@@ -1,45 +1,41 @@
+"""Implementation inspired by the paper "Heterogeneous Coalition Formation and Scheduling with Multi-Skilled Robots", Aswale 2023
+
+
+
+TODO:
+- Algorithm 1 to reject looping candidate solutions  (maybe lazy constraint as callback funciton )
+- (to align with paper: Stochastic task execution times (maybe not needed))
+"""
+
 import matplotlib.pyplot as plt
 import numpy as np
 import pulp
-from matplotlib.patches import Patch
+from problem_generator import ProblemData, generate_random_data
+from visualizations import plot_gantt_chart
 
 # Define parameters
-n_tasks = 5  # Total number of tasks (m)
+n_tasks = 6 # Total number of tasks (m)
 n_robots = 3  # Total number of robots (n)
 n_skills = 2  # Total number of skills (l)
 M = n_robots  # Large constant for if-else constraints
+M_skills = n_skills  # Large constant for if-else constraints
 
 robots = range(n_robots)
 skills = range(n_skills)
 tasks = range(n_tasks + 2)  # Tasks 0 and m+1 are starting and ending points
 
-# Q[i][s] = 1 if robot i has skill s, 0 otherwise
-Q = [
-    [1, 1],  # Robot 0
-    [0, 1],  # Robot 1
-    [1, 0],  # Robot 2
-]
+np.random.seed(44)
 
-# R[k][s] = 1 if task k requires skill s, 0 otherwise
-R = [
-    [0, 0],  # Task 0 (start)
-    [1, 0],  # Task 1
-    [1, 0],  # Task 2
-    [0, 1],  # Task 3
-    [0, 1],  # Task 4
-    [1, 1],  # Task 5
-    [0, 0],  # Task 6 (end)
-]
+# Generate random data
+problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills)
 
-# Task execution times
-T_e = np.array([0, 30, 40, 5, 6, 7, 0])  # Including start and end tasks
-
-# Task travel times
-T_t = np.ones((n_tasks + 2, n_tasks + 2))
+Q = problem_instance['Q']
+R = problem_instance['R']
+T_e = problem_instance['T_e']
+T_t = problem_instance['T_t']
 
 M_time = np.sum(T_e) * n_robots + np.sum(T_t)
 
-# Problem definition
 prob = pulp.LpProblem("Coalition_Formation_and_Scheduling", pulp.LpMinimize)
 
 # Variables
@@ -129,7 +125,7 @@ for i in robots:
         )
 
 # Matrix Z for number of robots with skill s for task k
-# where Z[k][s] indicates number of robots with skill s for task k
+# where Z[k][s] indicates number of robots with skill s for task k (eq 10)
 for s in skills:
     for k in range(1, n_tasks + 1):
         prob += (
@@ -155,6 +151,23 @@ for s in skills:
             Z[k][s] - R[k][s] - 1 + M * (1 - Z_b[k][s]) >= 0,
             f"Superfluous_Skill_Lower_{k}_{s}",
         )
+
+# # Each robot that attends a task must have at leat one skill that is not in excess (eq 13)
+for i in robots:
+    for k in range(1, n_tasks + 1):
+        # x_ik: Whether robot i attends task k
+        x_ik = pulp.lpSum([X[i][j][k] for j in tasks if j != k])
+
+        # s_ik: Number of redundant skills robot i has for task k
+        s_ik = pulp.lpSum([Z_b[k][s] * Q[i][s] for s in skills])
+
+        # r_ik: Number of required skills robot i has for task k that robot i possesses
+        r_ik = pulp.lpSum([Q[i][s] * R[k][s] for s in skills])
+
+        prob += (
+            s_ik <= r_ik - 1 + M_skills * (1 - x_ik),
+            f"Skill_Not_Excessive_{i}_{k}",
+        ) 
 
 # Arrival times
 # If a robot does not visit a task, then the arrival time is 0 (eq 14)
@@ -189,8 +202,7 @@ for i in robots:
                 )
 
 # Solve the problem
-prob.solve()
-# Print the status
+prob.solve(pulp.PULP_CBC_CMD(timeLimit=300)) 
 print("Status:", pulp.LpStatus[prob.status])
 
 # Check if the problem is feasible
@@ -199,67 +211,21 @@ if pulp.LpStatus[prob.status] == 'Optimal':
     print("Total time to complete all tasks:", pulp.value(prob.objective))
 
     # Prepare data for Gantt chart
-    task_colors = {}  # Assign colors to tasks
-    robot_tasks = {i: [] for i in robots}  # Tasks for each robot
+    task_colors = {}  
+    robot_tasks = {i: [] for i in robots} 
     color_pool = plt.cm.get_cmap('hsv', n_tasks + 2)
 
     for i in robots:
-        for k in tasks:
+        for k in tasks[:-1]:
             # Check if robot i visits task k
             if any(pulp.value(X[i][j][k]) > 0.5 for j in tasks if j != k):
                 start_time = pulp.value(Y_max[k])
                 end_time = start_time + T_e[k]
                 robot_tasks[i].append((start_time, end_time, k))
-                # Assign a color to the task if not already assigned
                 if k not in task_colors:
                     task_colors[k] = color_pool(k)
 
-    # Plot Gantt chart
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    yticks = []
-    yticklabels = []
-    legend_elements = []
-
-    for idx, i in enumerate(robots):
-        yticks.append(idx)
-        yticklabels.append(f"Robot {i}")
-        for task in robot_tasks[i]:
-            start_time, end_time, k = task
-            ax.barh(
-                idx,
-                end_time - start_time,
-                left=start_time,
-                height=0.4,
-                align='center',
-                color=task_colors[k],
-                edgecolor='black',
-            )
-            ax.text(
-                start_time + (end_time - start_time) / 2,
-                idx,
-                f"Task {k}",
-                va='center',
-                ha='center',
-                color='black',
-                fontsize=8,
-            )
-            # Add to legend if not already added
-            if k not in [e.get_label() for e in legend_elements]:
-                legend_elements.append(
-                    Patch(facecolor=task_colors[k], edgecolor='black', label=f'Task {k}')
-                )
-
-    ax.set_yticks(yticks)
-    ax.set_yticklabels(yticklabels)
-    ax.set_xlabel('Time')
-    ax.set_title('Gantt Chart of Robot Schedules')
-    ax.grid(True)
-
-    # Create legend
-    ax.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left')
-
-    plt.tight_layout()
-    plt.show()
+    
+    plot_gantt_chart(robots, tasks, robot_tasks, task_colors, Q, R, n_tasks, skills)
 else:
     print("No feasible solution found.")
