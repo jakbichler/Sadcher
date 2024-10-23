@@ -1,17 +1,34 @@
-# visualizations.py
-
 import matplotlib.pyplot as plt
 from matplotlib.patches import Patch
 
 
+def prepare_data_for_gantt_chart(robots, tasks, X, Y_max, T_execution):
+    # Prepare data for Gantt chart
+    task_colors = {}  
+    robot_tasks = {i: [] for i in robots} 
+    color_pool = plt.cm.get_cmap('hsv', len(tasks))
+
+    for i in robots:
+        for k in tasks[:-1]:
+            # Check if robot i visits task k
+            if any(X[i][j][k] == 1 for j in tasks if j != k):
+                start_time = Y_max[k]
+                end_time = start_time + T_execution[k]
+                robot_tasks[i].append((start_time, end_time, k))
+                if k not in task_colors:
+                    task_colors[k] = color_pool(k)
+
+    return robot_tasks, task_colors
+
 def plot_gantt_chart(robots, tasks, robot_tasks, task_colors, Q, R, n_tasks, skills):
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8), gridspec_kw={'height_ratios': [3, 1]})
+    # --- First popup: Gantt Chart ---
+    fig1, ax1 = plt.subplots(figsize=(10, 6))
 
     yticks = []
     yticklabels = []
     legend_elements = []
 
-    for idx, i in enumerate(robots):
+    for idx, i in enumerate(reversed(robots)):
         yticks.append(idx)
         yticklabels.append(f"Robot {i}")
         for task in robot_tasks[i]:
@@ -32,7 +49,7 @@ def plot_gantt_chart(robots, tasks, robot_tasks, task_colors, Q, R, n_tasks, ski
                 va='center',
                 ha='center',
                 color='black',
-                fontsize=8,
+                fontsize=6,  # Smaller font size for large number of tasks
             )
             # Add to legend if not already added
             if k not in [e.get_label() for e in legend_elements]:
@@ -47,8 +64,12 @@ def plot_gantt_chart(robots, tasks, robot_tasks, task_colors, Q, R, n_tasks, ski
     ax1.grid(True)
     ax1.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left')
 
-    # Add explanation of robot capabilities and task requirements
-    ax2.axis('off')  
+    plt.tight_layout()
+    plt.show(block = False)  # This will display the first popup for the Gantt chart
+
+    # --- Second popup: Table with Robot Capabilities and Task Requirements ---
+    fig2, ax2 = plt.subplots(figsize=(8, 4))  # Smaller figure for the table
+    ax2.axis('off')
 
     # Build table data
     robot_info = ["Robot {}: {}".format(i, ", ".join([f"Skill {s}" for s in skills if Q[i][s] == 1])) for i in robots]
@@ -62,9 +83,8 @@ def plot_gantt_chart(robots, tasks, robot_tasks, task_colors, Q, R, n_tasks, ski
     # Create the table
     table = ax2.table(cellText=table_data, colLabels=None, cellLoc='center', loc='center')
     table.auto_set_font_size(False)
-    table.set_fontsize(10)
-    table.scale(1, 2) 
+    table.set_fontsize(8)  # Smaller font size for better fit
+    table.scale(1, 1.5)    # Scale the table for better layout
 
     plt.tight_layout()
-    plt.show()
-
+    plt.show()  # This will display the second popup for the table

@@ -20,10 +20,10 @@ def generate_random_data(n_tasks: int, n_robots: int, n_skills: int) -> ProblemD
         if np.sum(Q[i]) == 0:
             Q[i][np.random.randint(0, n_skills)] = 1
 
-    # # Ensure all skills are present in the 
-    # for s in range(n_skills):
-    #     if np.sum(Q[:, s]) == 0:
-    #         Q[np.random.randint(0, n_robots)][s] = 1
+    # # Ensure all skills are present in the team
+    for s in range(n_skills):
+        if np.sum(Q[:, s]) == 0:
+            Q[np.random.randint(0, n_robots)][s] = 1
 
     # R[k][s] = 1 if task k requires skill s, 0 otherwise
     R = np.random.randint(0, 2, (n_tasks, n_skills))
