@@ -7,7 +7,7 @@ from problem_generator import ProblemData, generate_random_data
 from visualizations import plot_gantt_chart, prepare_data_for_gantt_chart
 
 # Define parameters
-n_tasks = 5
+n_tasks = 6 
 n_robots = 3
 n_skills = 2
 
@@ -183,8 +183,9 @@ if __name__ == "__main__":
     # Run the greedy solver on the problem
     X = greedy_task_allocation(Q, R, T_execution, T_travel)
 
-    task_end_times = [Y_max[task] + T_execution[task] for task in range(1, n_tasks + 1)]
-    print(f"Full time to completion: {np.max(task_end_times)}")
+    task_end_times = [Y_max[task] + T_execution[task] for task in range(1, n_tasks + 2)]
+    last_finished_task = np.argmax(task_end_times)
+    print(f"Full time to completion: {task_end_times[last_finished_task]+T_travel[last_finished_task][n_tasks+1]}")
 
     # Visualize the results
     tasks_to_plot, task_colors = prepare_data_for_gantt_chart(robots, tasks, X, Y_max, T_execution)
