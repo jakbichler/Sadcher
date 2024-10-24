@@ -7,11 +7,11 @@ from problem_generator import ProblemData, generate_random_data
 from visualizations import plot_gantt_chart, prepare_data_for_gantt_chart
 
 # Define parameters
-n_tasks = 20
+n_tasks = 7
 n_robots = 3
-n_skills = 4
+n_skills = 2
 
-# np.random.seed(44)
+np.random.seed(3)
 
 robots = range(n_robots)
 skills = range(n_skills)
@@ -187,4 +187,4 @@ if __name__ == "__main__":
 
     # Visualize the results
     tasks_to_plot, task_colors = prepare_data_for_gantt_chart(robots, tasks, X, Y_max, T_execution)
-    plot_gantt_chart(robots, tasks, tasks_to_plot, task_colors, Q, R_original, n_tasks, skills)
+    plot_gantt_chart("Greedy solution", robots, tasks, tasks_to_plot, task_colors, Q, R_original, n_tasks, skills)

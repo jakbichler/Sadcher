@@ -20,7 +20,7 @@ def prepare_data_for_gantt_chart(robots, tasks, X, Y_max, T_execution):
 
     return robot_tasks, task_colors
 
-def plot_gantt_chart(robots, tasks, robot_tasks, task_colors, Q, R, n_tasks, skills):
+def plot_gantt_chart(title, robots, tasks, robot_tasks, task_colors, Q, R, n_tasks, skills):
     # --- First popup: Gantt Chart ---
     fig1, ax1 = plt.subplots(figsize=(10, 6))
 
@@ -60,7 +60,7 @@ def plot_gantt_chart(robots, tasks, robot_tasks, task_colors, Q, R, n_tasks, ski
     ax1.set_yticks(yticks)
     ax1.set_yticklabels(yticklabels)
     ax1.set_xlabel('Time')
-    ax1.set_title('Gantt Chart of Robot Schedules')
+    ax1.set_title(title)
     ax1.grid(True)
     ax1.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left')
 

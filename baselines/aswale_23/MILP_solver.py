@@ -3,8 +3,9 @@ https://arxiv.org/abs/2306.11936
 
 
 TODO:
-- Algorithm 1 to reject looping candidate solutions  (maybe lazy constraint as callback funciton )
+- Algorithm 1/subtour elimination to reject looping candidate solutions  (maybe lazy constraint as callback funciton )
 - (to align with paper: Stochastic task execution times (maybe not needed))
+- Equation 13 when used decreases performance and always assigns tasks to robot with least excess skills, although makespan increases, beacuse excess-skilled robot remains idle
 """
 
 import matplotlib.pyplot as plt
@@ -14,17 +15,17 @@ from problem_generator import ProblemData, generate_random_data
 from visualizations import plot_gantt_chart
 
 # Define parameters
-n_tasks = 6 # Total number of tasks (m)
+n_tasks = 7 # Total number of tasks (m)
 n_robots = 3  # Total number of robots (n)
 n_skills = 2  # Total number of skills (l)
 M = n_robots  # Large constant for if-else constraints
-M_skills = n_skills  # Large constant for if-else constraints
+M_skills = n_skills * n_robots  # Large constant for if-else constraints
 
 robots = range(n_robots)
 skills = range(n_skills)
 tasks = range(n_tasks + 2)  # Tasks 0 and m+1 are starting and ending points
 
-np.random.seed(44)
+np.random.seed(3)
 
 # Generate random data
 problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills)
@@ -34,7 +35,7 @@ R = problem_instance['R']
 T_e = problem_instance['T_e']
 T_t = problem_instance['T_t']
 
-M_time = np.sum(T_e) * n_robots + np.sum(T_t)
+M_time = 2 * (np.sum(T_e) + np.sum(T_t))
 
 prob = pulp.LpProblem("Coalition_Formation_and_Scheduling", pulp.LpMinimize)
 
@@ -48,18 +49,18 @@ Z = pulp.LpVariable.dicts("Z", (tasks, skills), 0, None)  # Zks (skills provided
 Z_b = pulp.LpVariable.dicts(
     "Z_b", (tasks, skills), 0, 1, pulp.LpBinary
 )  # if 1 then skill s is excessive for task k
+U = pulp.LpVariable.dicts("U", (robots, tasks), 0, n_tasks + 1, pulp.LpContinuous)
 
 # Define the new variable T_max, which represents the maximum finish time
 T_max = pulp.LpVariable("T_max", 0, None)
 
-# Objective: Minimize the maximum time (T_max) at which the last robot finishes
+# Objective: Minimize the maximum time (T_max) at which the last robot finishes (Arrival at finish task )
 prob += T_max, "MinimizeMaxCompletionTime"
 
 # Constraints: T_max must be greater than or equal to the finish time of each robot at task m+1
 for i in robots:
-    prob += T_max >= Y[i][n_tasks + 1], f"T_max_Constraint_Robot_{i}"
+    prob += T_max >= Y[i][n_tasks + 1] + T_e[n_tasks + 1], f"T_max_Constraint_Robot_{i}"
 
-for i in robots:
     # Each robot starts at task 0 (eq 1)
     prob += (
         pulp.lpSum([X[i][0][k] for k in range(1, n_tasks + 2)]) == 1,
@@ -88,7 +89,7 @@ for i in robots:
 for i in robots:
     for k in range(1, n_tasks + 1):
         prob += (
-            pulp.lpSum([X[i][j][k] for j in range(n_tasks + 2)]) <= 1,
+            pulp.lpSum([X[i][j][k] for j in range(n_tasks + 1)]) <= 1,
             f"Enter_Task_{k}_Robot_{i}",
         )
 
@@ -96,7 +97,7 @@ for i in robots:
 for i in robots:
     for j in range(1, n_tasks + 1):
         prob += (
-            pulp.lpSum([X[i][j][k] for k in range(n_tasks + 2)]) <= 1,
+            pulp.lpSum([X[i][j][k] for k in range(1, n_tasks + 2)]) <= 1,
             f"Exit_Task_{j}_Robot_{i}",
         )
 
@@ -104,8 +105,8 @@ for i in robots:
 for i in robots:
     for j in range(1, n_tasks + 1):
         prob += (
-            pulp.lpSum([X[i][k][j] for k in range(n_tasks + 2)])
-            == pulp.lpSum([X[i][j][k] for k in range(n_tasks + 2)]),
+            pulp.lpSum([X[i][k][j] for k in range(n_tasks + 1)])
+            == pulp.lpSum([X[i][j][k] for k in range(1, n_tasks + 2)]),
             f"Enter_Exit_Task_{j}_Robot_{i}",
         )
 
@@ -119,7 +120,7 @@ for i in robots:
 for i in robots:
     for k in range(1, n_tasks + 1):
         prob += (
-            pulp.lpSum([X[i][j][k] for j in range(n_tasks + 2)])
+            pulp.lpSum([X[i][j][k] for j in range(n_tasks + 1)])
             <= pulp.lpSum([Q[i][s] * R[k][s] for s in range(n_skills)]),
             f"Skill_Allocation_Task_{k}_Robot_{i}",
         )
@@ -132,7 +133,7 @@ for s in skills:
             Z[k][s]
             == pulp.lpSum(
                 [
-                    Q[i][s] * pulp.lpSum([X[i][j][k] for j in range(n_tasks + 2)])
+                    Q[i][s] * pulp.lpSum([X[i][j][k] for j in range(n_tasks + 1)])
                     for i in robots
                 ]
             ),
@@ -153,26 +154,26 @@ for s in skills:
         )
 
 # # Each robot that attends a task must have at leat one skill that is not in excess (eq 13)
-for i in robots:
-    for k in range(1, n_tasks + 1):
-        # x_ik: Whether robot i attends task k
-        x_ik = pulp.lpSum([X[i][j][k] for j in tasks if j != k])
+# for i in robots:
+#     for k in range(1, n_tasks + 1):
+#         # x_ik: Whether robot i attends task k
+#         x_ik = pulp.lpSum([X[i][j][k] for j in tasks if j != k])
 
-        # s_ik: Number of redundant skills robot i has for task k
-        s_ik = pulp.lpSum([Z_b[k][s] * Q[i][s] for s in skills])
+#         # s_ik: Number of redundant skills robot i has for task k
+#         s_ik = pulp.lpSum([Z_b[k][s] * Q[i][s] for s in skills])
 
-        # r_ik: Number of required skills robot i has for task k that robot i possesses
-        r_ik = pulp.lpSum([Q[i][s] * R[k][s] for s in skills])
+#         # r_ik: Number of required skills robot i has for task k that robot i possesses
+#         r_ik = pulp.lpSum([Q[i][s] * R[k][s] for s in skills])
 
-        prob += (
-            s_ik <= r_ik - 1 + M_skills * (1 - x_ik),
-            f"Skill_Not_Excessive_{i}_{k}",
-        ) 
+#         prob += (
+#             s_ik <= r_ik - 1 + M_skills * (1 - x_ik),
+#             f"Skill_Not_Excessive_{i}_{k}",
+#         ) 
 
 # Arrival times
 # If a robot does not visit a task, then the arrival time is 0 (eq 14)
 for i in robots:
-    for k in tasks:
+    for k in range(1, n_tasks+2):
         prob += (
             Y[i][k]
             <= M_time * pulp.lpSum([X[i][j][k] for j in tasks if j != k]),
@@ -181,25 +182,32 @@ for i in robots:
 
 # Task j starts at the arrival time of the last robot (eq 15)
 # Constraint: y_j_max >= Y[i][j] for all robots i
-for i in robots:
-    for j in tasks:
+for j in range(1, n_tasks + 2):
+    for i in robots:
         prob += Y_max[j] >= Y[i][j], f"Max_Arrival_Time_Task_{j}_Robot_{i}"
 
 # Arrival time of robot i at task k is sum of completion time of previous task j and travel time between j and k (eq 16)
 for i in robots:
-    for j in tasks:
-        for k in tasks:
-            if j != k:
-                prob += (
-                    Y[i][k]
-                    >= Y_max[j] + T_e[j] + T_t[j][k] - M_time * (1 - X[i][j][k]),
-                    f"ArrivalTime_Update_LB_{i}_{j}_{k}",
-                )
-                prob += (
-                    Y[i][k]
-                    <= Y_max[j] + T_e[j] + T_t[j][k] + M_time * (1 - X[i][j][k]),
-                    f"ArrivalTime_Update_UB_{i}_{j}_{k}",
-                )
+    for j in range(0, n_tasks + 1):
+        for k in range(1, n_tasks + 2):
+            prob += (
+                Y[i][k]
+                >= Y_max[j] + T_e[j] + T_t[j][k] - M_time * (1 - X[i][j][k]),
+                f"ArrivalTime_Update_LB_{i}_{j}_{k}",
+            )
+            prob += (
+                Y[i][k]
+                <= Y_max[j] + T_e[j] + T_t[j][k] + M_time * (1 - X[i][j][k]),
+                f"ArrivalTime_Update_UB_{i}_{j}_{k}",
+            )
+
+# # Subtour elimination
+# for i in robots:
+#     for j in range(1, n_tasks + 1):
+#         for k in range(1, n_tasks + 1):
+#             if j != k:
+#                 prob += U[i][j] - U[i][k] + (n_tasks + 1) * X[i][j][k] <= n_tasks, f"Subtour_Elimination_{i}_{j}_{k}"
+
 
 # Solve the problem
 prob.solve(pulp.PULP_CBC_CMD(timeLimit=300)) 
@@ -216,7 +224,7 @@ if pulp.LpStatus[prob.status] == 'Optimal':
     color_pool = plt.cm.get_cmap('hsv', n_tasks + 2)
 
     for i in robots:
-        for k in tasks[:-1]:
+        for k in tasks:
             # Check if robot i visits task k
             if any(pulp.value(X[i][j][k]) > 0.5 for j in tasks if j != k):
                 start_time = pulp.value(Y_max[k])
@@ -226,6 +234,6 @@ if pulp.LpStatus[prob.status] == 'Optimal':
                     task_colors[k] = color_pool(k)
 
     
-    plot_gantt_chart(robots, tasks, robot_tasks, task_colors, Q, R, n_tasks, skills)
+    plot_gantt_chart("MILP solution", robots, tasks, robot_tasks, task_colors, Q, R, n_tasks, skills)
 else:
     print("No feasible solution found.")
