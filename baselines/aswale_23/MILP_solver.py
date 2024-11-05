@@ -5,7 +5,6 @@ https://arxiv.org/abs/2306.11936
 TODO:
 - Algorithm 1/subtour elimination to reject looping candidate solutions  (maybe lazy constraint as callback funciton )
 - (to align with paper: Stochastic task execution times (maybe not needed))
-- Equation 13 when used decreases performance and always assigns tasks to robot with least excess skills, although makespan increases, beacuse excess-skilled robot remains idle
 """
 
 import matplotlib.pyplot as plt
@@ -15,9 +14,9 @@ from problem_generator import ProblemData, generate_random_data
 from visualizations import plot_gantt_chart
 
 # Define parameters
-n_tasks = 7 # Total number of tasks (m)
-n_robots = 3  # Total number of robots (n)
-n_skills = 2  # Total number of skills (l)
+n_tasks = 6 # Total number of tasks (m)
+n_robots = 4  # Total number of robots (n)
+n_skills = 2  # Total number of skills (l)  
 M = n_robots  # Large constant for if-else constraints
 M_skills = n_skills * n_robots  # Large constant for if-else constraints
 
@@ -25,7 +24,8 @@ robots = range(n_robots)
 skills = range(n_skills)
 tasks = range(n_tasks + 2)  # Tasks 0 and m+1 are starting and ending points
 
-np.random.seed(3)
+
+np.random.seed(3245)
 
 # Generate random data
 problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills)
@@ -45,7 +45,7 @@ X = pulp.LpVariable.dicts(
 )  # Xijk --> robot i attends task k after task j
 Y = pulp.LpVariable.dicts("Y", (robots, tasks), 0, None)  # Yik (arrival times)
 Y_max = pulp.LpVariable.dicts("Y_max", tasks, 0, None)  # Yk (latest arrival time)
-Z = pulp.LpVariable.dicts("Z", (tasks, skills), 0, None)  # Zks (skills provided)
+Z = pulp.LpVariable.dicts("Z", (tasks, skills), 0, None, cat = pulp.LpInteger)  # Zks (skills provided)
 Z_b = pulp.LpVariable.dicts(
     "Z_b", (tasks, skills), 0, 1, pulp.LpBinary
 )  # if 1 then skill s is excessive for task k
@@ -54,6 +54,8 @@ U = pulp.LpVariable.dicts("U", (robots, tasks), 0, n_tasks + 1, pulp.LpContinuou
 # Define the new variable T_max, which represents the maximum finish time
 T_max = pulp.LpVariable("T_max", 0, None)
 
+
+#This is the original obejctive from the paper
 # Objective: Minimize the maximum time (T_max) at which the last robot finishes (Arrival at finish task )
 prob += T_max, "MinimizeMaxCompletionTime"
 
@@ -125,6 +127,7 @@ for i in robots:
             f"Skill_Allocation_Task_{k}_Robot_{i}",
         )
 
+
 # Matrix Z for number of robots with skill s for task k
 # where Z[k][s] indicates number of robots with skill s for task k (eq 10)
 for s in skills:
@@ -153,24 +156,18 @@ for s in skills:
             f"Superfluous_Skill_Lower_{k}_{s}",
         )
 
-# # Each robot that attends a task must have at leat one skill that is not in excess (eq 13)
-# for i in robots:
-#     for k in range(1, n_tasks + 1):
-#         # x_ik: Whether robot i attends task k
-#         x_ik = pulp.lpSum([X[i][j][k] for j in tasks if j != k])
+# Each robot that attends a task must have at least one skill that is not in excess (eq 13)
+for i in robots:
+    for k in range(1, n_tasks + 1):
+        # x_ik: Whether robot i attends task k
+        x_ik = pulp.lpSum([X[i][j][k] for j in tasks if j != k])
 
-#         # s_ik: Number of redundant skills robot i has for task k
-#         s_ik = pulp.lpSum([Z_b[k][s] * Q[i][s] for s in skills])
+        # c_ik: Number of required skills robot i has for task k that are not redundant
+        c_ik = pulp.lpSum([Q[i][s] * R[k][s] * (1 - Z_b[k][s]) for s in skills])
 
-#         # r_ik: Number of required skills robot i has for task k that robot i possesses
-#         r_ik = pulp.lpSum([Q[i][s] * R[k][s] for s in skills])
+        prob += c_ik >= x_ik, f"NonRedundantSkill_{i}_{k}"
 
-#         prob += (
-#             s_ik <= r_ik - 1 + M_skills * (1 - x_ik),
-#             f"Skill_Not_Excessive_{i}_{k}",
-#         ) 
 
-# Arrival times
 # If a robot does not visit a task, then the arrival time is 0 (eq 14)
 for i in robots:
     for k in range(1, n_tasks+2):
@@ -210,11 +207,11 @@ for i in robots:
 
 
 # Solve the problem
-prob.solve(pulp.PULP_CBC_CMD(timeLimit=300)) 
+prob.solve(pulp.PULP_CBC_CMD(timeLimit=60*60)) 
 print("Status:", pulp.LpStatus[prob.status])
 
 # Check if the problem is feasible
-if pulp.LpStatus[prob.status] == 'Optimal':
+if pulp.LpStatus[prob.status] in ['Optimal', 'Feasible']:
     # Print the objective value
     print("Total time to complete all tasks:", pulp.value(prob.objective))
 

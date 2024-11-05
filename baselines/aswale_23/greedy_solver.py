@@ -7,11 +7,11 @@ from problem_generator import ProblemData, generate_random_data
 from visualizations import plot_gantt_chart, prepare_data_for_gantt_chart
 
 # Define parameters
-n_tasks = 6 
-n_robots = 3
+n_tasks = 6
+n_robots = 4
 n_skills = 2
 
-np.random.seed(81)
+np.random.seed(3245)
 
 robots = range(n_robots)
 skills = range(n_skills)
@@ -44,7 +44,6 @@ def greedy_task_allocation(Q, R, T_execution, T_travel):
         Y_max[selected_task] = np.max(Y[:, selected_task])
 
     return X
-
 
 def get_current_task(robot_index, X):
     current = 0
@@ -184,9 +183,12 @@ if __name__ == "__main__":
     X = greedy_task_allocation(Q, R, T_execution, T_travel)
 
     task_end_times = [Y_max[task] + T_execution[task] for task in range(1, n_tasks + 2)]
-    last_finished_task = np.argmax(task_end_times)
-    print(f"Full time to completion: {task_end_times[last_finished_task]+T_travel[last_finished_task][n_tasks+1]}")
+    last_task_finished = np.argmax(task_end_times)
+    last_depot_arrival_time = task_end_times[last_task_finished] + T_travel[last_task_finished][n_tasks + 1]
+
+    print(f"Full time to completion: {last_depot_arrival_time}")
 
     # Visualize the results
     tasks_to_plot, task_colors = prepare_data_for_gantt_chart(robots, tasks, X, Y_max, T_execution)
     plot_gantt_chart("Greedy solution", robots, tasks, tasks_to_plot, task_colors, Q, R_original, n_tasks, skills)
+
