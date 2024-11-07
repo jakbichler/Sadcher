@@ -1,10 +1,12 @@
 """Implementation inspired by the paper "Heterogeneous Coalition Formation and Scheduling with Multi-Skilled Robots", Aswale 2023
 https://arxiv.org/abs/2306.11936
 
+--> precedence constraints are added, which the paper does not mention
+
 
 TODO:
 - Algorithm 1/subtour elimination to reject looping candidate solutions  (maybe lazy constraint as callback funciton )
-- (to align with paper: Stochastic task execution times (maybe not needed))
+- Stochastic task execution times (if needed))
 """
 
 import matplotlib.pyplot as plt
@@ -15,8 +17,8 @@ from visualizations import plot_gantt_chart
 
 # Define parameters
 n_tasks = 6 # Total number of tasks (m)
-n_robots = 4  # Total number of robots (n)
-n_skills = 2  # Total number of skills (l)  
+n_robots = 3 # Total number of robots (n)
+n_skills = 3  # Total number of skills (l)  
 M = n_robots  # Large constant for if-else constraints
 M_skills = n_skills * n_robots  # Large constant for if-else constraints
 
@@ -25,7 +27,7 @@ skills = range(n_skills)
 tasks = range(n_tasks + 2)  # Tasks 0 and m+1 are starting and ending points
 
 
-np.random.seed(3245)
+np.random.seed(124)
 
 # Generate random data
 problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills)
@@ -34,6 +36,10 @@ Q = problem_instance['Q']
 R = problem_instance['R']
 T_e = problem_instance['T_e']
 T_t = problem_instance['T_t']
+
+# Define precedence constraints(j,k) --> (task_j must be finished before task_k can start)
+# precedence_constraints = np.array([[3, 1], [1, 2]])  
+precedence_constraints = np.array([[1,2], [2,3], [3,4], [4,5], [5,6]])
 
 M_time = 2 * (np.sum(T_e) + np.sum(T_t))
 
@@ -58,6 +64,8 @@ T_max = pulp.LpVariable("T_max", 0, None)
 #This is the original obejctive from the paper
 # Objective: Minimize the maximum time (T_max) at which the last robot finishes (Arrival at finish task )
 prob += T_max, "MinimizeMaxCompletionTime"
+
+
 
 # Constraints: T_max must be greater than or equal to the finish time of each robot at task m+1
 for i in robots:
@@ -197,6 +205,10 @@ for i in robots:
                 <= Y_max[j] + T_e[j] + T_t[j][k] + M_time * (1 - X[i][j][k]),
                 f"ArrivalTime_Update_UB_{i}_{j}_{k}",
             )
+
+# Precedence constraints
+for j, k in precedence_constraints:
+    prob += Y_max[k] >= Y_max[j] + T_e[j], f"Precedence_Task_{j}_before_Task_{k}"
 
 # # Subtour elimination
 # for i in robots:
