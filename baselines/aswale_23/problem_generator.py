@@ -8,6 +8,7 @@ class ProblemData(TypedDict):
     R: np.ndarray
     T_e: np.ndarray
     T_t: np.ndarray
+    task_locations: np.ndarray
 
 
 def generate_random_data(n_tasks: int, n_robots: int, n_skills: int) -> ProblemData:
@@ -42,7 +43,11 @@ def generate_random_data(n_tasks: int, n_robots: int, n_skills: int) -> ProblemD
     # Append start and end tasks
     T_e = np.hstack([[0], T_e, [0]])
 
-    # Task travel times
-    T_t = np.random.randint(1, 10, (n_tasks + 2, n_tasks + 2))
+    # Task locations
+    grid_size = 100
+    task_locations = np.random.randint(0, grid_size,(n_tasks + 2, 2))
 
-    return ProblemData(Q=Q, R=R, T_e=T_e, T_t=T_t)
+    # Travel times between tasks (appr)
+    T_t = np.linalg.norm(task_locations[:, np.newaxis] - task_locations[np.newaxis, :], axis=2)
+
+    return ProblemData(Q=Q, R=R, T_e=T_e, T_t=T_t, task_locations=task_locations)
