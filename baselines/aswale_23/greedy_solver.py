@@ -182,10 +182,10 @@ if __name__ == "__main__":
     # Run the greedy solver on the problem
     X = greedy_task_allocation(Q, R, T_execution, T_travel)
 
-    task_end_times = [Y_max[task] + T_execution[task] for task in range(1, n_tasks + 2)]
+    task_end_times = [Y_max[task] + T_execution[task] for task in range(1, n_tasks + 1)]
     last_task_finished = np.argmax(task_end_times)
-    last_depot_arrival_time = task_end_times[last_task_finished] + T_travel[last_task_finished][n_tasks + 1]
-
+    finish_task = n_tasks + 1
+    last_depot_arrival_time = task_end_times[last_task_finished] + T_travel[last_task_finished+1][finish_task]
     print(f"Full time to completion: {last_depot_arrival_time}")
 
     # Visualize the results
