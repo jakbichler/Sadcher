@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 from matplotlib.patches import Patch
 
 
@@ -105,3 +106,62 @@ def show_problem_instance(problem_instance):
 
     plt.tight_layout()
     plt.show()  # Displays the table
+
+
+def plot_task_map(task_locations, T_execution, R):
+    marker_sizes = T_execution[1:-1] * 2
+    
+    plt.figure(figsize=(8, 8))
+    plt.scatter(task_locations[1:-1, 0], task_locations[1:-1, 1], s=marker_sizes, label="Tasks")
+    plt.scatter(task_locations[0, 0], task_locations[0, 1], color='green', s=150, marker = 'x', label="Start (Task 0)")
+    plt.scatter(task_locations[-1, 0], task_locations[-1, 1], color='red', s=150, marker = 'x', label="End (Task -1)")
+    
+    for idx, (x, y) in enumerate(task_locations[1:-1], start=1):
+        skills_required = [str(skill) for skill, needed in enumerate(R[idx]) if needed == 1]
+        plt.text(x, y+2, f"{', '.join(skills_required)}", fontsize=10, ha='center')
+    
+    plt.xlabel("X Coordinate")
+    plt.ylabel("Y Coordinate")
+    plt.legend()
+    plt.title("Task Map with Scaled Execution Times")
+    plt.show()
+
+def plot_robot_trajectories(task_locations, task_assignments, T_execution, R):
+    def draw_arrow(start, end, color, label=""):
+        dx, dy = end[0] - start[0], end[1] - start[1]
+        length = np.sqrt(dx**2 + dy**2)
+        adjusted_dx, adjusted_dy = dx / length * (length - 5), dy / length * (length - 5)
+        plt.arrow(start[0], start[1], adjusted_dx, adjusted_dy, head_width=2, head_length=5,
+                  fc=color, ec=color, alpha=0.5, label=label)
+
+    marker_sizes = T_execution[1:-1] * 2
+
+    plt.figure(figsize=(10, 10))
+    plt.scatter(task_locations[1:-1, 0], task_locations[1:-1, 1], s=marker_sizes, label="Tasks")
+    plt.scatter(task_locations[0, 0], task_locations[0, 1], color='green', s=150, marker = 'x', label="Start (Task 0)")
+    plt.scatter(task_locations[-1, 0], task_locations[-1, 1], color='red', s=150, marker = 'x', label="End (Task -1)")
+
+    colors = plt.cm.Set1(np.linspace(0, 1, len(task_assignments.keys())))
+
+    for idx, (robot_id, tasks) in enumerate(task_assignments.items()):
+        color = colors[idx]
+        start = task_locations[0]
+        
+        for _, _, task_id in tasks:
+            end = task_locations[task_id]
+            draw_arrow(start, end, color, label=f"Robot {robot_id}" if start is task_locations[0] else "")
+            start = end
+        
+        end = task_locations[-1]
+        draw_arrow(start, end, color)
+
+    for idx, (x, y) in enumerate(task_locations[1:-1], start=1):
+        skills_required = [str(skill) for skill, needed in enumerate(R[idx]) if needed == 1]
+        plt.text(x, y+2, f"{', '.join(skills_required)}", fontsize=10, ha='center')
+
+
+    plt.xlabel("X Coordinate")
+    plt.ylabel("Y Coordinate")
+    plt.legend()
+    plt.title("Robot Trajectories for Fulfilled Tasks")
+    plt.show()

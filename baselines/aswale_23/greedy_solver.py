@@ -10,7 +10,8 @@ from problem_generator import ProblemData, read_problem_instance
 
 def greedy_scheduling(problem_instance: ProblemData):
 
-    Q, R, T_execution, T_travel, task_locations, precedence_constraints = read_problem_instance(problem_instance)
+    Q, R_original, T_execution, T_travel, task_locations, precedence_constraints = read_problem_instance(problem_instance)
+    R = R_original.copy() # R is modified during the scheduling process
     n_robots = Q.shape[0]
     n_tasks = R.shape[0] - 2
     X = np.zeros((n_robots, n_tasks + 2, n_tasks + 2)) # Robot-task assignment matrix
@@ -48,9 +49,9 @@ def greedy_scheduling(problem_instance: ProblemData):
         
         Y_max[selected_task] = np.max(Y[:, selected_task])
 
-    calculate_task_end_times(Y_max, T_execution, T_travel, n_tasks)
+    makespan = calculate_task_end_times(Y_max, T_execution, T_travel, n_tasks)
 
-    return X, Y_max
+    return makespan, X, Y_max
 
 def get_current_task(robot_index, X):
     current = 0
@@ -182,7 +183,7 @@ def select_earliest_robot(X, Y_max, robots, task_index, T_travel, T_execution, p
     earliest_robot = None
 
     for robot in robots:
-        current_task = get_current_task(robot)
+        current_task = get_current_task(robot, X)
         arrival_time = Y_max[current_task] + T_execution[current_task] + T_travel[current_task][task_index]
         earliest_possible_start_time_due_to_precedence =  finish_time_all_predecessors(task_index, T_travel, Y_max, T_execution, precedence_constraints)
         arrival_time = max(arrival_time, earliest_possible_start_time_due_to_precedence)
@@ -200,3 +201,5 @@ def calculate_task_end_times(Y_max, T_execution, T_travel, n_tasks):
     finish_task = n_tasks + 1
     last_depot_arrival_time = task_end_times[last_task_finished] + T_travel[last_task_finished+1][finish_task]
     print(f"Full time to completion: {last_depot_arrival_time}")
+
+    return last_depot_arrival_time

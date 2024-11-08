@@ -195,13 +195,14 @@ def milp_scheduling(problem_instance):
 
 
     # Solve the problem
-    prob.solve(pulp.PULP_CBC_CMD(timeLimit=60*5)) 
+    prob.solve(pulp.PULP_CBC_CMD(timeLimit=60*5, msg = False)) 
     print("Status:", pulp.LpStatus[prob.status])
 
     # Check if the problem is feasible
     if pulp.LpStatus[prob.status] in ['Optimal', 'Feasible']:
         # Print the objective value
-        print("Total time to complete all tasks:", pulp.value(prob.objective))
+        makespan = pulp.value(prob.objective)
+        print(f"Total time to complete all tasks: {makespan}")
 
         # # Prepare data for Gantt chart
         task_colors = {}  
@@ -218,10 +219,8 @@ def milp_scheduling(problem_instance):
                     if k not in task_colors:
                         task_colors[k] = color_pool(k)
 
-        
-   
     else:
         print("No feasible solution found.")
 
 
-    return robot_tasks, task_colors
+    return makespan, robot_tasks, task_colors
