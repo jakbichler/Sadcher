@@ -9,9 +9,10 @@ class ProblemData(TypedDict):
     T_e: np.ndarray
     T_t: np.ndarray
     task_locations: np.ndarray
+    precedence_constraints: np.ndarray
 
 
-def generate_random_data(n_tasks: int, n_robots: int, n_skills: int) -> ProblemData:
+def generate_random_data(n_tasks: int, n_robots: int, n_skills: int, precedence_constraints) -> ProblemData:
     # Generate random data
     # Q[i][s] = 1 if robot i has skill s, 0 otherwise
     Q = np.random.randint(0, 2, (n_robots, n_skills))
@@ -50,4 +51,15 @@ def generate_random_data(n_tasks: int, n_robots: int, n_skills: int) -> ProblemD
     # Travel times between tasks (appr)
     T_t = np.linalg.norm(task_locations[:, np.newaxis] - task_locations[np.newaxis, :], axis=2)
 
-    return ProblemData(Q=Q, R=R, T_e=T_e, T_t=T_t, task_locations=task_locations)
+    return ProblemData(Q=Q, R=R, T_e=T_e, T_t=T_t, task_locations=task_locations, precedence_constraints=precedence_constraints)
+
+
+
+def read_problem_instance(problem_instance: ProblemData):
+    Q = problem_instance['Q']
+    R = problem_instance['R']
+    T_e = problem_instance['T_e']
+    T_t = problem_instance['T_t']
+    task_locations = problem_instance['task_locations']
+    precedence_constraints = problem_instance['precedence_constraints']
+    return Q, R, T_e, T_t, task_locations, precedence_constraints
