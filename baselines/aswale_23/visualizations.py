@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Patch
-
+from matplotlib.patches import Wedge
 
 def prepare_data_for_gantt_chart(robots, tasks, X, Y_max, T_execution):
     # Prepare data for Gantt chart
@@ -108,23 +108,46 @@ def show_problem_instance(problem_instance):
     plt.show()  # Displays the table
 
 
+
 def plot_task_map(task_locations, T_execution, R):
-    marker_sizes = T_execution[1:-1] * 2
+    n_skills = R.shape[1]
+    colors = plt.cm.Set1(np.linspace(0, 1, n_skills))  # Generate a color palette
+    marker_sizes = T_execution[1:-1] * 3
     
-    plt.figure(figsize=(8, 8))
-    plt.scatter(task_locations[1:-1, 0], task_locations[1:-1, 1], s=marker_sizes, label="Tasks")
-    plt.scatter(task_locations[0, 0], task_locations[0, 1], color='green', s=150, marker = 'x', label="Start (Task 0)")
-    plt.scatter(task_locations[-1, 0], task_locations[-1, 1], color='red', s=150, marker = 'x', label="End (Task -1)")
+    def draw_pie(ax, x, y, sizes, radius):
+        start_angle = 0
+        for size, color in zip(sizes, colors):
+            end_angle = start_angle + size * 360
+            if size > 0:
+                wedge = Wedge((x, y), radius, start_angle, end_angle, facecolor=color, edgecolor="black", lw=0.5)
+                ax.add_patch(wedge)
+            start_angle = end_angle
+
+    fig, ax = plt.subplots(figsize=(8, 8))
     
+    # Plot tasks with pie-chart representation
     for idx, (x, y) in enumerate(task_locations[1:-1], start=1):
-        skills_required = [str(skill) for skill, needed in enumerate(R[idx]) if needed == 1]
-        plt.text(x, y+2, f"{', '.join(skills_required)}", fontsize=10, ha='center')
+        skills_required = R[idx]
+        total_skills = np.sum(skills_required)
+        skill_sizes = skills_required / total_skills if total_skills > 0 else np.zeros_like(skills_required)
+        draw_pie(ax, x, y, skill_sizes, marker_sizes[idx-1] / 100)
     
-    plt.xlabel("X Coordinate")
-    plt.ylabel("Y Coordinate")
-    plt.legend()
-    plt.title("Task Map with Scaled Execution Times")
+    # Plot start and end points
+    ax.scatter(task_locations[0, 0], task_locations[0, 1], color='green', s=150, marker='x', label="Start (Task 0)")
+    plt.text(task_locations[0, 0] + 6 ,  task_locations[0, 1] - 1, "Start", fontsize=15, ha='center')
+    ax.scatter(task_locations[-1, 0], task_locations[-1, 1], color='red', s=150, marker='x', label="End (Task -1)")
+    plt.text(task_locations[-1, 0] + 6 ,  task_locations[-1, 1] - 1, "End", fontsize=15, ha='center')
+
+    legend_patches = [plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i], markersize=10, label=f"Skill {i}") for i in range(n_skills)]
+    ax.legend(handles=legend_patches, title="Task Skills", loc="upper right")
+    
+    ax.set_xlabel("X Coordinate")
+    ax.set_ylabel("Y Coordinate")
+    ax.set_title("Task Map (Size corresponds to execution time)")
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
     plt.show()
+
 
 def plot_robot_trajectories(task_locations, task_assignments, T_execution, R):
     def draw_arrow(start, end, color, label=""):
@@ -132,36 +155,63 @@ def plot_robot_trajectories(task_locations, task_assignments, T_execution, R):
         length = np.sqrt(dx**2 + dy**2)
         adjusted_dx, adjusted_dy = dx / length * (length - 5), dy / length * (length - 5)
         plt.arrow(start[0], start[1], adjusted_dx, adjusted_dy, head_width=2, head_length=5,
-                  fc=color, ec=color, alpha=0.5, label=label)
+                  fc=color, ec=color, alpha=0.7, label=label)
+
+    def draw_pie(ax, x, y, sizes, radius):
+        start_angle = 0
+        for size, color in zip(sizes, colors):
+            end_angle = start_angle + size * 360
+            if size > 0:
+                wedge = Wedge((x, y), radius, start_angle, end_angle, facecolor=color, edgecolor="black", lw=0.5)
+                ax.add_patch(wedge)
+            start_angle = end_angle
 
     marker_sizes = T_execution[1:-1] * 2
+    n_skills = R.shape[1]
+    colors = plt.cm.Set1(np.linspace(0, 1, n_skills))  # Generate skill color palette
 
-    plt.figure(figsize=(10, 10))
-    plt.scatter(task_locations[1:-1, 0], task_locations[1:-1, 1], s=marker_sizes, label="Tasks")
-    plt.scatter(task_locations[0, 0], task_locations[0, 1], color='green', s=150, marker = 'x', label="Start (Task 0)")
-    plt.scatter(task_locations[-1, 0], task_locations[-1, 1], color='red', s=150, marker = 'x', label="End (Task -1)")
+    fig, ax = plt.subplots(figsize=(10, 10))
 
-    colors = plt.cm.Set1(np.linspace(0, 1, len(task_assignments.keys())))
+    # Plot tasks with pie-chart representation
+    for idx, (x, y) in enumerate(task_locations[1:-1], start=1):
+        skills_required = R[idx]
+        total_skills = np.sum(skills_required)
+        skill_sizes = skills_required / total_skills if total_skills > 0 else np.zeros_like(skills_required)
+        draw_pie(ax, x, y, skill_sizes, marker_sizes[idx - 1] / 100)
 
+    # Plot start and end points
+    ax.scatter(task_locations[0, 0], task_locations[0, 1], color='green', s=150, marker='x', label="Start (Task 0)")
+    ax.text(task_locations[0, 0] + 6, task_locations[0, 1] - 1, "Start", fontsize=12, ha='center')
+    ax.scatter(task_locations[-1, 0], task_locations[-1, 1], color='red', s=150, marker='x', label="End (Task -1)")
+    ax.text(task_locations[-1, 0] + 6, task_locations[-1, 1] - 1, "End", fontsize=12, ha='center')
+
+    # Draw arrows for robot trajectories
+    trajectory_colors = plt.cm.Set1(np.linspace(0, 1, len(task_assignments.keys())))
     for idx, (robot_id, tasks) in enumerate(task_assignments.items()):
-        color = colors[idx]
+        color = trajectory_colors[idx]
         start = task_locations[0]
-        
-        for _, _, task_id in tasks:
+
+        # Ensure tasks are sorted by start_time
+        tasks_sorted = sorted(tasks, key=lambda x: x[0])
+
+        for _, _, task_id in tasks_sorted:
             end = task_locations[task_id]
             draw_arrow(start, end, color, label=f"Robot {robot_id}" if start is task_locations[0] else "")
             start = end
-        
+
         end = task_locations[-1]
         draw_arrow(start, end, color)
 
-    for idx, (x, y) in enumerate(task_locations[1:-1], start=1):
-        skills_required = [str(skill) for skill, needed in enumerate(R[idx]) if needed == 1]
-        plt.text(x, y+2, f"{', '.join(skills_required)}", fontsize=10, ha='center')
+    # Add legend for skills
+    legend_patches = [
+        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i], markersize=10, label=f"Skill {i}")
+        for i in range(n_skills)
+    ]
+    ax.legend(handles=legend_patches, title="Task Skills", loc="upper right")
 
-
-    plt.xlabel("X Coordinate")
-    plt.ylabel("Y Coordinate")
-    plt.legend()
-    plt.title("Robot Trajectories for Fulfilled Tasks")
+    ax.set_xlabel("X Coordinate")
+    ax.set_ylabel("Y Coordinate")
+    ax.set_title("Robot Trajectories with Task Skill Representation")
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 100)
     plt.show()
