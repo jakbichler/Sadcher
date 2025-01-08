@@ -1,4 +1,5 @@
 literature_survey/
 venv_thesis/
-roboflo/
+datasets/
 *.pyc
+results/

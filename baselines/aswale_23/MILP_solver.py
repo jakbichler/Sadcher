@@ -12,7 +12,7 @@ TODO:
 import matplotlib.pyplot as plt
 import numpy as np
 import pulp
-from problem_generator import read_problem_instance
+from data_generation.problem_generator import read_problem_instance
 
 
 def milp_scheduling(problem_instance):
@@ -195,14 +195,14 @@ def milp_scheduling(problem_instance):
 
 
     # Solve the problem
-    prob.solve(pulp.PULP_CBC_CMD(timeLimit=60*5, msg = False)) 
+    prob.solve(pulp.PULP_CBC_CMD(timeLimit=60*10, msg = False)) 
     print("Status:", pulp.LpStatus[prob.status])
 
     # Check if the problem is feasible
     if pulp.LpStatus[prob.status] in ['Optimal', 'Feasible']:
         # Print the objective value
         makespan = pulp.value(prob.objective)
-        print(f"Total time to complete all tasks: {makespan}")
+        print(f"MILP time to complete all tasks: {makespan}")
 
         # # Prepare data for Gantt chart
         task_colors = {}  
@@ -221,6 +221,7 @@ def milp_scheduling(problem_instance):
 
     else:
         print("No feasible solution found.")
+
 
 
     return makespan, robot_tasks, task_colors

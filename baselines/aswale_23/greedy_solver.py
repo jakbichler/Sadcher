@@ -5,7 +5,7 @@ extension of the greedy solver to include precedence constraints
 """
 
 import numpy as np
-from problem_generator import ProblemData, read_problem_instance
+from data_generation.problem_generator import ProblemData, read_problem_instance
 
 
 def greedy_scheduling(problem_instance: ProblemData):
@@ -200,6 +200,6 @@ def calculate_task_end_times(Y_max, T_execution, T_travel, n_tasks):
     last_task_finished = np.argmax(task_end_times)
     finish_task = n_tasks + 1
     last_depot_arrival_time = task_end_times[last_task_finished] + T_travel[last_task_finished+1][finish_task]
-    print(f"Full time to completion: {last_depot_arrival_time}")
+    print(f"Greedy time to completion: {last_depot_arrival_time}")
 
     return last_depot_arrival_time
