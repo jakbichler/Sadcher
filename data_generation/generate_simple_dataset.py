@@ -41,13 +41,13 @@ def generate_simple_dataset(n_instances: int, output_dir: str):
             json.dump(serializable_problem_instance, f)
 
         # Solve the problem instance using the MILP solver
-        optimal_makespan, optimal_schedule, _ = milp_scheduling(problem_instance)
+        optimal_schedule = milp_scheduling(problem_instance)
 
         solution_path = os.path.join(
             output_dir, "solutions", f"optimal_schedule_{instance_index}.json"
         )
         with open(solution_path, "w") as f:
-            json.dump({"makespan": optimal_makespan, "schedule": optimal_schedule}, f)
+            json.dump(optimal_schedule.to_dict(), f)
 
 
 if __name__ == "__main__":

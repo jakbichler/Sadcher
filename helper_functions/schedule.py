@@ -1,3 +1,4 @@
+import json
 class Schedule:
     """
     Represents a solution to the scheduling problem.
@@ -33,3 +34,37 @@ class Schedule:
             for task, start, end in tasks:
                 result += f"      Task {task}: {start:.2f} -> {end:.2f}\n"
         return result
+    
+
+    def to_dict(self):
+        """
+        Converts the Schedule object into a dictionary for JSON serialization.
+        """
+        return {
+            "makespan": self.makespan,
+            "n_tasks": self.n_tasks,
+            "n_robots": self.n_robots,
+            "robot_schedules": {
+                robot: [
+                    {"task": task, "start_time": start, "end_time": end}
+                    for task, start, end in tasks
+                ]
+                for robot, tasks in self.robot_schedules.items()
+            },
+
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        """
+        Creates a Schedule object from a dictionary (useful for JSON deserialization).
+        """
+        robot_schedules = {
+            int(robot): [(t["task"], t["start_time"], t["end_time"]) for t in tasks]
+            for robot, tasks in data["robot_schedules"].items()
+        }
+        return cls(
+            makespan=data["makespan"],
+            robot_schedules=robot_schedules,
+            n_tasks=data["n_tasks"],
+        )
