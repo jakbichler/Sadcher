@@ -6,6 +6,7 @@ extension of the greedy solver to include precedence constraints
 
 import numpy as np
 from data_generation.problem_generator import ProblemData, read_problem_instance
+from helper_functions.schedule import Schedule
 
 
 def greedy_scheduling(problem_instance: ProblemData):
@@ -51,7 +52,21 @@ def greedy_scheduling(problem_instance: ProblemData):
 
     makespan = calculate_task_end_times(Y_max, T_execution, T_travel, n_tasks)
 
-    return makespan, X, Y_max
+    robots = range(n_robots)
+    tasks = range(n_tasks + 2)
+    robot_schedules = {robot: [] for robot in robots}
+
+    for robot in range(n_robots):
+        for task in tasks[:-1]:
+            # Check if robot visits task
+            if any(X[robot][previous_task][task] == 1 for previous_task in tasks if previous_task != task):
+                start_time = Y_max[task]
+                end_time = start_time + T_execution[task]
+                if task != 0 and task != n_tasks + 1:
+                    robot_schedules[robot].append((task, start_time, end_time))
+
+    return Schedule(makespan, robot_schedules, n_tasks)
+
 
 def get_current_task(robot_index, X):
     current = 0

@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pulp
 from data_generation.problem_generator import read_problem_instance
+from helper_functions.schedule import Schedule
 
 
 def milp_scheduling(problem_instance):
@@ -197,31 +198,31 @@ def milp_scheduling(problem_instance):
     # Solve the problem
     prob.solve(pulp.PULP_CBC_CMD(timeLimit=60*10, msg = False)) 
     print("Status:", pulp.LpStatus[prob.status])
-
     # Check if the problem is feasible
     if pulp.LpStatus[prob.status] in ['Optimal', 'Feasible']:
-        # Print the objective value
         makespan = pulp.value(prob.objective)
         print(f"MILP time to complete all tasks: {makespan}")
 
-        # # Prepare data for Gantt chart
-        task_colors = {}  
-        robot_tasks = {i: [] for i in robots} 
-        color_pool = plt.cm.get_cmap('hsv', n_tasks + 2)
+        # # # Prepare data for Gantt chart
+        # task_colors = {}  
+        # robot_tasks = {i: [] for i in robots} 
+        # color_pool = plt.cm.get_cmap('hsv', n_tasks + 2)
+        robot_schedules = {robot: [] for robot in robots}
 
-        for i in robots:
-            for k in tasks:
+        for robot in robots:
+            for task in tasks:
                 # Check if robot i visits task k
-                if any(pulp.value(X[i][j][k]) > 0.5 for j in tasks if j != k):
-                    start_time = pulp.value(Y_max[k])
-                    end_time = start_time + T_execution[k]
-                    robot_tasks[i].append((start_time, end_time, k))
-                    if k not in task_colors:
-                        task_colors[k] = color_pool(k)
+                if any(pulp.value(X[robot][previous_task][task]) > 0.5 for previous_task in tasks if previous_task != task):
+                    start_time = pulp.value(Y_max[task])
+                    end_time = start_time + T_execution[task]
+
+                    # Exclude start and end tasks
+                    if task != 0 and task != n_tasks + 1:
+                        robot_schedules[robot].append((task, start_time, end_time))
+                    # if k not in task_colors:
+                    #     task_colors[k] = color_pool(k)
 
     else:
         print("No feasible solution found.")
 
-
-
-    return makespan, robot_tasks, task_colors
+    return Schedule(makespan, robot_schedules, n_tasks)
