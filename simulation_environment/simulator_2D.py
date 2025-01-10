@@ -1,5 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.table import Table
+from matplotlib.patches import Wedge
 from matplotlib.widgets import Button
 import sys
 sys.path.append('..')
@@ -7,14 +9,17 @@ sys.path.append('..')
 from data_generation.problem_generator import ProblemData, generate_random_data, generate_simple_data
 
 class Task:
-    def __init__(self, location, duration, requirements):
+    def __init__(self, task_id, location, duration, requirements):
+        self.task_id = task_id
         self.location = np.array(location, dtype=np.float64)
         self.duration = duration
         self.requirements = requirements
         self.status = 'PENDING'  # could be PENDING, IN_PROGRESS, DONE
 
+
 class Robot:
-    def __init__(self, location, speed=1.0, capabilities=None):
+    def __init__(self, robot_id, location, speed=1.0, capabilities=None):
+        self.robot_id = robot_id
         if capabilities is None:
             capabilities = [0, 0]
         self.location = np.array(location, dtype=np.float64)
@@ -22,15 +27,18 @@ class Robot:
         self.capabilities = capabilities
         self.current_task = None
     
-    def move_towards(self):
+    
+    def update_position(self):
         """Move the robot one step toward its current_task if assigned."""
         if self.current_task:
             # Simple step in the direction of goal based on speed
             movement_vector = self.current_task.location - self.location
             dist = np.linalg.norm(movement_vector)
-            if dist > 1e-9:  # avoid division by zero
-                normalized_mv = movement_vector / dist
+            if dist > self.speed:  
+                normalized_mv = movement_vector / dist + 1e-9
                 self.location += normalized_mv * self.speed
+            else: # Arrived at task
+                self.location = self.current_task.location
 
 class Simulation:
     def __init__(self, problem_instance):
@@ -42,10 +50,7 @@ class Simulation:
         # For example, Q is a list of robot capabilities
         robot_capabilities = problem_instance['Q']
         start_location = problem_instance['task_locations'][0]
-        robots = []
-        for cap in robot_capabilities:
-            robots.append(Robot(location=start_location, capabilities=cap))
-        return robots
+        return [Robot(robot_id = idx, location=start_location, capabilities=cap) for idx,cap in enumerate(robot_capabilities)]
 
     def create_tasks(self, problem_instance):
         # T_e = durations, R = requirements
@@ -53,24 +58,65 @@ class Simulation:
         durations = problem_instance['T_e']
         requirements = problem_instance['R']
         return [
-            Task(loc, dur, req) 
-            for loc, dur, req in zip(locations, durations, requirements)
+            Task(idx, loc, dur, req) 
+            for idx, (loc, dur, req) in enumerate(zip(locations, durations, requirements))
         ]
+    
+    def update_task(self, task):
+        """Update task status based on robot proximity."""
+        if self.all_skills_present(task):
+            task.status = 'IN_PROGRESS' 
+            task.duration -= 1
+        if task.duration <= 0:
+            task.status = 'DONE'
+        print(f"Task {task.task_id} status: {task.status}")
+        
+
+    def all_skills_present(self, task):
+        """
+        Returns True if:
+        1) The logical OR of all assigned robots' capabilities covers all task requirements.
+        2) Every assigned robot is within 1 unit of the task location.
+        Otherwise, returns False.
+        """
+        assigned_robots = [r for r in self.robots if r.current_task == task]
+
+        # Combine capabilities via logical OR across all assigned robots
+        combined_capabilities = np.zeros_like(task.requirements, dtype=bool)
+        for robot in assigned_robots:
+            robot_cap = np.array(robot.capabilities, dtype=bool)
+            combined_capabilities = np.logical_or(combined_capabilities, robot_cap)
+
+        required_skills = np.array(task.requirements, dtype=bool)
+
+        # Check if the combined team covers all required skills
+        if not np.all(combined_capabilities[required_skills]):
+            return False
+
+        # Check if all assigned robots are close enough to the task
+        for robot in assigned_robots:
+            distance = np.linalg.norm(robot.location - task.location)
+            if distance > 1.0:
+                return False
+
+        return True
+
+
+    def update_robot(self, robot):
+        robot.update_position()
+        print(f"Robot {robot.robot_id} has task: {robot.current_task.task_id if robot.current_task else None}")
+        if robot.current_task is not None and robot.current_task.status == 'DONE':
+            print(f"Robot {robot.robot_id} completed task {robot.current_task.task_id}")
+            robot.current_task = None
 
     def step(self):
         """Advance the simulation by one timestep, moving robots and updating tasks."""
-        self.timestep += 1
 
-        # Move robots
-        for robot in self.robots:
-            robot.move_towards()
-
+        for robot in self.robots:   
+            self.update_robot(robot)
         # Update tasks (if in progress, decrement duration, mark done if complete)
         for task in self.tasks:
-            if task.status == 'IN_PROGRESS':
-                task.duration -= 1
-                if task.duration <= 0:
-                    task.status = 'DONE'
+            self.update_task(task)
 
         # Check if any robot is idle and there are pending tasks
         idle_robots = [r for r in sim.robots if not r.current_task or r.current_task.status == 'DONE']
@@ -78,6 +124,7 @@ class Simulation:
         if idle_robots:
             schedule_tasks(sim)
 
+        self.timestep += 1
 
 def schedule_tasks(sim):
     """
@@ -87,58 +134,127 @@ def schedule_tasks(sim):
     This could be replaced by a call to your NN or heuristic.
     """
     if sim.timestep > 3:
-        sim.robots[0].current_task = sim.tasks[1]
+        sim.robots[0].current_task = sim.tasks[1] 
 
-    if sim.timestep > 5:
-        sim.robots[1].current_task = sim.tasks[2]
+    if sim.timestep > 10:
+        sim.robots[1].current_task = sim.tasks[1]
 
 
 def visualize(sim):
-    """Interactive Matplotlib figure with a Next Timestep button."""
+    """Interactive Matplotlib figure with tasks as pie charts and step buttons."""
+    n_skills = len(sim.tasks[0].requirements)  # Assume all tasks have the same number of skills
+    colors = plt.cm.Set1(np.linspace(0, 1, n_skills))  # Generate a color palette
+    
+    def add_robot_skills_table(fig, robots):
+        """Add a table below the plot displaying robots and their skills."""
+        # Create table data
+        table_data = [["Robot", "Skills", "Current Task"]]
+        for i, robot in enumerate(robots):
+            skills = ", ".join([str(skill) for skill in robot.capabilities])
+            current_task = robot.current_task.task_id if robot.current_task else "None"
+            table_data.append([f"Robot {i}", skills, f"Task {current_task}"])
+        # Create the table
+        ax_table = plt.axes([0.1, 0.05, 0.8, 0.2])  # Position for the table
+        ax_table.axis("off")  # Hide the axes
+        table = Table(ax_table, bbox=[0, 0, 1, 1])
+        cell_colors = [["#d4e6f1" if row % 2 == 0 else "#f2f3f4" for col in range(2)] for row in range(len(table_data))]
+
+        # Add cells to the table
+        for row, (robot, skills, task) in enumerate(table_data):
+            table.add_cell(row, 0, width=0.4, height=0.15, text=robot, loc="center", facecolor=cell_colors[row][0])
+            table.add_cell(row, 1, width=0.6, height=0.15, text=skills, loc="center", facecolor=cell_colors[row][1])
+            table.add_cell(row, 2, width=0.6, height=0.15, text=task, loc="center", facecolor=cell_colors[row][1])
+        # Add table to the axes
+        ax_table.add_table(table)
+
+
+    def draw_pie(ax, x, y, sizes, radius):
+        """Draw a pie chart at the specified (x, y) position."""
+        start_angle = 0
+        for size, color in zip(sizes, colors):
+            end_angle = start_angle + size * 360
+            if size > 0:
+                wedge = Wedge((x, y), radius, start_angle, end_angle, facecolor=color, edgecolor="black", lw=0.5)
+                ax.add_patch(wedge)
+            start_angle = end_angle
+
     fig, ax = plt.subplots(figsize=(8, 8))
-    plt.subplots_adjust(bottom=0.2)
+    plt.subplots_adjust(bottom=0.3)  # Make space for buttons
+
 
     def update_plot():
         ax.clear()
 
-        # Plot tasks
-        task_x = [t.location[0] for t in sim.tasks if t.status != 'DONE']
-        task_y = [t.location[1] for t in sim.tasks if t.status != 'DONE']
-        ax.scatter(task_x, task_y, marker='o', c='blue', label='Tasks')
+        # Plot tasks with pie-chart representation
+        for task in sim.tasks:
+            if task.status != 'DONE':
+                total_skills = np.sum(task.requirements)
+                skill_sizes = task.requirements / total_skills if total_skills > 0 else np.zeros_like(task.requirements)
+                draw_pie(ax, task.location[0], task.location[1], skill_sizes, task.duration / 50)  # Scale pie size by duration
 
-        # Plot robots
-        robot_x = [r.location[0] for r in sim.robots]
-        robot_y = [r.location[1] for r in sim.robots]
-        ax.scatter(robot_x, robot_y, marker='s', c='red', label='Robots')
+        # Plot robots and add their numbers
+        for robot_idx, robot in enumerate(sim.robots):
+            ax.scatter(robot.location[0], robot.location[1], marker='s', c='black', label='Robots' if robot_idx == 0 else None)
+            ax.text(robot.location[0] + 1, robot.location[1] + 1, f"{robot_idx}", fontsize=10, color="black", ha='center')
+
+
+
+        # Plot start and end points
+        ax.scatter(sim.tasks[0].location[0], sim.tasks[0].location[1], color='green', s=150, marker='x', label="Start (Task 0)")
+        plt.text(sim.tasks[0].location[0] + 6, sim.tasks[0].location[1] - 1, "Start", fontsize=15, ha='center')
+        ax.scatter(sim.tasks[-1].location[0], sim.tasks[-1].location[1], color='red', s=150, marker='x', label="End (Task -1)")
+        plt.text(sim.tasks[-1].location[0] + 6, sim.tasks[-1].location[1] - 1, "End", fontsize=15, ha='center')
+
+        # Add robot skills table
+        add_robot_skills_table(fig, sim.robots)
+
+        # Add legend for skills
+        legend_patches = [
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i], markersize=10, label=f"Skill {i}")
+            for i in range(n_skills)
+        ]
+        ax.legend(handles=legend_patches, title="Task Skills", loc="upper right")
 
         ax.set_title(f"Timestep: {sim.timestep}")
-        ax.legend()
+        #ax.legend()
+        ax.set_xlim(0, 100)
+        ax.set_ylim(0, 100)
         plt.draw()
 
-    def next_step_callback(event):
-        # Advance one timestep and update
+
+    def next_step_callback(event=None):
         sim.step()
         update_plot()
 
-    def advance_10_steps_callback(event):
-        # Advance 10 timesteps
+
+    def advance_10_steps_callback(event=None):
         for _ in range(10):
             sim.step()
         update_plot()
+    
+
+    def key_press(event):
+        """Handle key presses to trigger button actions."""
+        if event.key == 'n':  # Press 'n' for Next Timestep
+            next_step_callback()
+        elif event.key == 'm':  # Press 't' for Advance 10 Timesteps
+            advance_10_steps_callback()
 
     # Create buttons
-    ax_button_next = plt.axes([0.5, 0.05, 0.2, 0.07])  # Position for 'Next Timestep' button
-    ax_button_10 = plt.axes([0.7, 0.05, 0.2, 0.07])    # Position for 'Advance 10 Timesteps' button
+    ax_button_next = plt.axes([0.5, 0.92, 0.2, 0.07])  # Position for 'Next Timestep' button
+    ax_button_10 = plt.axes([0.7, 0.92, 0.2, 0.07])    # Position for 'Advance 10 Timesteps' button
 
     btn_next = Button(ax_button_next, 'Next Timestep')
     btn_next.on_clicked(next_step_callback)
 
     btn_advance_10 = Button(ax_button_10, '10 Timesteps')
     btn_advance_10.on_clicked(advance_10_steps_callback)
+    fig.canvas.mpl_connect('key_press_event', key_press)
 
     # Initial draw
     update_plot()
     plt.show()
+
 
 
 def simulation_main_loop(sim):
