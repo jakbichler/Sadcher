@@ -7,13 +7,13 @@ import sys
 sys.path.append('..')
 
 from data_generation.problem_generator import ProblemData, generate_random_data, generate_simple_data
-
+from greedy_instantaneous_scheduler import greedy_instantaneous_assignment
 class Task:
     def __init__(self, task_id, location, duration, requirements):
         self.task_id = task_id
         self.location = np.array(location, dtype=np.float64)
         self.duration = duration
-        self.requirements = requirements
+        self.requirements = np.array(requirements, dtype=bool)
         self.status = 'PENDING'  # could be PENDING, IN_PROGRESS, DONE
 
 
@@ -24,7 +24,7 @@ class Robot:
             capabilities = [0, 0]
         self.location = np.array(location, dtype=np.float64)
         self.speed = speed
-        self.capabilities = capabilities
+        self.capabilities = np.array(capabilities, dtype=bool)
         self.current_task = None
     
     
@@ -41,10 +41,11 @@ class Robot:
                 self.location = self.current_task.location
 
 class Simulation:
-    def __init__(self, problem_instance):
+    def __init__(self, problem_instance, precedence_constraints):
         self.timestep = 0
-        self.robots = self.create_robots(problem_instance)
-        self.tasks = self.create_tasks(problem_instance)
+        self.robots: list[Robot] = self.create_robots(problem_instance)
+        self.tasks: list[Task] = self.create_tasks(problem_instance)
+        self.precedence_constraints = precedence_constraints
 
     def create_robots(self, problem_instance):
         # For example, Q is a list of robot capabilities
@@ -52,8 +53,8 @@ class Simulation:
         start_location = problem_instance['task_locations'][0]
         return [Robot(robot_id = idx, location=start_location, capabilities=cap) for idx,cap in enumerate(robot_capabilities)]
 
+
     def create_tasks(self, problem_instance):
-        # T_e = durations, R = requirements
         locations = problem_instance['task_locations']
         durations = problem_instance['T_e']
         requirements = problem_instance['R']
@@ -61,15 +62,26 @@ class Simulation:
             Task(idx, loc, dur, req) 
             for idx, (loc, dur, req) in enumerate(zip(locations, durations, requirements))
         ]
-    
+        
+
+
+    def update_robot(self, robot):
+        robot.update_position()
+        if robot.current_task is not None and robot.current_task.status == 'DONE':
+            robot.current_task = None    
+
+
     def update_task(self, task):
-        """Update task status based on robot proximity."""
+        if task.status == 'DONE':
+            return
         if self.all_skills_present(task):
-            task.status = 'IN_PROGRESS' 
+            task.status = 'IN_PROGRESS'
             task.duration -= 1
-        if task.duration <= 0:
-            task.status = 'DONE'
-        print(f"Task {task.task_id} status: {task.status}")
+            if task.duration <= -0.5:
+                task.status = 'DONE'
+        else:
+            task.status = 'PENDING'
+
         
 
     def all_skills_present(self, task):
@@ -88,7 +100,6 @@ class Simulation:
             combined_capabilities = np.logical_or(combined_capabilities, robot_cap)
 
         required_skills = np.array(task.requirements, dtype=bool)
-
         # Check if the combined team covers all required skills
         if not np.all(combined_capabilities[required_skills]):
             return False
@@ -102,13 +113,6 @@ class Simulation:
         return True
 
 
-    def update_robot(self, robot):
-        robot.update_position()
-        print(f"Robot {robot.robot_id} has task: {robot.current_task.task_id if robot.current_task else None}")
-        if robot.current_task is not None and robot.current_task.status == 'DONE':
-            print(f"Robot {robot.robot_id} completed task {robot.current_task.task_id}")
-            robot.current_task = None
-
     def step(self):
         """Advance the simulation by one timestep, moving robots and updating tasks."""
 
@@ -118,13 +122,17 @@ class Simulation:
         for task in self.tasks:
             self.update_task(task)
 
+
         # Check if any robot is idle and there are pending tasks
         idle_robots = [r for r in sim.robots if not r.current_task or r.current_task.status == 'DONE']
 
         if idle_robots:
             schedule_tasks(sim)
 
+        
+
         self.timestep += 1
+
 
 def schedule_tasks(sim):
     """
@@ -133,12 +141,13 @@ def schedule_tasks(sim):
       - Assign them tasks if any are PENDING
     This could be replaced by a call to your NN or heuristic.
     """
-    if sim.timestep > 3:
-        sim.robots[0].current_task = sim.tasks[1] 
+    instantaneous_schedule = greedy_instantaneous_assignment(sim)
+    for robot in sim.robots:
+        task_id = instantaneous_schedule.robot_assignments.get(robot.robot_id)
+        if task_id is not None:
+            robot.current_task = sim.tasks[task_id]
 
-    if sim.timestep > 10:
-        sim.robots[1].current_task = sim.tasks[1]
-
+    
 
 def visualize(sim):
     """Interactive Matplotlib figure with tasks as pie charts and step buttons."""
@@ -225,6 +234,7 @@ def visualize(sim):
     def next_step_callback(event=None):
         sim.step()
         update_plot()
+        print ("----")
 
 
     def advance_10_steps_callback(event=None):
@@ -232,6 +242,7 @@ def visualize(sim):
             sim.step()
         update_plot()
     
+        print ("----")
 
     def key_press(event):
         """Handle key presses to trigger button actions."""
@@ -257,25 +268,15 @@ def visualize(sim):
 
 
 
-def simulation_main_loop(sim):
-    """
-    This wraps the visualization. 
-    You can later add code here for logging or additional checks, 
-    but the main interactive loop is driven by the Matplotlib UI.
-    """
-    visualize(sim)
-
-
 if __name__ == '__main__':
     # Example usage
-    n_tasks = 8
-    n_robots = 4
-    n_skills = 3
+    n_tasks = 4
+    n_robots = 2
+    n_skills = 2
     # np.random.seed(35)
 
     precedence_constraints = np.array([[1,2]])
     problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
 
-    sim = Simulation(problem_instance)
-    simulation_main_loop(sim)
-
+    sim = Simulation(problem_instance, precedence_constraints)
+    visualize(sim)

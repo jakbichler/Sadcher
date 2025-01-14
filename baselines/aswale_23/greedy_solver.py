@@ -6,7 +6,7 @@ extension of the greedy solver to include precedence constraints
 
 import numpy as np
 from data_generation.problem_generator import ProblemData, read_problem_instance
-from helper_functions.schedule import Schedule
+from helper_functions.schedules import Full_Horizon_Schedule
 
 
 def greedy_scheduling(problem_instance: ProblemData):
@@ -65,7 +65,7 @@ def greedy_scheduling(problem_instance: ProblemData):
                 if task != 0 and task != n_tasks + 1:
                     robot_schedules[robot].append((task, start_time, end_time))
 
-    return Schedule(makespan, robot_schedules, n_tasks)
+    return Full_Horizon_Schedule(makespan, robot_schedules, n_tasks)
 
 
 def get_current_task(robot_index, X):
