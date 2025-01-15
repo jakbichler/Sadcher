@@ -16,7 +16,7 @@ from data_generation.problem_generator import read_problem_instance
 from helper_functions.schedules import Full_Horizon_Schedule
 
 
-def milp_scheduling(problem_instance, threads = 1):
+def milp_scheduling(problem_instance, n_threads = 2):
     Q, R, T_execution, T_travel, task_locations, precedence_constraints = read_problem_instance(problem_instance)
     n_robots = Q.shape[0]
     n_tasks = R.shape[0] - 2
@@ -194,8 +194,9 @@ def milp_scheduling(problem_instance, threads = 1):
     #             if j != k:
     #                 prob += U[i][j] - U[i][k] + (n_tasks + 1) * X[i][j][k] <= n_tasks, f"Subtour_Elimination_{i}_{j}_{k}"
 
+
     # Solve the problem
-    prob.solve(pulp.PULP_CBC_CMD(timeLimit=60*10, msg = False, threads=threads)) 
+    prob.solve(pulp.PULP_CBC_CMD(timeLimit=60*10, msg = False, threads = n_threads)) 
     print("Status:", pulp.LpStatus[prob.status])
     # Check if the problem is feasible
     if pulp.LpStatus[prob.status] in ['Optimal', 'Feasible']:
@@ -214,7 +215,6 @@ def milp_scheduling(problem_instance, threads = 1):
                     # Exclude start and end tasks
                     if task != 0 and task != n_tasks + 1:
                         robot_schedules[robot].append((task, start_time, end_time))
-
 
     else:
         print("No feasible solution found.")
