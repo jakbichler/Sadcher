@@ -1,3 +1,4 @@
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.table import Table
@@ -46,6 +47,9 @@ class Simulation:
         self.robots: list[Robot] = self.create_robots(problem_instance)
         self.tasks: list[Task] = self.create_tasks(problem_instance)
         self.precedence_constraints = precedence_constraints
+        self.sim_done = False
+        self.makespan = -1 
+
 
     def create_robots(self, problem_instance):
         # For example, Q is a list of robot capabilities
@@ -70,19 +74,39 @@ class Simulation:
         if robot.current_task is not None and robot.current_task.status == 'DONE':
             robot.current_task = None    
 
-
     def update_task(self, task):
         if task.status == 'DONE':
             return
+
+        # If this is the last task:
+        if task.task_id == len(self.tasks) - 1:
+            # Check if all robots have arrived
+            if self.all_robots_at_task(self.robots, task, threshold=1.0):
+                task.status = 'DONE'
+                print("All robots have arrived at the end location. Simulation finished.")
+                self.sim_done = True
+                self.makespan = self.timestep
+            else:
+                task.status = 'PENDING'
+            return
+
+        # Else: normal tasks
         if self.all_skills_present(task):
             task.status = 'IN_PROGRESS'
             task.duration -= 1
-            if task.duration <= -0.5:
+            if task.duration <= 0:
                 task.status = 'DONE'
         else:
             task.status = 'PENDING'
 
-        
+
+    def all_robots_at_task(self, robots, task, threshold=1.0):
+        """True if all robots are within 'threshold' distance of 'task' location."""
+        for r in robots:
+            if np.linalg.norm(r.location - task.location) > threshold:
+                return False
+        return True  
+
 
     def all_skills_present(self, task):
         """
@@ -105,13 +129,8 @@ class Simulation:
             return False
 
         # Check if all assigned robots are close enough to the task
-        for robot in assigned_robots:
-            distance = np.linalg.norm(robot.location - task.location)
-            if distance > 1.0:
-                return False
-
-        return True
-
+        return self.all_robots_at_task(assigned_robots, task)
+    
 
     def step(self):
         """Advance the simulation by one timestep, moving robots and updating tasks."""
@@ -200,6 +219,8 @@ def visualize(sim):
                 total_skills = np.sum(task.requirements)
                 skill_sizes = task.requirements / total_skills if total_skills > 0 else np.zeros_like(task.requirements)
                 draw_pie(ax, task.location[0], task.location[1], skill_sizes, task.duration / 50)  # Scale pie size by duration
+                ax.text(task.location[0], task.location[1], f"Task {task.task_id}", fontsize=10, ha='center')
+
 
         # Plot robots and add their numbers
         for robot_idx, robot in enumerate(sim.robots):
@@ -223,9 +244,15 @@ def visualize(sim):
             for i in range(n_skills)
         ]
         ax.legend(handles=legend_patches, title="Task Skills", loc="upper right")
+        
+        if sim.sim_done:
+            ax.text(
+                50, 50, 
+                f"Simulation Finished in {sim.makespan} timesteps!", 
+                fontsize=15, color='blue', ha='center', va='center', bbox=dict(facecolor='white', alpha=0.8)
+            )
 
         ax.set_title(f"Timestep: {sim.timestep}")
-        #ax.legend()
         ax.set_xlim(0, 100)
         ax.set_ylim(0, 100)
         plt.draw()
@@ -241,6 +268,7 @@ def visualize(sim):
         for _ in range(10):
             sim.step()
         update_plot()
+        print(sim.sim_done)
     
         print ("----")
 
@@ -269,11 +297,12 @@ def visualize(sim):
 
 
 if __name__ == '__main__':
+
     # Example usage
-    n_tasks = 4
+    n_tasks = 5
     n_robots = 2
     n_skills = 2
-    # np.random.seed(35)
+    # np.random.seed(36)
 
     precedence_constraints = np.array([[1,2]])
     problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
