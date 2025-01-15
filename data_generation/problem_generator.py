@@ -11,7 +11,7 @@ class ProblemData(TypedDict):
     task_locations: np.ndarray
     precedence_constraints: np.ndarray
 
-def generate_random_data(n_tasks: int, n_robots: int, n_skills: int, precedence_constraints) -> ProblemData:
+def generate_random_data(n_tasks: int, n_robots: int, n_skills: int,precedence_constraints = None) -> ProblemData:
     # Generate random data
     # Q[i][s] = 1 if robot i has skill s, 0 otherwise
     Q = np.random.randint(0, 2, (n_robots, n_skills))

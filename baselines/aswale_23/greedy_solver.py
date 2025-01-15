@@ -123,6 +123,8 @@ def find_max_contribution_pairs(Q, X, R, n_tasks, n_robots, precedence_constrain
 
 
 def predecessors_completed(task, R, precedence_constraints):
+    if precedence_constraints is None:
+        return True
     predecessors = [j for (j, k) in precedence_constraints if k == task]
     for predecessor in predecessors:
         if np.any(R[predecessor] > 0):
@@ -149,6 +151,9 @@ def select_earliest_pair(X, pairs, Y_max, T_execution, T_travel, precedence_cons
 
 
 def finish_time_all_predecessors(task, T_travel, Y_max, T_execution, precedence_constraints):
+    if precedence_constraints is None:
+        return 0
+    
     predecessors = [j for (j, k) in precedence_constraints if k == task]
     max_finish_time = 0
     for predecessor in predecessors:
