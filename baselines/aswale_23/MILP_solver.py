@@ -184,8 +184,9 @@ def milp_scheduling(problem_instance, n_threads = 2):
                 )
 
     # Precedence constraints
-    for j, k in precedence_constraints:
-        prob += Y_max[k] >= Y_max[j] + T_execution[j], f"Precedence_Task_{j}_before_Task_{k}"
+    if precedence_constraints is not None:
+        for j, k in precedence_constraints:
+            prob += Y_max[k] >= Y_max[j] + T_execution[j], f"Precedence_Task_{j}_before_Task_{k}"
 
     # # Subtour elimination
     # for i in robots:

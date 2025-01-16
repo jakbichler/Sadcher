@@ -1,4 +1,4 @@
-import time
+import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.table import Table
@@ -9,6 +9,8 @@ sys.path.append('..')
 
 from data_generation.problem_generator import ProblemData, generate_random_data, generate_simple_data
 from greedy_instantaneous_scheduler import greedy_instantaneous_assignment
+from helper_functions.schedules import Full_Horizon_Schedule
+from visualizations.solution_visualization import plot_gantt_chart, plot_robot_trajectories
 class Task:
     def __init__(self, task_id, location, duration, requirements):
         self.task_id = task_id
@@ -49,7 +51,7 @@ class Simulation:
         self.precedence_constraints = precedence_constraints
         self.sim_done = False
         self.makespan = -1 
-
+        self.robot_schedules = {robot.robot_id: [] for robot in self.robots}
 
     def create_robots(self, problem_instance):
         # For example, Q is a list of robot capabilities
@@ -75,15 +77,16 @@ class Simulation:
             robot.current_task = None    
 
     def update_task(self, task):
+        previous_status = task.status
+
         if task.status == 'DONE':
             return
 
         # If this is the last task:
         if task.task_id == len(self.tasks) - 1:
             # Check if all robots have arrived
-            if self.all_robots_at_task(self.robots, task, threshold=1.0):
+            if self.all_robots_at_task(self.robots, task, threshold=0.01):
                 task.status = 'DONE'
-                print("All robots have arrived at the end location. Simulation finished.")
                 self.sim_done = True
                 self.makespan = self.timestep
             else:
@@ -99,8 +102,19 @@ class Simulation:
         else:
             task.status = 'PENDING'
 
+          # Check for transition from PENDING -> IN_PROGRESS: log start time
+        if previous_status == 'PENDING' and task.status == 'IN_PROGRESS':
+            for r in [rb for rb in self.robots if rb.current_task == task]:
+                self.robot_schedules[r.robot_id].append((task.task_id, self.timestep, None))
 
-    def all_robots_at_task(self, robots, task, threshold=1.0):
+        # Check for transition from IN_PROGRESS -> DONE: log end time
+        if previous_status == 'IN_PROGRESS' and task.status == 'DONE':
+            for r in [rb for rb in self.robots if rb.current_task == task]:
+                tid, start, _ = self.robot_schedules[r.robot_id][-1]
+                if tid == task.task_id:
+                    self.robot_schedules[r.robot_id][-1] = (tid, start, self.timestep)
+
+    def all_robots_at_task(self, robots, task, threshold=0.01):
         """True if all robots are within 'threshold' distance of 'task' location."""
         for r in robots:
             if np.linalg.norm(r.location - task.location) > threshold:
@@ -261,16 +275,12 @@ def visualize(sim):
     def next_step_callback(event=None):
         sim.step()
         update_plot()
-        print ("----")
 
 
     def advance_10_steps_callback(event=None):
         for _ in range(10):
             sim.step()
         update_plot()
-        print(sim.sim_done)
-    
-        print ("----")
 
     def key_press(event):
         """Handle key presses to trigger button actions."""
@@ -298,14 +308,29 @@ def visualize(sim):
 
 if __name__ == '__main__':
 
-    # Example usage
-    n_tasks = 5
-    n_robots = 2
-    n_skills = 2
-    # np.random.seed(36)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--visualize", action='store_true', help="Visualize the simulation")
+    args = parser.parse_args()
 
-    precedence_constraints = np.array([[1,2]])
+    # Example usage
+    n_tasks = 7 
+    n_robots = 3
+    n_skills = 3
+    np.random.seed(20)
+
+    precedence_constraints = [[1,2], [2,3]]
     problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
 
+
     sim = Simulation(problem_instance, precedence_constraints)
-    visualize(sim)
+    
+    if args.visualize: 
+        visualize(sim)
+
+    else:
+        while not sim.sim_done:
+            sim.step()
+
+    rolled_out_schedule = Full_Horizon_Schedule(sim.makespan, sim.robot_schedules, n_tasks)
+    print(rolled_out_schedule)
+    plot_gantt_chart("Greedily Rolled-Out Schedule", rolled_out_schedule)
