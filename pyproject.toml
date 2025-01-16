@@ -13,6 +13,7 @@ dependencies = [
     "torch==2.4.0",
     "tqdm>=4.67.1",
     "pyqt5>=5.15.11",
+    "pyyaml>=6.0.2",
 ]
 
 [dependency-groups]
