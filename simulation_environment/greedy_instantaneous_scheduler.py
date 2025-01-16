@@ -45,7 +45,6 @@ def greedy_instantaneous_assignment(sim):
 
             if np.array_equal(needed_mask, new_needed_mask):
                 # Robot does not add to this task -> redundant 
-                print(f"Robot {robot.robot_id} does not add to task {task.task_id}")
                 continue
 
             travel_time = np.linalg.norm(robot.location - task.location) / robot.speed
@@ -71,9 +70,7 @@ def predecessors_completed(task, sim):
     if sim.precedence_constraints is None:
         return True
     
-    print(f"precedence_constraints: {sim.precedence_constraints}")
     predecessors = [j for (j, k) in sim.precedence_constraints if k == task.task_id]
-    print(f"Task {task} has predecessors {predecessors}")
     preceding_tasks = [t for t in sim.tasks if t.task_id in predecessors] 
     for preceding_task in preceding_tasks:
         if preceding_task.status != 'DONE':
