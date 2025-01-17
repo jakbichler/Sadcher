@@ -3,13 +3,17 @@ name = "thesis"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.11"
 dependencies = [
     "ipywidgets>=8.1.5",
     "matplotlib>=3.7.5",
     "pandas>=2.0.3",
     "pulp>=2.9.0",
+    "torch-geometric>=2.6.1",
+    "torch==2.4.0",
     "tqdm>=4.67.1",
+    "pyqt5>=5.15.11",
+    "pyyaml>=6.0.2",
 ]
 
 [dependency-groups]

@@ -13,10 +13,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pulp
 from data_generation.problem_generator import read_problem_instance
-from helper_functions.schedule import Schedule
+from helper_functions.schedules import Full_Horizon_Schedule
 
 
-def milp_scheduling(problem_instance):
+def milp_scheduling(problem_instance, n_threads = 2):
     Q, R, T_execution, T_travel, task_locations, precedence_constraints = read_problem_instance(problem_instance)
     n_robots = Q.shape[0]
     n_tasks = R.shape[0] - 2
@@ -184,8 +184,9 @@ def milp_scheduling(problem_instance):
                 )
 
     # Precedence constraints
-    for j, k in precedence_constraints:
-        prob += Y_max[k] >= Y_max[j] + T_execution[j], f"Precedence_Task_{j}_before_Task_{k}"
+    if precedence_constraints is not None:
+        for j, k in precedence_constraints:
+            prob += Y_max[k] >= Y_max[j] + T_execution[j], f"Precedence_Task_{j}_before_Task_{k}"
 
     # # Subtour elimination
     # for i in robots:
@@ -196,17 +197,13 @@ def milp_scheduling(problem_instance):
 
 
     # Solve the problem
-    prob.solve(pulp.PULP_CBC_CMD(timeLimit=60*10, msg = False)) 
+    prob.solve(pulp.PULP_CBC_CMD(timeLimit=60*10, msg = False, threads = n_threads)) 
     print("Status:", pulp.LpStatus[prob.status])
     # Check if the problem is feasible
     if pulp.LpStatus[prob.status] in ['Optimal', 'Feasible']:
         makespan = pulp.value(prob.objective)
         print(f"MILP time to complete all tasks: {makespan}")
 
-        # # # Prepare data for Gantt chart
-        # task_colors = {}  
-        # robot_tasks = {i: [] for i in robots} 
-        # color_pool = plt.cm.get_cmap('hsv', n_tasks + 2)
         robot_schedules = {robot: [] for robot in robots}
 
         for robot in robots:
@@ -219,10 +216,8 @@ def milp_scheduling(problem_instance):
                     # Exclude start and end tasks
                     if task != 0 and task != n_tasks + 1:
                         robot_schedules[robot].append((task, start_time, end_time))
-                    # if k not in task_colors:
-                    #     task_colors[k] = color_pool(k)
 
     else:
         print("No feasible solution found.")
 
-    return Schedule(makespan, robot_schedules, n_tasks)
+    return Full_Horizon_Schedule(makespan, robot_schedules, n_tasks)

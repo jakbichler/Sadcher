@@ -6,7 +6,7 @@ extension of the greedy solver to include precedence constraints
 
 import numpy as np
 from data_generation.problem_generator import ProblemData, read_problem_instance
-from helper_functions.schedule import Schedule
+from helper_functions.schedules import Full_Horizon_Schedule
 
 
 def greedy_scheduling(problem_instance: ProblemData):
@@ -65,7 +65,7 @@ def greedy_scheduling(problem_instance: ProblemData):
                 if task != 0 and task != n_tasks + 1:
                     robot_schedules[robot].append((task, start_time, end_time))
 
-    return Schedule(makespan, robot_schedules, n_tasks)
+    return Full_Horizon_Schedule(makespan, robot_schedules, n_tasks)
 
 
 def get_current_task(robot_index, X):
@@ -123,6 +123,8 @@ def find_max_contribution_pairs(Q, X, R, n_tasks, n_robots, precedence_constrain
 
 
 def predecessors_completed(task, R, precedence_constraints):
+    if precedence_constraints is None:
+        return True
     predecessors = [j for (j, k) in precedence_constraints if k == task]
     for predecessor in predecessors:
         if np.any(R[predecessor] > 0):
@@ -149,6 +151,9 @@ def select_earliest_pair(X, pairs, Y_max, T_execution, T_travel, precedence_cons
 
 
 def finish_time_all_predecessors(task, T_travel, Y_max, T_execution, precedence_constraints):
+    if precedence_constraints is None:
+        return 0
+    
     predecessors = [j for (j, k) in precedence_constraints if k == task]
     max_finish_time = 0
     for predecessor in predecessors:

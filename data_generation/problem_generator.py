@@ -11,8 +11,7 @@ class ProblemData(TypedDict):
     task_locations: np.ndarray
     precedence_constraints: np.ndarray
 
-
-def generate_random_data(n_tasks: int, n_robots: int, n_skills: int, precedence_constraints) -> ProblemData:
+def generate_random_data(n_tasks: int, n_robots: int, n_skills: int,precedence_constraints = None) -> ProblemData:
     # Generate random data
     # Q[i][s] = 1 if robot i has skill s, 0 otherwise
     Q = np.random.randint(0, 2, (n_robots, n_skills))
@@ -52,6 +51,8 @@ def generate_random_data(n_tasks: int, n_robots: int, n_skills: int, precedence_
     T_t = np.linalg.norm(task_locations[:, np.newaxis] - task_locations[np.newaxis, :], axis=2)
 
     return ProblemData(Q=Q, R=R, T_e=T_e, T_t=T_t, task_locations=task_locations, precedence_constraints=precedence_constraints)
+
+
 
 def generate_simple_data() -> ProblemData:
     """

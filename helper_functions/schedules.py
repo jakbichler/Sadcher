@@ -1,5 +1,5 @@
 import json
-class Schedule:
+class Full_Horizon_Schedule:
     """
     Represents a solution to the scheduling problem.
 
@@ -68,3 +68,26 @@ class Schedule:
             robot_schedules=robot_schedules,
             n_tasks=data["n_tasks"],
         )
+
+
+
+class Instantaneous_Schedule:
+    """
+    Represents an instantaneous schedule for robots of varying lengths.
+    
+    The schedule is a dict with robot indices as keys and next task indices as values. 
+    The main difference between this and Full_Horizon_Schedule is that this schedule
+    only contains the next task for each robot and not the entire schedule.
+    """
+
+    def __init__(self, robot_assignments:dict):
+        self.robot_assignments = robot_assignments # i.e. {robot_id: task_id}
+
+    def __str__(self):
+        """
+        String representation for better readability.
+        """
+        result = f"Instantaneous Schedule:\n"
+        for robot, task in self.robot_assignments.items():
+            result += f"  Robot {robot}: Task {task}\n"
+        return result

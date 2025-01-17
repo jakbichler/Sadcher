@@ -1,0 +1,7 @@
+n_tasks: 6
+n_robots: 2
+n_skills: 3
+random_seed: 30
+precedence_constraints:
+  - [1, 2]
+  - [2, 3]

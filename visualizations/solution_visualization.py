@@ -57,7 +57,7 @@ def plot_gantt_chart(title, schedule):
     ax.axvline(x=schedule.makespan, color='red', linestyle='--', label='Makespan')
 
     plt.tight_layout()
-    plt.show(block=False)  # Displays the Gantt chart without blocking
+    plt.show()  # Displays the Gantt chart without blocking
 
 
 
