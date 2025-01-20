@@ -49,7 +49,7 @@ class Robot:
                 normalized_mv = movement_vector / dist + 1e-9
                 self.location += normalized_mv * self.speed
             else: # Arrived at task
-                self.location = self.current_task.location
+                self.location = np.copy(self.current_task.location)
 
     def check_task_completion(self):
         if self.current_task is not None and self.current_task.status == 'DONE':
