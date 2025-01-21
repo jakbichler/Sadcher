@@ -17,6 +17,8 @@ class Task:
         self.duration = duration
         self.requirements = np.array(requirements, dtype=bool)
         self.status = 'PENDING'  if task_id != 0 else 'DONE' # could be PENDING, IN_PROGRESS, DONE
+        self.ready = False
+
 
     def start(self):
         self.status = 'IN_PROGRESS'
@@ -29,6 +31,17 @@ class Task:
         if self.duration <= 0:
             self.complete()
 
+    def predecessors_completed(self, sim):
+        if sim.precedence_constraints is None:
+            return True
+        
+        predecessors = [j for (j, k) in sim.precedence_constraints if k == self.task_id]
+        preceding_tasks = [t for t in sim.tasks if t.task_id in predecessors] 
+        for preceding_task in preceding_tasks:
+            if preceding_task.status != 'DONE':
+                return False
+        return True
+
 class Robot:
     def __init__(self, robot_id, location, speed=1.0, capabilities=None):
         self.robot_id = robot_id
@@ -38,6 +51,7 @@ class Robot:
         self.speed = speed
         self.capabilities = np.array(capabilities, dtype=bool)
         self.current_task = None
+        self.available = True
     
     def update_position(self):
         """Move the robot one step toward its current_task if assigned."""
@@ -51,10 +65,11 @@ class Robot:
             else: # Arrived at task
                 self.location = np.copy(self.current_task.location)
 
-    def check_task_completion(self):
-        if self.current_task is not None and self.current_task.status == 'DONE':
-            self.current_task = None    
-
+    def check_task_status(self):
+        if self.current_task and self.current_task.status == 'DONE':
+            self.current_task = None
+        
+        self.available = self.current_task is None
 
 class Simulation:
     def __init__(self, problem_instance, precedence_constraints):
@@ -86,10 +101,16 @@ class Simulation:
         
     def update_robot(self, robot):
         robot.update_position()
-        robot.check_task_completion()
+        robot.check_task_status()
 
     def update_task(self, task):
         previous_status = task.status
+
+        # Check if task is ready to start based on precedence constraints
+        if task.task_id == 0 or task.predecessors_completed(self):
+            task.ready = True
+        else:
+            task.ready = False
 
         if task.status == 'DONE':
             return
