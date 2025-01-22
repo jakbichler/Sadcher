@@ -12,17 +12,19 @@ def solve_bipartite_matching(R, sim):
     n_tasks = len(sim.tasks)
     n_skills = len(sim.robots[0].capabilities)
 
-    print(f"started bipartite matching with {n_robots} robots and {n_tasks} tasks")
-
-    for task in sim.tasks:
-        print(task.task_id, task.requirements)
-
     problem = pulp.LpProblem("BipartiteMatching", pulp.LpMaximize)
 
     # Decision variables: A[robot][task] in {0,1}
     A = pulp.LpVariable.dicts("A", (range(n_robots), range(n_tasks)),
                               lowBound=0, upBound=1, cat=pulp.LpBinary)
 
+
+    # Binary "activated" variables for the bipartite matching --> only checks requirements for tasks that will be scheduled this round
+    X = pulp.LpVariable.dicts("X", range(n_tasks),
+                              lowBound=0, upBound=1, cat=pulp.LpBinary)
+
+    M_robots = n_robots
+    
     # Objective: maximize total reward
     problem += pulp.lpSum(R[robot_idx][task_idx] * A[robot_idx][task_idx]
                           for robot_idx in range(n_robots)
@@ -42,10 +44,16 @@ def solve_bipartite_matching(R, sim):
     for task_idx, task in enumerate(sim.tasks):
         # Only constrain if this task is ready
         if task.ready and task.incomplete:
+
+            # Link A to X with big-M constraints
+            problem += pulp.lpSum(A[robot_idx][task_idx] for robot_idx in range(n_robots)) <= M_robots * X[task_idx]
+            problem += pulp.lpSum(A[robot_idx][task_idx] for robot_idx in range(n_robots)) >= X[task_idx]
+
+
             # 1) Capability requirement: if c_t[j][p] = 1, subteam must have it
             for cap in range(n_skills):
                 if task.requirements[cap] != 0:
-                    problem += pulp.lpSum(sim.robots[robot_idx].capabilities[cap] * A[robot_idx][task_idx] for robot_idx in range(n_robots)) >= task.requirements[cap]
+                    problem += pulp.lpSum(sim.robots[robot_idx].capabilities[cap] * A[robot_idx][task_idx] for robot_idx in range(n_robots)) >= task.requirements[cap] * X[task_idx]
 
         else:
             # If task is not ready, force no assignment
