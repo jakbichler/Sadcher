@@ -75,7 +75,7 @@ def create_robot_features_from_optimal(problem_instance, solution, timestep):
     return torch.tensor(robot_features, dtype=torch.float32)
 
 
-def get_expert_reward(schedule, decision_time, gamma = 0.99):
+def get_expert_reward(schedule, decision_time, gamma = 0.99, immediate_reward = 10):
     """
     schedule: dict {robot_id: [(task_id, start_time, end_time), ...]}
     decision_time: float
@@ -89,8 +89,6 @@ def get_expert_reward(schedule, decision_time, gamma = 0.99):
       - Robots are identified by keys in `schedule`
       - Tasks are the unique set of all task_ids in all intervals
     """
-
-
     n_robots = len(schedule)
     task_ids = sorted({t_id for r_id in schedule for (t_id, _, _) in schedule[r_id]})
 
@@ -115,7 +113,7 @@ def get_expert_reward(schedule, decision_time, gamma = 0.99):
             # Task is completed at end_time
             if start_time >= decision_time:
                 # Expert reward is discounted time to completion (task_id-1, because task 0 is the beginning of the mission)
-                E[robot_id, task_id-1] = gamma**(end_time - decision_time)
+                E[robot_id, task_id-1] = gamma**(end_time - decision_time) * immediate_reward
                 
 
     return torch.tensor(E), torch.tensor(X) 
