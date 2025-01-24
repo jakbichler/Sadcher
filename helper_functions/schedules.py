@@ -11,15 +11,20 @@ class Full_Horizon_Schedule:
     """
     def __init__(self, makespan, robot_schedules, n_tasks):
         self.makespan: float = makespan
-        self.robot_schedules: dict = robot_schedules
+        self.robot_schedules: dict = self.remove_duplicates(robot_schedules)
         self.n_tasks: int = n_tasks
         self.n_robots: int = len(robot_schedules)
+
+        
 
         # Sort tasks for each robot by starting time
         self.robot_schedules = {
             robot: sorted(tasks, key=lambda x: x[1])
             for robot, tasks in robot_schedules.items()
         }
+
+
+
     def __str__(self):
         """
         String representation for better readability.
@@ -68,7 +73,25 @@ class Full_Horizon_Schedule:
             robot_schedules=robot_schedules,
             n_tasks=data["n_tasks"],
         )
-
+    
+    def remove_duplicates(self, robot_schedules):
+        for robot_id, schedule in robot_schedules.items():
+            task_dict = {}
+            for task_id, start_time, end_time in schedule:
+                if task_id not in task_dict:
+                    task_dict[task_id] = (start_time, end_time)
+                else:
+                    # Update with the lower start time and higher end time
+                    prev_start, prev_end = task_dict[task_id]
+                    task_dict[task_id] = (
+                        min(prev_start, start_time),
+                        prev_end if end_time is None else (end_time if prev_end is None else max(prev_end, end_time))  # Handle None
+                    )
+            # Replace the schedule with the merged entries
+            robot_schedules[robot_id] = [
+                (task_id, start, end) for task_id, (start, end) in task_dict.items()
+            ]
+        return robot_schedules
 
 
 class Instantaneous_Schedule:
