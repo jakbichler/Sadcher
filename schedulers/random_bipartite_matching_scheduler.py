@@ -1,5 +1,5 @@
 import numpy as np
-from .bigraph_matching import solve_bipartite_matching
+from schedulers.bigraph_matching import solve_bipartite_matching
 from helper_functions.schedules import Instantaneous_Schedule
 
 
@@ -22,7 +22,8 @@ class RandomBipartiteMatchingScheduler:
             return Instantaneous_Schedule(robot_assignments)
 
         # Create random reward matrix 
-        R = np.random.randint(1, 10, size=(n_robots, n_tasks))
+        R = np.random.randint(0, 10, size=(n_robots, n_tasks))
+        print(R)
         bipartite_matching_solution = solve_bipartite_matching(R, sim)
 
         robot_assignments = {robot: task for (robot, task), val in bipartite_matching_solution.items() if val == 1}

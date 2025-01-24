@@ -33,7 +33,6 @@ class GreedyInstantaneousScheduler:
             best_travel_time = float('inf')
 
             for task in executable_tasks:
-
                 assigned_robots = [r for r in sim.robots if r.current_task == task and r != robot]
                 combined_capabilities = np.zeros_like(task.requirements, dtype=bool)
                 for r_assigned in assigned_robots:

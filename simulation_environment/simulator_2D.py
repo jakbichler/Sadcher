@@ -222,26 +222,28 @@ class Simulation:
         for task in self.tasks:
             self.update_task(task)
 
-        idle_robots = [r for r in sim.robots if not r.current_task or r.current_task.status == 'DONE']
+        idle_robots = [r for r in self.robots if not r.current_task or r.current_task.status == 'DONE']
 
         if idle_robots:
-            instantaneous_assignment = self.scheduler.assign_tasks_to_robots(sim)
-            assign_tasks_to_robots(instantaneous_assignment, sim.robots)
+            instantaneous_assignment = self.scheduler.assign_tasks_to_robots(self)
+            self.assign_tasks_to_robots(instantaneous_assignment, self.robots)
 
         self.timestep += 1
 
 
-def assign_tasks_to_robots(instantaneous_schedule, robots):
-    """
-    Example scheduling logic:
-      - Check for any idle robots
-      - Assign them tasks if any are PENDING
-    This could be replaced by a call to your NN or heuristic.
-    """
-    for robot in robots:
-        task_id = instantaneous_schedule.robot_assignments.get(robot.robot_id)
-        if task_id is not None:
-            robot.current_task = sim.tasks[task_id]
+    def assign_tasks_to_robots(self, instantaneous_schedule, robots):
+        """
+        Example scheduling logic:
+        - Check for any idle robots
+        - Assign them tasks if any are PENDING
+        This could be replaced by a call to your NN or heuristic.
+        """
+        for robot in robots:
+            task_id = instantaneous_schedule.robot_assignments.get(robot.robot_id)
+            if task_id is not None:
+                task = self.tasks[task_id]
+                robot.current_task = task
+                task.assigned = True
 
 
 if __name__ == '__main__':
