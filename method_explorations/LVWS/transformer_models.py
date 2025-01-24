@@ -105,7 +105,7 @@ class TransformerScheduler(nn.Module):
     def forward(self, robot_features, task_features):
         robot_embeddings = self.robot_embedding(robot_features)
         task_embeddings = self.task_embedding(task_features)
-
+        
         x = torch.cat([robot_embeddings, task_embeddings], dim=1)
 
         for transformer in self.transformer_blocks:

@@ -1,3 +1,9 @@
+import json
+import os
+
+import sys
+sys.path.append("../..")
+from helper_functions.schedules import Full_Horizon_Schedule
 import numpy as np
 import torch 
 
@@ -40,7 +46,7 @@ def get_task_status(solution, task_id,  timestep):
     print(f"Task {task_id} not found in the solution")
 
 
-def create_task_features(problem_instance, solution,  timestep):
+def create_task_features_from_optimal(problem_instance, solution,  timestep):
     task_features = []
     for task_id, task_requirements in enumerate(problem_instance["R"][1:-1]): # Exclude start and end task
         task = Task(task_requirements)
@@ -49,7 +55,7 @@ def create_task_features(problem_instance, solution,  timestep):
         task.assigned = task_status["assigned"]
         task.incomplete = task_status["incomplete"]
         task_features.append(task.feature_vector())
-    return torch.tensor(task_features, dtype=torch.float32).unsqueeze(0)
+    return torch.tensor(task_features, dtype=torch.float32)
     
 
 def is_idle(solution, robot_id, timestep):
@@ -59,14 +65,14 @@ def is_idle(solution, robot_id, timestep):
     return True
 
 
-def create_robot_features(problem_instance, solution, timestep):
+def create_robot_features_from_optimal(problem_instance, solution, timestep):
     robot_features = []
     for robot_id, robot_capabilities in enumerate(problem_instance["Q"]):
         robot = Robot(robot_capabilities)
         robot.available = 1 if is_idle(solution, robot_id, timestep) else 0
         robot_features.append(robot.feature_vector())
     
-    return torch.tensor(robot_features, dtype=torch.float32).unsqueeze(0)
+    return torch.tensor(robot_features, dtype=torch.float32)
 
 
 def get_expert_reward(schedule, decision_time, gamma = 0.99):
@@ -112,4 +118,31 @@ def get_expert_reward(schedule, decision_time, gamma = 0.99):
                 E[robot_id, task_id-1] = gamma**(end_time - decision_time)
                 
 
-    return E, X 
+    return torch.tensor(E), torch.tensor(X) 
+
+def load_dataset(problem_dir, solution_dir):
+    problems = []
+    solutions = []
+    
+    # Load all problem instances
+    for file_name in sorted(os.listdir(problem_dir)):
+        with open(os.path.join(problem_dir, file_name), "r") as f:
+            problems.append(json.load(f))
+    
+    # Load all solution files
+    for file_name in sorted(os.listdir(solution_dir)):
+        with open(os.path.join(solution_dir, file_name), "r") as f:
+            solutions.append(json.load(f))
+    
+    solutions = [Full_Horizon_Schedule.from_dict(solution) for solution in solutions]
+    
+    return problems, solutions
+    
+
+def find_decision_points(solution):
+    end_time_index = 2
+    end_times_of_tasks = np.array([task[end_time_index] for tasks in solution.robot_schedules.values() for task in tasks])
+    decision_points = np.unique(end_times_of_tasks)
+
+    # Also beginning of mission is decsision point --> append 0
+    return np.ceil(np.append([0],decision_points))
