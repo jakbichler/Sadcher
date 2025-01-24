@@ -4,10 +4,12 @@ import sys
 import yaml
 sys.path.append('..')
 
-from data_generation.problem_generator import ProblemData, generate_random_data, generate_simple_data
-from display_simulation import visualize
-from schedulers.greedy_instantaneous_scheduler import greedy_instantaneous_assignment
+from data_generation.problem_generator import ProblemData, generate_random_data 
 from helper_functions.schedules import Full_Horizon_Schedule
+from schedulers.greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
+from schedulers.random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
+from schedulers.dbgm_scheduler import DBGMScheduler
+from simulation_environment.display_simulation import visualize
 from visualizations.solution_visualization import plot_gantt_chart
 
 class Task:
@@ -17,17 +19,37 @@ class Task:
         self.duration = duration
         self.requirements = np.array(requirements, dtype=bool)
         self.status = 'PENDING'  if task_id != 0 else 'DONE' # could be PENDING, IN_PROGRESS, DONE
+        self.ready = True
+        self.assigned = False
+        self.incomplete = True if task_id != 0 else False
 
     def start(self):
         self.status = 'IN_PROGRESS'
+        self.assigned = True
 
     def complete(self):
         self.status = 'DONE'
+        self.incomplete = False
 
     def decrement_duration(self):
         self.duration -= 1
         if self.duration <= 0:
             self.complete()
+
+    def predecessors_completed(self, sim):
+        if sim.precedence_constraints is None:
+            return True
+        
+        predecessors = [j for (j, k) in sim.precedence_constraints if k == self.task_id]
+        preceding_tasks = [t for t in sim.tasks if t.task_id in predecessors] 
+        for preceding_task in preceding_tasks:
+            if preceding_task.status != 'DONE':
+                return False
+        return True
+    
+    def feature_vector(self):
+        return np.concatenate([self.requirements, np.array([self.ready, self.assigned, self.incomplete])], dtype=int)
+
 
 class Robot:
     def __init__(self, robot_id, location, speed=1.0, capabilities=None):
@@ -38,6 +60,7 @@ class Robot:
         self.speed = speed
         self.capabilities = np.array(capabilities, dtype=bool)
         self.current_task = None
+        self.available = True
     
     def update_position(self):
         """Move the robot one step toward its current_task if assigned."""
@@ -51,13 +74,18 @@ class Robot:
             else: # Arrived at task
                 self.location = np.copy(self.current_task.location)
 
-    def check_task_completion(self):
-        if self.current_task is not None and self.current_task.status == 'DONE':
-            self.current_task = None    
+    def check_task_status(self):
+        if self.current_task and self.current_task.status == 'DONE':
+            self.current_task = None
+        
+        self.available = self.current_task is None
+
+    def feature_vector(self):
+        return np.concatenate([self.capabilities, np.array([self.available])], dtype=int)
 
 
 class Simulation:
-    def __init__(self, problem_instance, precedence_constraints):
+    def __init__(self, problem_instance, precedence_constraints, scheduler_name=None):
         self.timestep = 0
         self.robots: list[Robot] = self.create_robots(problem_instance)
         self.tasks: list[Task] = self.create_tasks(problem_instance)
@@ -67,6 +95,7 @@ class Simulation:
         self.robot_schedules = {robot.robot_id: [] for robot in self.robots}
         self.n_tasks = len(self.tasks)
         self.last_task_id = self.n_tasks - 1
+        self.scheduler = self.create_scheduler(scheduler_name)
 
     def create_robots(self, problem_instance):
         # For example, Q is a list of robot capabilities
@@ -83,13 +112,29 @@ class Simulation:
             Task(idx, loc, dur, req) 
             for idx, (loc, dur, req) in enumerate(zip(locations, durations, requirements))
         ]
+
+    def create_scheduler(self,name: str):
+        if name == "greedy":
+            return GreedyInstantaneousScheduler()
+        elif name == "random_bipartite":
+            return RandomBipartiteMatchingScheduler()
+        elif name == "dbgm":
+            return DBGMScheduler()
+        else:
+            raise ValueError(f"Unknown scheduler '{name}'")
         
     def update_robot(self, robot):
         robot.update_position()
-        robot.check_task_completion()
+        robot.check_task_status()
 
     def update_task(self, task):
         previous_status = task.status
+
+        # Check if task is ready to start based on precedence constraints
+        if task.task_id == 0 or task.predecessors_completed(self):
+            task.ready = True
+        else:
+            task.ready = False
 
         if task.status == 'DONE':
             return
@@ -101,6 +146,7 @@ class Simulation:
                 self.finish_simulation()
             else:
                 task.status = 'PENDING'
+                task.ready = False
             return
 
         # Normal tasks
@@ -110,7 +156,7 @@ class Simulation:
             task.decrement_duration()
         else:
             task.status = 'PENDING'
-
+            task.assigned = False
         self.log_into_full_horizon_schedule(task, previous_status)
 
     def finish_simulation(self):
@@ -155,7 +201,6 @@ class Simulation:
                 return False
         return True    
 
-
     def log_into_full_horizon_schedule(self, task, previous_status):
         # Check for transition from PENDING -> IN_PROGRESS: log start time
         if previous_status == 'PENDING' and task.status == 'IN_PROGRESS':
@@ -180,10 +225,11 @@ class Simulation:
         idle_robots = [r for r in sim.robots if not r.current_task or r.current_task.status == 'DONE']
 
         if idle_robots:
-            instantaneous_assignment = greedy_instantaneous_assignment(sim)
+            instantaneous_assignment = self.scheduler.assign_tasks_to_robots(sim)
             assign_tasks_to_robots(instantaneous_assignment, sim.robots)
 
         self.timestep += 1
+
 
 def assign_tasks_to_robots(instantaneous_schedule, robots):
     """
@@ -197,9 +243,11 @@ def assign_tasks_to_robots(instantaneous_schedule, robots):
         if task_id is not None:
             robot.current_task = sim.tasks[task_id]
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--visualize", action='store_true', help="Visualize the simulation")
+    parser.add_argument("--scheduler", type=str, help="Scheduler to use (greedy or random_bipartite)")
     args = parser.parse_args()
 
     with open("simulation_config.yaml", "r") as file:
@@ -212,7 +260,7 @@ if __name__ == '__main__':
     precedence_constraints = config["precedence_constraints"]
     problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
 
-    sim = Simulation(problem_instance, precedence_constraints)
+    sim = Simulation(problem_instance, precedence_constraints, scheduler_name=args.scheduler)
     
     if args.visualize: 
         visualize(sim)
@@ -221,6 +269,7 @@ if __name__ == '__main__':
         while not sim.sim_done:
             sim.step()
 
+    print(sim.robot_schedules)
     rolled_out_schedule = Full_Horizon_Schedule(sim.makespan, sim.robot_schedules, n_tasks)
     print(rolled_out_schedule)
-    plot_gantt_chart("Greedily Rolled-Out Schedule", rolled_out_schedule)
+    plot_gantt_chart(f"{sim.scheduler} Rolled-Out Schedule", rolled_out_schedule)

@@ -5,6 +5,7 @@ from matplotlib.patches import Wedge
 from matplotlib.widgets import Button
 
 
+
 def visualize(sim):
     """Interactive Matplotlib figure with tasks as pie charts and step buttons."""
     n_skills = len(sim.tasks[0].requirements)  # Assume all tasks have the same number of skills
@@ -13,8 +14,8 @@ def visualize(sim):
     plt.subplots_adjust(bottom=0.3)  # Make space for buttons
 
     # Create buttons
-    ax_button_next = plt.axes([0.5, 0.92, 0.2, 0.07])  # Position for 'Next Timestep' button
-    ax_button_10 = plt.axes([0.7, 0.92, 0.2, 0.07])    # Position for 'Advance 10 Timesteps' button
+    ax_button_next = plt.axes([0.3, 0.92, 0.2, 0.07])  # Position for 'Next Timestep' button
+    ax_button_10 = plt.axes([0.5, 0.92, 0.2, 0.07])    # Position for 'Advance 10 Timesteps' button
 
     btn_next = Button(ax_button_next, 'Next Timestep')
     btn_next.on_clicked(lambda event: next_step_callback(sim, ax, fig, colors, n_skills))
@@ -107,12 +108,10 @@ def next_step_callback(sim, ax, fig, colors, n_skills):
     sim.step()
     update_plot(sim, ax, fig, colors, n_skills)
 
-
 def advance_10_steps_callback(sim, ax, fig, colors, n_skills):
     for _ in range(10):
         sim.step()
     update_plot(sim, ax, fig, colors, n_skills)
-
 
 def key_press(event, sim, ax, fig, colors, n_skills):
     if event.key == 'n':  # Press 'n' for Next Timestep
