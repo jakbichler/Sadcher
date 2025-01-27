@@ -3,118 +3,140 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class SingleHeadTransformerBlock(nn.Module):
-    def __init__(self, embed_dim, ff_dim, dropout=0.0):
-        """
-        Initializes a Transformer Block with a single-head attention mechanism.
-
-        Args:
-            embed_dim (int): Size of input embeddings.
-            ff_dim (int): Size of the feed-forward layer.
-            dropout (float): Dropout rate.
-        """
-        super(SingleHeadTransformerBlock, self).__init__()
+class MultiHeadTransformerBlock(nn.Module):
+    def __init__(self, embed_dim, ff_dim, num_heads, dropout=0.0):
+        super(MultiHeadTransformerBlock, self).__init__()
         self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.head_dim = embed_dim // num_heads
 
-        # Linear layers for Q, K, V
+        # Projections for multi-head Q, K, V
         self.query_proj = nn.Linear(embed_dim, embed_dim)
-        self.key_proj = nn.Linear(embed_dim, embed_dim)
+        self.key_proj   = nn.Linear(embed_dim, embed_dim)
         self.value_proj = nn.Linear(embed_dim, embed_dim)
 
-        # Output projection after attention
+        # Output projection after multi-head concat
         self.out_proj = nn.Linear(embed_dim, embed_dim)
 
-        # Feed-forward network
+        # Feed-forward
         self.ffn = nn.Sequential(
             nn.Linear(embed_dim, ff_dim),
             nn.ReLU(),
             nn.Linear(ff_dim, embed_dim)
         )
 
-        # Layer normalizations
+        # Layer norms
         self.norm1 = nn.LayerNorm(embed_dim)
         self.norm2 = nn.LayerNorm(embed_dim)
 
-        # Dropout
         self.dropout = nn.Dropout(dropout)
 
-    def attention(self, Q, K, V, mask=None):
+    def multi_head_attention(self, x, mask=None):
         """
-        Compute the scaled dot-product attention.
-
-        Args:
-            Q (torch.Tensor): Query tensor of shape (batch_size, seq_len, embed_dim).
-            K (torch.Tensor): Key tensor of shape (batch_size, seq_len, embed_dim).
-            V (torch.Tensor): Value tensor of shape (batch_size, seq_len, embed_dim).
-            mask (torch.Tensor, optional): Attention mask of shape (batch_size, seq_len, seq_len).
-
-        Returns:
-            torch.Tensor: Attention output of shape (batch_size, seq_len, embed_dim).
+        x: (batch_size, seq_len, embed_dim)
+        mask: (batch_size, seq_len, seq_len) or None
+        Returns: (batch_size, seq_len, embed_dim)
         """
-        scores = torch.matmul(Q, K.transpose(-2, -1)) / (self.embed_dim ** 0.5)  # (batch_size, seq_len, seq_len)
+        B, S, E = x.shape
 
-        # Apply mask if provided
+        # Project to Q, K, V (each [B, S, E])
+        Q = self.query_proj(x)
+        K = self.key_proj(x)
+        V = self.value_proj(x)
+
+        # Reshape to heads: [B, S, num_heads, head_dim] -> [B, num_heads, S, head_dim]
+        Q = Q.view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
+        K = K.view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
+        V = V.view(B, S, self.num_heads, self.head_dim).transpose(1, 2)
+
+        # Compute scaled dot-product attention per head
+        # Q @ K^T -> [B, num_heads, S, S]
+        scores = torch.matmul(Q, K.transpose(-2, -1)) / (self.head_dim ** 0.5)
         if mask is not None:
-            scores = scores.masked_fill(mask == 0, float('-inf'))
+            scores = scores.masked_fill(mask.unsqueeze(1) == 0, float('-inf'))
 
-        attention_weights = F.softmax(scores, dim=-1)  # (batch_size, seq_len, seq_len)
+        attn = F.softmax(scores, dim=-1)
+        out = torch.matmul(attn, V)  # [B, num_heads, S, head_dim]
 
-        return torch.matmul(attention_weights, V)  # (batch_size, seq_len, embed_dim)
+        # Re-combine heads -> [B, S, embed_dim]
+        out = out.transpose(1, 2).contiguous().view(B, S, E)
+        return self.out_proj(out)  # final linear proj
 
     def forward(self, x, mask=None):
-        """
-        Forward pass of the Transformer Block.
-
-        Args:
-            x (torch.Tensor): Input tensor of shape (batch_size, seq_len, embed_dim).
-            mask (torch.Tensor, optional): Attention mask of shape (batch_size, seq_len, seq_len).
-
-        Returns:
-            torch.Tensor: Output tensor of shape (batch_size, seq_len, embed_dim).
-        """
-        # Attention
-        Q = self.query_proj(x)  # (batch_size, seq_len, embed_dim)
-        K = self.key_proj(x)    # (batch_size, seq_len, embed_dim)
-        V = self.value_proj(x)  # (batch_size, seq_len, embed_dim)
-
-        attention_output = self.attention(Q, K, V, mask)  # (batch_size, seq_len, embed_dim)
-        attention_output = self.out_proj(attention_output)
-
-        x = x + self.dropout(attention_output)
+        # Multi-head self-attention
+        attn_out = self.multi_head_attention(x, mask=mask)
+        x = x + self.dropout(attn_out)
         x = self.norm1(x)
 
         # Feed-forward
-        ffn_output = self.ffn(x)
-        x = x + self.dropout(ffn_output)
+        ffn_out = self.ffn(x)
+        x = x + self.dropout(ffn_out)
         x = self.norm2(x)
 
         return x
 
 
+class TransformerEncoder(nn.Module):
+    def __init__(self, embed_dim, ff_dim, num_heads, num_layers, dropout=0.0):
+        super(TransformerEncoder, self).__init__()
+        self.layers = nn.ModuleList([
+            MultiHeadTransformerBlock(embed_dim, ff_dim, num_heads, dropout) for _ in range(num_layers)
+        ])
+
+    def forward(self, x, mask=None):
+        for layer in self.layers:
+            x = layer(x, mask=mask)
+        return x
+
+
 class TransformerScheduler(nn.Module):
-    def __init__(self, robot_input_dimensions, task_input_dimension, embed_dim, ff_dim, num_layers, dropout = 0.0):
+    def __init__(self, robot_input_dimensions, task_input_dimension, embed_dim, ff_dim, num_heads, num_layers, dropout = 0.0):
         
         super(TransformerScheduler, self).__init__()
         self.robot_embedding = nn.Linear(robot_input_dimensions, embed_dim)
         self.task_embedding = nn.Linear(task_input_dimension, embed_dim)
 
-        self.transformer_blocks = nn.ModuleList([
-            SingleHeadTransformerBlock(embed_dim, ff_dim, dropout) for _ in range(num_layers)
-        ])
+        self.robot_transformer_encoder = TransformerEncoder(embed_dim, ff_dim, num_heads, num_layers, dropout)
+        self.task_transformer_encoder = TransformerEncoder(embed_dim, ff_dim, num_heads, num_layers, dropout)
+
+        # MLP to map [robot_embedding, task_embedding] -> single reward value
+        self.reward_mlp = nn.Sequential(
+            nn.Linear(2 * embed_dim, ff_dim),
+            nn.ReLU(),
+            nn.Linear(ff_dim, 1)  # outputs scalar per (robot, task) pair
+        )
 
     def forward(self, robot_features, task_features):
-        robot_embeddings = self.robot_embedding(robot_features)
-        task_embeddings = self.task_embedding(task_features)
-        
-        x = torch.cat([robot_embeddings, task_embeddings], dim=1)
+        """
+        robot_features: shape (batch_size, n_robots, robot_input_dimensions)
+        task_features:  shape (batch_size, n_tasks,  task_input_dimensions)
 
-        for transformer in self.transformer_blocks:
-            x = transformer(x)
+        returns: reward_matrix of shape (batch_size, n_robots, n_tasks)
+        """
+        B, N, _ = robot_features.shape  # e.g., B, n_robots, robot_input_dimensions
+        _, M, _ = task_features.shape   # e.g., B, n_tasks,  task_input_dimensions
 
-        n_robots = robot_features.shape[1] 
+        # 1) Embed each robot/task
+        # Result: (B, N, embed_dim) and (B, M, embed_dim)
+        robot_emb = self.robot_embedding(robot_features)
+        task_emb  = self.task_embedding(task_features)
 
-        features_per_robot = x[:, :n_robots]
-        features_per_task = x[:, n_robots:]
-        reward_matrix = torch.matmul(features_per_robot, features_per_task.transpose(1,2))
-        
-        return reward_matrix 
+        # 2) Pass through robot and task TransformerEncoders
+        # Still shape: (B, N, embed_dim) and (B, M, embed_dim)
+        robot_out = self.robot_transformer_encoder(robot_emb)  # shape: (B, N, embed_dim)
+        task_out  = self.task_transformer_encoder(task_emb)    # shape: (B, M, embed_dim)
+
+        # 3) Build pairwise combinations for robot-task
+        # We'll expand both to shape (B, N, M, embed_dim) and then concat along last dim
+        # so that each "pair" is [robot_embedding, task_embedding].
+        # This yields a shape (B, N, M, 2*embed_dim).
+        expanded_robot = robot_out.unsqueeze(2).expand(B, N, M, robot_out.shape[-1])
+        expanded_task  = task_out.unsqueeze(1).expand(B, N, M, task_out.shape[-1])
+        pairwise_input = torch.cat([expanded_robot, expanded_task], dim=-1)  # (B, N, M, 2*embed_dim)
+
+        # 4) Run the MLP to get a scalar reward for each (robot, task) pair
+        # shape after MLP: (B, N, M, 1), then squeeze -> (B, N, M)
+        reward_scores = self.reward_mlp(pairwise_input)        # (B, N, M, 1)
+        reward_scores = reward_scores.squeeze(-1)              # (B, N, M)
+
+        return reward_scores

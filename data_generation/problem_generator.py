@@ -38,7 +38,7 @@ def generate_random_data(n_tasks: int, n_robots: int, n_skills: int,precedence_c
     R = np.vstack([np.zeros(n_skills), R, np.zeros(n_skills)])
 
     # Task execution times
-    T_e = np.random.randint(10, 200, n_tasks) 
+    T_e = np.random.randint(50, 200, n_tasks) 
 
     # Append start and end tasks
     T_e = np.hstack([[0], T_e, [0]])
@@ -67,7 +67,7 @@ def generate_simple_data() -> ProblemData:
             - task_locations (np.ndarray): Randomly generated task locations on a grid.
             - precedence_constraints (np.ndarray): Task precedence constraints as an array of (task_j, task_k) pairs.
     """
-    n_tasks = 4
+    n_tasks = 6 
     n_skills = 2
 
     task_type_1 = np.array([1, 0])
@@ -76,20 +76,25 @@ def generate_simple_data() -> ProblemData:
 
     Q = np.array([[1, 0],  # Robot 0 has skill 0
                   [0, 1]])  # Robot 1 has skill 1
+    
+    np.random.shuffle(Q)
 
     random_tasks = np.array([task_type_1, task_type_2])
     R = np.vstack([
         task_type_3,  # Task type 3 (always present)
-        random_tasks[np.random.choice(len(random_tasks), 3, replace=True)]  # Randomly choose 3 tasks
+        random_tasks[np.random.choice(len(random_tasks), 5, replace=True)]  # Randomly choose 5 tasks
     ])
+
+
+    np.random.shuffle(R)
     R = np.vstack([np.zeros(n_skills), R, np.zeros(n_skills)])
 
-    T_e = np.random.randint(10, 100, n_tasks)
+    T_e = np.random.randint(50, 100, n_tasks)
     T_e = np.hstack([[0], T_e, [0]])
 
     grid_size = 100
     task_locations = np.random.randint(0, grid_size, (n_tasks + 2, 2))
-    T_t = np.linalg.norm(task_locations[:, np.newaxis] - task_locations[np.newaxis, :], axis=2).round(1)
+    T_t = np.linalg.norm(task_locations[:, np.newaxis] - task_locations[np.newaxis, :], axis=2).round(0)
 
     precedence_constraints = np.array([])
 

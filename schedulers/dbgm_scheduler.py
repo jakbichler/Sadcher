@@ -8,10 +8,10 @@ from helper_functions.schedules import Instantaneous_Schedule
 
 
 class DBGMScheduler:
-    def __init__(self):
+    def __init__(self, checkpoint_path):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.trained_model = TransformerScheduler(robot_input_dimensions=3, task_input_dimension=5, embed_dim=64, ff_dim=128, num_layers=2).to(self.device)
-        self.trained_model.load_state_dict(torch.load("/home/jakob/thesis/method_explorations/LVWS/checkpoints/checkpoint_epoch_20.pt", weights_only=True)
+        self.trained_model = TransformerScheduler(robot_input_dimensions=3, task_input_dimension=5, embed_dim=64, ff_dim=128, num_heads=4, num_layers=4).to(self.device)
+        self.trained_model.load_state_dict(torch.load(checkpoint_path, weights_only=True)
                                     )
     def assign_tasks_to_robots(self, sim):
         n_robots = len(sim.robots)
@@ -40,7 +40,7 @@ class DBGMScheduler:
         # Add  negative rewards for for the start and end task --> not to be selected, will be handled by the scheduler
         reward_start_end = torch.ones(n_robots, 1).to(self.device) * (-1000)
         predicted_reward = torch.cat((reward_start_end, predicted_reward, reward_start_end), dim=1)
-
+        print(predicted_reward.shape)
 
         for robot_idx, robot in enumerate(sim.robots):
             for task_idx, task in enumerate(sim.tasks):
@@ -55,6 +55,8 @@ class DBGMScheduler:
         filtered_solution = self.filter_overassignments(filtered_solution, sim)
         print(filtered_solution)
         robot_assignments = {robot: task for (robot, task), val in filtered_solution.items() if val == 1}
+
+        print("##############################################\n\n")
 
         return Instantaneous_Schedule(robot_assignments)
     

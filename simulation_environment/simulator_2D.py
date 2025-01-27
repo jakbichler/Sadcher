@@ -85,7 +85,7 @@ class Robot:
 
 
 class Simulation:
-    def __init__(self, problem_instance, precedence_constraints, scheduler_name=None):
+    def __init__(self, problem_instance, precedence_constraints, scheduler_name=None, checkpoint_path = None):
         self.timestep = 0
         self.robots: list[Robot] = self.create_robots(problem_instance)
         self.tasks: list[Task] = self.create_tasks(problem_instance)
@@ -95,7 +95,7 @@ class Simulation:
         self.robot_schedules = {robot.robot_id: [] for robot in self.robots}
         self.n_tasks = len(self.tasks)
         self.last_task_id = self.n_tasks - 1
-        self.scheduler = self.create_scheduler(scheduler_name)
+        self.scheduler = self.create_scheduler(scheduler_name, checkpoint_path)
 
     def create_robots(self, problem_instance):
         # For example, Q is a list of robot capabilities
@@ -113,13 +113,13 @@ class Simulation:
             for idx, (loc, dur, req) in enumerate(zip(locations, durations, requirements))
         ]
 
-    def create_scheduler(self,name: str):
+    def create_scheduler(self,name: str, checkpoint_path = None):
         if name == "greedy":
             return GreedyInstantaneousScheduler()
         elif name == "random_bipartite":
             return RandomBipartiteMatchingScheduler()
         elif name == "dbgm":
-            return DBGMScheduler()
+            return DBGMScheduler(checkpoint_path)
         else:
             raise ValueError(f"Unknown scheduler '{name}'")
         

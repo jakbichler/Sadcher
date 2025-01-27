@@ -60,7 +60,7 @@ def solve_bipartite_matching(R, sim):
             for robot_idx, robot in enumerate(sim.robots):
                 problem += A[robot_idx][task_idx] == 0
 
-
+    
 
     problem.solve(pulp.PULP_CBC_CMD(msg=0))
     print(f"solver status: {pulp.LpStatus[problem.status]}")
