@@ -1,3 +1,4 @@
+import argparse
 import matplotlib.pyplot as plt
 import os
 import torch
@@ -24,16 +25,23 @@ class LVWS_Loss(nn.Module):
 
 
 if __name__ == "__main__":
+    argument_parser = argparse.ArgumentParser(description="Train the LVWS model on a dataset of problem instances.")
+    argument_parser.add_argument("--dataset_dir", type=str, required=True, help="Directory containing problem instances.")
+    argument_parser.add_argument("--checkpoint_dir", type=str, required=True, help="Directory to save model checkpoints.")
 
-    problem_dir = "/home/jakob/thesis/datasets/simple_dataset_1000/problem_instances"
-    solution_dir = "/home/jakob/thesis/datasets/simple_dataset_1000/solutions"
-    checkpoint_dir = "/home/jakob/thesis/method_explorations/LVWS/checkpoints"
+    args = argument_parser.parse_args()
+
+
+    problem_dir = os.path.join(args.dataset_dir, "problem_instances/")
+    solution_dir = os.path.join(args.dataset_dir, "solutions/")
+    checkpoint_dir = args.checkpoint_dir
+    os.makedirs(checkpoint_dir, exist_ok=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    n_epochs = 20
-    batch_size = 256
+    n_epochs = 5
+    batch_size = 512
 
     problems, solutions = load_dataset(problem_dir, solution_dir)
     dataset = SchedulingDataset(problems, solutions, gamma=0.99, immediate_reward=10)
@@ -60,8 +68,9 @@ if __name__ == "__main__":
         task_input_dimension=task_input_dim,
         embed_dim=64,
         ff_dim=128,
-        num_layers=2,
-        dropout=0.1
+        num_heads=4,
+        num_layers=4,
+        dropout=0.0
     ).to(device)
 
     loss_fn = LVWS_Loss(weight_factor=0.1)
