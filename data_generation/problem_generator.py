@@ -82,7 +82,7 @@ def generate_simple_data() -> ProblemData:
     random_tasks = np.array([task_type_1, task_type_2])
     R = np.vstack([
         task_type_3,  # Task type 3 (always present)
-        random_tasks[np.random.choice(len(random_tasks), 5, replace=True)]  # Randomly choose 5 tasks
+        random_tasks[np.random.choice(len(random_tasks), n_tasks-1, replace=True)]  # Randomly choose 5 tasks
     ])
 
 
@@ -90,6 +90,47 @@ def generate_simple_data() -> ProblemData:
     R = np.vstack([np.zeros(n_skills), R, np.zeros(n_skills)])
 
     T_e = np.random.randint(50, 100, n_tasks)
+    T_e = np.hstack([[0], T_e, [0]])
+
+    grid_size = 100
+    task_locations = np.random.randint(0, grid_size, (n_tasks + 2, 2))
+    T_t = np.linalg.norm(task_locations[:, np.newaxis] - task_locations[np.newaxis, :], axis=2).round(0)
+
+    precedence_constraints = np.array([])
+
+    return ProblemData(
+        Q=Q,
+        R=R,
+        T_e=T_e,
+        T_t=T_t,
+        task_locations=task_locations,
+        precedence_constraints=precedence_constraints
+    )
+
+
+def generate_simple_homogeneous_data(n_tasks: int, n_robots: int) -> ProblemData:
+    """
+    Generates a simple problem instance for testing multi-robot task allocation with homogeneous robots.
+    
+    Args:
+        n_tasks (int): Number of tasks to generate.
+        n_robots (int): Number of robots to generate.
+    
+    Returns:
+        ProblemData: A dictionary containing:
+            - Q (np.ndarray): Robot skill matrix indicating which robot has which skill.
+            - R (np.ndarray): Task requirements matrix indicating required skills for tasks.
+            - T_e (np.ndarray): Task execution times including start and end tasks.
+            - T_t (np.ndarray): Travel times between tasks based on Euclidean distance.
+            - task_locations (np.ndarray): Randomly generated task locations on a grid.
+            - precedence_constraints (np.ndarray): Task precedence constraints as an array of (task_j, task_k) pairs.
+    """
+    Q = np.ones((n_robots, 1))
+
+
+    R = np.vstack([np.zeros(1), np.ones((n_tasks, 1)), np.zeros(1)])
+
+    T_e = np.random.randint(80, 100, n_tasks)
     T_e = np.hstack([[0], T_e, [0]])
 
     grid_size = 100
@@ -115,3 +156,86 @@ def read_problem_instance(problem_instance: ProblemData):
     task_locations = problem_instance['task_locations']
     precedence_constraints = problem_instance['precedence_constraints']
     return Q, R, T_e, T_t, task_locations, precedence_constraints
+
+
+def generate_static_data():
+
+    Q = np.array([[1, 0],  # Robot 0 has skill 0
+                  [0, 1]])  # Robot 1 has skill 1
+    
+    R = np.array([[0,0],
+                  [1, 0],
+                  [1,0],
+                  [0,1],
+                   [0,0]])
+                    
+    
+    T_e = np.array([0, 50, 50, 50, 0])
+
+    task_locations = np.array([[30,30],
+                                 [10,90],
+                                 [90,10],
+                                 [90,90],
+                                 [50,50]])
+    
+    T_t = np.linalg.norm(task_locations[:, np.newaxis] - task_locations[np.newaxis, :], axis=2).round(0)
+
+    return ProblemData(
+        Q=Q,
+        R=R,
+        T_e=T_e,
+        T_t=T_t,
+        task_locations=task_locations,
+        precedence_constraints=np.array([])
+    )
+
+
+
+def generate_biased_homogeneous_data() -> ProblemData:
+    """
+    Generates a problem instance with 6 tasks (plus start and end) arranged along a line.
+    The optimal solution is heavily dependent on the relative distances.
+    """
+    n_tasks = 6  # number of “real” tasks
+    n_robots = 1    
+
+    Q = np.ones((n_robots, 1))
+    
+    # Tasks require the skill (trivial in this case)
+    # Add start (index 0) and end (index n_tasks+1) tasks with no requirements.
+    R_tasks = np.ones((n_tasks, 1))
+    R = np.vstack([np.zeros((1, 1)), R_tasks, np.zeros((1, 1))])
+    
+    # Execution times: set a fixed duration for each task.
+    T_e_tasks = np.full(n_tasks, 50)
+    T_e = np.hstack([[0], T_e_tasks, [0]])
+    
+    # Define a bias in locations.
+    # Let start and end be at the ends of the line.
+    start_location = np.array([0, 50])
+    end_location = np.array([100, 50])
+    # Place the tasks evenly between start and end.
+    xs = np.linspace(10, 90, n_tasks)
+    ys = np.full(n_tasks, 50)  # constant y-coordinate
+    task_locations = np.stack([xs, ys], axis=1)
+
+    # add jitter to xs and ys
+    task_locations += np.random.normal(0, 10, task_locations.shape)
+    np.random.shuffle(task_locations)
+    
+    # Combine start, tasks, and end.
+    task_locations = np.vstack([start_location, task_locations, end_location])
+    
+    # Travel times: Euclidean distance between tasks.
+    T_t = np.linalg.norm(task_locations[:, np.newaxis] - task_locations[np.newaxis, :], axis=2).round(0)
+    
+    precedence_constraints = np.array([])  # No precedence constraints for simplicity.
+    
+    return ProblemData(
+        Q=Q,
+        R=R,
+        T_e=T_e,
+        T_t=T_t,
+        task_locations=task_locations,
+        precedence_constraints=precedence_constraints
+    )
