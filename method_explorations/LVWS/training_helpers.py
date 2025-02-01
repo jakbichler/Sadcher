@@ -9,23 +9,24 @@ import torch
 
 
 class Robot:
-    def __init__(self, capabilities):
+    def __init__(self, xy_location, capabilities):
+        self.xy_location = np.array(xy_location)
         self.capability = np.array(capabilities)  
         self.available = 1  # 0 if not available, 1 if available
 
-    def feature_vector(self):
-        return np.concatenate([self.capability, np.array([self.available])])
-
+    def feature_vector(self, relative_distances = None):
+        return np.concatenate([self.xy_location, self.capability, np.array([self.available])])
 
 class Task:
-    def __init__(self, skills_required):
+    def __init__(self, xy_location, skills_required):
+        self.xy_location = np.array(xy_location)
         self.skills_required = np.array(skills_required)  
         self.ready = 1 # 0 if not ready, 1 if ready --> predecessor tasks are finished
         self.assigned = 0 # 0 if not assigned, 1 if assigned
         self.incomplete = 1 # 0 if completed, 1 if incomplete  
 
     def feature_vector(self):
-        return np.concatenate([self.skills_required, np.array([self.ready, self.assigned, self.incomplete])])
+        return np.concatenate([self.xy_location, self.skills_required, np.array([self.ready, self.assigned, self.incomplete])])
 
 
 def get_task_status(solution, task_id,  timestep):
@@ -49,12 +50,13 @@ def get_task_status(solution, task_id,  timestep):
 def create_task_features_from_optimal(problem_instance, solution,  timestep):
     task_features = []
     for task_id, task_requirements in enumerate(problem_instance["R"][1:-1]): # Exclude start and end task
-        task = Task(task_requirements)
+        task = Task(problem_instance["task_locations"][task_id + 1], task_requirements)
         task_status = get_task_status(solution, task_id + 1, timestep)
         task.ready = task_status["ready"]
         task.assigned = task_status["assigned"]
         task.incomplete = task_status["incomplete"]
         task_features.append(task.feature_vector())
+
     return torch.tensor(task_features, dtype=torch.float32)
     
 
@@ -68,12 +70,56 @@ def is_idle(solution, robot_id, timestep):
 def create_robot_features_from_optimal(problem_instance, solution, timestep):
     robot_features = []
     for robot_id, robot_capabilities in enumerate(problem_instance["Q"]):
-        robot = Robot(robot_capabilities)
+        xy_location = find_robot_position_from_optimal(problem_instance, solution, timestep, robot_id)
+        robot = Robot(xy_location, robot_capabilities)
         robot.available = 1 if is_idle(solution, robot_id, timestep) else 0
         robot_features.append(robot.feature_vector())
-    
+
     return torch.tensor(robot_features, dtype=torch.float32)
 
+
+def find_distances_relative_to_robot_from_optimal(problem, solution,  timestep, robot_id):
+    last_finished_task = None
+    last_finished_end = float('-inf')
+
+    for t_id, start, end in solution[robot_id]:
+        if start <= timestep <= end:  
+            # Robot is currently executing a task
+            return np.array(problem["T_t"][t_id][1:-1])
+
+        elif end < timestep and end > last_finished_end:
+            # Robot is currently not executing a task
+            last_finished_end = end
+            last_finished_task = t_id
+    
+    if last_finished_task is not None:
+        # Return relative distances to all other real tasks (excluding start and end tasks)
+        return np.array(problem["T_t"][last_finished_task][1:-1])
+    
+    else:
+        # Still at start task --> return distance relative to start (Task 0)
+        return np.array(problem["T_t"][0][1:-1])
+
+
+def find_robot_position_from_optimal(problem, solution, timestep, robot_id):
+    last_finished_task = None
+    last_finished_end = float('-inf')
+    for t_id, start, end in solution[robot_id]:
+        if start <= timestep <= end:
+            # Robot is currently executing a task
+            return problem["task_locations"][t_id]
+        
+        elif end < timestep and end > last_finished_end:
+            # Robot is currently not executing a task
+            last_finished_end = end
+            last_finished_task = t_id
+
+    if last_finished_task is not None:
+        return problem["task_locations"][last_finished_task]
+        
+    else:
+        # Still at start task
+        return problem["task_locations"][0]
 
 def get_expert_reward(schedule, decision_time, gamma = 0.99, immediate_reward = 10):
     """
@@ -142,5 +188,5 @@ def find_decision_points(solution):
     end_times_of_tasks = np.array([task[end_time_index] for tasks in solution.robot_schedules.values() for task in tasks])
     decision_points = np.unique(end_times_of_tasks)
 
-    # Also beginning of mission is decsision point --> append 0
+    # Also beginning of mission is decsision point --> append 0, round up to nearest integer
     return np.ceil(np.append([0],decision_points))

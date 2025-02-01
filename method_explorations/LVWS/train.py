@@ -40,7 +40,7 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    n_epochs = 5
+    n_epochs = 200
     batch_size = 512
 
     problems, solutions = load_dataset(problem_dir, solution_dir)
@@ -60,21 +60,21 @@ if __name__ == "__main__":
 
     print(f"Loaded {len(problems)} problems and {len(solutions)} solutions...............")
     
-    robot_input_dim = len(problems[0]["Q"][0]) + 1    # e.g., capabilities + 'available'
-    task_input_dim = len(problems[0]["R"][0]) + 3     # e.g., skill requirements + (ready, assigned, incomplete)
+    robot_input_dim = len(problems[0]["Q"][0]) + 1 + 2   # e.g., capabilities + 'available' + xy_location2 xy_location
+    task_input_dim = len(problems[0]["R"][0]) + 3 + 2     # e.g., skill requirements + (ready, assigned, incomplete) + xy_location
     
     model = TransformerScheduler(
         robot_input_dimensions=robot_input_dim,
         task_input_dimension=task_input_dim,
-        embed_dim=64,
-        ff_dim=128,
+        embed_dim=128,
+        ff_dim=256,
         num_heads=4,
         num_layers=4,
         dropout=0.0
     ).to(device)
 
     loss_fn = LVWS_Loss(weight_factor=0.1)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
     
     print("Starting training...............")
 
@@ -86,6 +86,9 @@ if __name__ == "__main__":
         model.train()
         total_train_loss = 0.0
         for robot_features, task_features, expert_reward, feasibility_mask in tqdm(train_loader, unit="Batch", desc=f"Epoch {epoch+1}/{n_epochs} - Training"):
+           
+
+
             predicted_reward_matrix = model(robot_features.to(device), task_features.to(device))
 
             loss = loss_fn(expert_reward.to(device), predicted_reward_matrix, feasibility_mask.to(device))
