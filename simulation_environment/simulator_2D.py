@@ -4,7 +4,7 @@ import sys
 import yaml
 sys.path.append('..')
 
-from data_generation.problem_generator import ProblemData, generate_random_data 
+from data_generation.problem_generator import ProblemData, generate_random_data, generate_static_data, generate_biased_homogeneous_data
 from helper_functions.schedules import Full_Horizon_Schedule
 from schedulers.greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
 from schedulers.random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
@@ -29,6 +29,7 @@ class Task:
 
     def complete(self):
         self.status = 'DONE'
+        self.assigned = False
         self.incomplete = False
 
     def decrement_duration(self):
@@ -48,7 +49,7 @@ class Task:
         return True
     
     def feature_vector(self):
-        return np.concatenate([self.requirements, np.array([self.ready, self.assigned, self.incomplete])], dtype=int)
+        return np.concatenate([self.location, self.requirements, np.array([self.ready, self.assigned, self.incomplete])], dtype=float)
 
 
 class Robot:
@@ -81,15 +82,16 @@ class Robot:
         self.available = self.current_task is None
 
     def feature_vector(self):
-        return np.concatenate([self.capabilities, np.array([self.available])], dtype=int)
+        return np.concatenate([self.location, self.capabilities, np.array([self.available])], dtype=float)
 
 
 class Simulation:
-    def __init__(self, problem_instance, precedence_constraints, scheduler_name=None, checkpoint_path = None):
+    def __init__(self, problem_instance, precedence_constraints, scheduler_name=None, checkpoint_path = None, debug = False):
         self.timestep = 0
         self.robots: list[Robot] = self.create_robots(problem_instance)
         self.tasks: list[Task] = self.create_tasks(problem_instance)
         self.precedence_constraints = precedence_constraints
+        self.debugging = debug
         self.sim_done = False
         self.makespan = -1 
         self.robot_schedules = {robot.robot_id: [] for robot in self.robots}
@@ -119,7 +121,7 @@ class Simulation:
         elif name == "random_bipartite":
             return RandomBipartiteMatchingScheduler()
         elif name == "dbgm":
-            return DBGMScheduler(checkpoint_path)
+            return DBGMScheduler(debugging = self.debugging,  checkpoint_path = checkpoint_path)
         else:
             raise ValueError(f"Unknown scheduler '{name}'")
         
@@ -156,7 +158,6 @@ class Simulation:
             task.decrement_duration()
         else:
             task.status = 'PENDING'
-            task.assigned = False
         self.log_into_full_horizon_schedule(task, previous_status)
 
     def finish_simulation(self):
@@ -222,14 +223,27 @@ class Simulation:
         for task in self.tasks:
             self.update_task(task)
 
+        if self.debugging:
+
+            print(f"############### TIMESTEP {self.timestep} ###############")
+            for robot in self.robots:
+                print(f"Robot {robot.robot_id} with available {robot.available} is at location {robot.location}")
+
+            for task in self.tasks:
+                print(f"Task {task.task_id} with status {task.status}, ready {task.ready}, assigned {task.assigned}, incomplete {task.incomplete}")
+        
+            print ("\n")
+
+
         idle_robots = [r for r in self.robots if not r.current_task or r.current_task.status == 'DONE']
 
         if idle_robots:
             instantaneous_assignment = self.scheduler.assign_tasks_to_robots(self)
             self.assign_tasks_to_robots(instantaneous_assignment, self.robots)
 
-        self.timestep += 1
 
+
+        self.timestep += 1
 
     def assign_tasks_to_robots(self, instantaneous_schedule, robots):
         """
@@ -260,9 +274,13 @@ if __name__ == '__main__':
     n_skills = config["n_skills"]
     np.random.seed(config["random_seed"])
     precedence_constraints = config["precedence_constraints"]
-    problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
 
-    sim = Simulation(problem_instance, precedence_constraints, scheduler_name=args.scheduler)
+
+    problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    #problem_instance = generate_biased_homogeneous_data()
+    #problem_instance = generate_static_data()
+
+    sim = Simulation(problem_instance, precedence_constraints, scheduler_name=args.scheduler, checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/homogeneous_1r_6t_10000ex/checkpoint_epoch_100.pt", debug=True)
     
     if args.visualize: 
         visualize(sim)
