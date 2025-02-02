@@ -38,7 +38,7 @@ def generate_random_data(n_tasks: int, n_robots: int, n_skills: int,precedence_c
     R = np.vstack([np.zeros(n_skills), R, np.zeros(n_skills)])
 
     # Task execution times
-    T_e = np.random.randint(50, 200, n_tasks) 
+    T_e = np.random.randint(50, 100, n_tasks) 
 
     # Append start and end tasks
     T_e = np.hstack([[0], T_e, [0]])
