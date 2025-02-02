@@ -20,7 +20,7 @@ class MultiHeadTransformerBlock(nn.Module):
 
         self.ffn = nn.Sequential(
             nn.Linear(embed_dim, ff_dim),
-            nn.ReLU(),
+            nn.LeakyReLU(negative_slope=-0.01),
             nn.Linear(ff_dim, embed_dim)
         )
 
@@ -98,7 +98,7 @@ class TransformerScheduler(nn.Module):
         # The final reward MLP now takes robot+task embeddings concatenated with the processed distance.
         self.reward_mlp = nn.Sequential(
             nn.Linear(2 * embed_dim + 1, ff_dim),
-            nn.ReLU(),
+            nn.LeakyReLU(),
             nn.Linear(ff_dim, 1)  # outputs scalar per (robot, task) pair
         )
 
@@ -129,7 +129,6 @@ class TransformerScheduler(nn.Module):
         task_positions  = task_features[:, :, :2]     # (B, M, 2)
         robot_pos_exp = robot_positions.unsqueeze(2).expand(B, N, M, 2)
         task_pos_exp  = task_positions.unsqueeze(1).expand(B, N, M, 2)
-        # Euclidean distance along last dimension, output shape: (B, N, M, 1)
         rel_distance = torch.norm(robot_pos_exp - task_pos_exp, dim=-1, keepdim=True)
         rel_distance = rel_distance / torch.max(rel_distance)  # (B, N, M, 1)
 
@@ -142,4 +141,4 @@ class TransformerScheduler(nn.Module):
         # 7) Compute reward scores.
         reward_scores = self.reward_mlp(final_pairwise_input).squeeze(-1)  # (B, N, M)
 
-        return torch.clamp(reward_scores, min = 1e-6) ## In rare cases, model mayu predict negative values ---> DBGM will not work
+        return F.softplus(reward_scores)  # Ensure positive values

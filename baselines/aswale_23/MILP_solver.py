@@ -16,7 +16,7 @@ from data_generation.problem_generator import read_problem_instance
 from helper_functions.schedules import Full_Horizon_Schedule
 
 
-def milp_scheduling(problem_instance, n_threads = 2):
+def milp_scheduling(problem_instance, n_threads = 2, cutoff_time_seconds = 10 * 60):
     Q, R, T_execution, T_travel, task_locations, precedence_constraints = read_problem_instance(problem_instance)
     n_robots = Q.shape[0]
     n_tasks = R.shape[0] - 2
@@ -197,7 +197,7 @@ def milp_scheduling(problem_instance, n_threads = 2):
 
 
     # Solve the problem
-    prob.solve(pulp.PULP_CBC_CMD(timeLimit=60*10, msg = False, threads = n_threads)) 
+    prob.solve(pulp.PULP_CBC_CMD(timeLimit=cutoff_time_seconds, msg = False, threads = n_threads)) 
     print("Status:", pulp.LpStatus[prob.status])
     # Check if the problem is feasible
     if pulp.LpStatus[prob.status] in ['Optimal', 'Feasible']:
