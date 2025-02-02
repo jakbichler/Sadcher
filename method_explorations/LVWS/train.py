@@ -1,4 +1,5 @@
 import argparse
+from datetime import datetime   
 import matplotlib.pyplot as plt
 import os
 import torch
@@ -15,13 +16,20 @@ class LVWS_Loss(nn.Module):
         super(LVWS_Loss, self).__init__()
         self.l1_loss = nn.L1Loss()
         self.weight_factor = weight_factor
-
         
     def forward (self, expert_reward, predicted_reward, feasibility_mask):
         loss_feasible = self.l1_loss(predicted_reward*feasibility_mask, expert_reward * feasibility_mask)
         loss_not_in_expert = self.l1_loss(predicted_reward*(1-feasibility_mask), expert_reward*(1-feasibility_mask))
         return loss_feasible + self.weight_factor * loss_not_in_expert 
 
+
+def initialize_weights(model):
+    for name, param in model.named_parameters():
+        if 'weight' in name:
+            if len(param.shape) > 1:  # Ensure it's a linear layer
+                nn.init.kaiming_uniform_(param, nonlinearity='relu')
+        elif 'bias' in name:
+            nn.init.constant_(param, 0.0)
 
 
 if __name__ == "__main__":
@@ -30,8 +38,6 @@ if __name__ == "__main__":
     argument_parser.add_argument("--checkpoint_dir", type=str, required=True, help="Directory to save model checkpoints.")
 
     args = argument_parser.parse_args()
-
-
     problem_dir = os.path.join(args.dataset_dir, "problem_instances/")
     solution_dir = os.path.join(args.dataset_dir, "solutions/")
     checkpoint_dir = args.checkpoint_dir
@@ -40,12 +46,26 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    n_epochs = 200
-    batch_size = 512
+    config = {
+        "batch_size": 512,
+        "embedding_dim": 64,
+        "ff_dim": 64,
+        "num_heads": 4,
+        "num_layers": 2,
+        "dropout": 0.0,
+        "loss_weight_factor": 0.1,
+        "learning_rate": 1e-4,
+        "reward_gamma": 0.99,
+        "early_stopping_patience": 5,
+        }
+
+    # Log config
+    with open(os.path.join(checkpoint_dir, "run_description.txt"), "w") as f:
+        f.write(f"Training Run - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Config: {config}\n")
 
     problems, solutions = load_dataset(problem_dir, solution_dir)
-    dataset = SchedulingDataset(problems, solutions, gamma=0.99, immediate_reward=10)
-    dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    dataset = SchedulingDataset(problems, solutions, gamma=config["reward_gamma"], immediate_reward=10)
     
     # Train-validation split (80% train, 20% validation)
     dataset_size = len(dataset)
@@ -55,71 +75,79 @@ if __name__ == "__main__":
     
     print(f"Dataset split into {train_size} training samples and {val_size} validation samples.")
 
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
+    train_loader = DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=True)
+    val_loader = DataLoader(val_dataset, batch_size= config["batch_size"], shuffle=False)
 
     print(f"Loaded {len(problems)} problems and {len(solutions)} solutions...............")
     
-    robot_input_dim = len(problems[0]["Q"][0]) + 1 + 2   # e.g., capabilities + 'available' + xy_location2 xy_location
+    robot_input_dim = len(problems[0]["Q"][0]) + 1 + 2   # e.g., capabilities + 'available' + xy_location
     task_input_dim = len(problems[0]["R"][0]) + 3 + 2     # e.g., skill requirements + (ready, assigned, incomplete) + xy_location
     
     model = TransformerScheduler(
         robot_input_dimensions=robot_input_dim,
         task_input_dimension=task_input_dim,
-        embed_dim=128,
-        ff_dim=256,
-        num_heads=4,
-        num_layers=4,
-        dropout=0.0
+        embed_dim=config["embedding_dim"],
+        ff_dim=config["ff_dim"],
+        num_heads=config["num_heads"],
+        num_layers=config["num_layers"],
+        dropout=config["dropout"],
     ).to(device)
 
-    loss_fn = LVWS_Loss(weight_factor=0.1)
-    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-    
+    initialize_weights(model)
+
+    loss_fn = LVWS_Loss(weight_factor=config["loss_weight_factor"])
+    optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
+
     print("Starting training...............")
 
-    train_losses = []
-    val_losses = []
+    train_losses, val_losses = [], []
+    best_val_loss = float("inf")
+    epoch, epochs_without_improvement = 0, 0 
 
-    for epoch in range(n_epochs):
+    while epochs_without_improvement < config["early_stopping_patience"]:
+        epoch += 1
+        
         # Training loop
         model.train()
         total_train_loss = 0.0
-        for robot_features, task_features, expert_reward, feasibility_mask in tqdm(train_loader, unit="Batch", desc=f"Epoch {epoch+1}/{n_epochs} - Training"):
-           
-
-
+        for robot_features, task_features, expert_reward, feasibility_mask in tqdm(train_loader, unit="Batch", desc=f"Epoch {epoch+1} - Training"):
             predicted_reward_matrix = model(robot_features.to(device), task_features.to(device))
-
             loss = loss_fn(expert_reward.to(device), predicted_reward_matrix, feasibility_mask.to(device))
-
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
             total_train_loss += loss.item()
 
         avg_train_loss = total_train_loss / max(1, len(train_loader))
         train_losses.append(avg_train_loss)
-        print(f"Epoch {epoch+1}/{n_epochs} - Avg Train Loss: {avg_train_loss:.4f}")
+        print(f"Epoch {epoch+1} - Avg Train Loss: {avg_train_loss:.5f}")
 
         # Validation loop
         model.eval()
         total_val_loss = 0.0
         with torch.no_grad():
-            for robot_features, task_features, expert_reward, feasibility_mask in tqdm(val_loader, unit="Batch", desc=f"Epoch {epoch+1}/{n_epochs} - Validation"):
+            for robot_features, task_features, expert_reward, feasibility_mask in tqdm(val_loader, unit="Batch", desc=f"Epoch {epoch+1} - Validation"):
                 predicted_reward_matrix = model(robot_features.to(device), task_features.to(device))
-
                 loss = loss_fn(expert_reward.to(device), predicted_reward_matrix, feasibility_mask.to(device))
                 total_val_loss += loss.item()
 
         avg_val_loss = total_val_loss / max(1, len(val_loader))
         val_losses.append(avg_val_loss)
-        print(f"Epoch {epoch+1}/{n_epochs} - Avg Val Loss: {avg_val_loss:.4f}")
+        print(f"Epoch {epoch+1} - Avg Val Loss: {avg_val_loss:.5f}")
 
-        # Save checkpoint
-        checkpoint_path = os.path.join(checkpoint_dir, f"checkpoint_epoch_{epoch+1}.pt")
-        torch.save(model.state_dict(), checkpoint_path)
+        # Log losses
+        with open(os.path.join(checkpoint_dir, "losses.txt"), "a") as f:
+            f.write(f"Epoch - {epoch}, Train loss {avg_train_loss}, Val loss - {avg_val_loss}\n")
+
+        # Check early stopping condition (has to be at least 0.0001 better)
+        if avg_val_loss < (best_val_loss - 1e-4):
+            best_val_loss = avg_val_loss
+            epochs_without_improvement = 0  
+            best_model_path = os.path.join(checkpoint_dir, "best_checkpoint.pt")
+            torch.save(model.state_dict(), best_model_path)
+            print(f"New best model saved at epoch {epoch}")
+        else:
+            epochs_without_improvement += 1
 
     # Plot losses
     plt.plot(train_losses, label="Train Loss")
