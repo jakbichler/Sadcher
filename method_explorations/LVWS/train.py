@@ -9,7 +9,7 @@ from tqdm import tqdm
 
 from dataset import SchedulingDataset
 from training_helpers import load_dataset, find_decision_points
-from transformer_models import TransformerScheduler
+from transformer_models import SchedulerNetwork
 
 class LVWS_Loss(nn.Module):
     def __init__(self, weight_factor):
@@ -48,13 +48,15 @@ if __name__ == "__main__":
 
     config = {
         "batch_size": 512,
-        "embedding_dim": 64,
-        "ff_dim": 64,
-        "num_heads": 4,
-        "num_layers": 2,
+        "embedding_dim": 256,
+        "ff_dim": 256,
+        "n_transformer_heads": 4,
+        "n_transformer_layers": 4,
+        "n_gatn_heads": 4,
+        "n_gatn_layers": 0,
         "dropout": 0.0,
         "loss_weight_factor": 0.1,
-        "learning_rate": 1e-4,
+        "learning_rate": 1e-3,
         "reward_gamma": 0.99,
         "early_stopping_patience": 5,
         }
@@ -83,14 +85,15 @@ if __name__ == "__main__":
     robot_input_dim = len(problems[0]["Q"][0]) + 1 + 2   # e.g., capabilities + 'available' + xy_location
     task_input_dim = len(problems[0]["R"][0]) + 3 + 2     # e.g., skill requirements + (ready, assigned, incomplete) + xy_location
     
-    model = TransformerScheduler(
+    model = SchedulerNetwork(
         robot_input_dimensions=robot_input_dim,
         task_input_dimension=task_input_dim,
         embed_dim=config["embedding_dim"],
         ff_dim=config["ff_dim"],
-        num_heads=config["num_heads"],
-        num_layers=config["num_layers"],
-        dropout=config["dropout"],
+        n_transformer_heads=config["n_transformer_heads"],
+        n_transformer_layers=config["n_transformer_layers"],
+        n_gatn_heads=config["n_gatn_heads"],
+        n_gatn_layers=config["n_gatn_layers"],
     ).to(device)
 
     initialize_weights(model)

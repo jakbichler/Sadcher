@@ -50,12 +50,15 @@ def get_task_status(solution, task_id,  timestep):
 def create_task_features_from_optimal(problem_instance, solution,  timestep):
     task_features = []
     for task_id, task_requirements in enumerate(problem_instance["R"][1:-1]): # Exclude start and end task
-        task = Task(problem_instance["task_locations"][task_id + 1], task_requirements)
+        xy_location = np.array(problem_instance["task_locations"][task_id + 1])
+        normalized_xy = xy_location / 100
+        task = Task(normalized_xy, task_requirements)
         task_status = get_task_status(solution, task_id + 1, timestep)
         task.ready = task_status["ready"]
         task.assigned = task_status["assigned"]
         task.incomplete = task_status["incomplete"]
         task_features.append(task.feature_vector())
+    task_features = np.array(task_features)
 
     return torch.tensor(task_features, dtype=torch.float32)
     
@@ -71,9 +74,12 @@ def create_robot_features_from_optimal(problem_instance, solution, timestep):
     robot_features = []
     for robot_id, robot_capabilities in enumerate(problem_instance["Q"]):
         xy_location = find_robot_position_from_optimal(problem_instance, solution, timestep, robot_id)
-        robot = Robot(xy_location, robot_capabilities)
+        normalized_xy = xy_location / 100
+        # Other features are binary --> roughly normalize to grid size
+        robot = Robot(normalized_xy, robot_capabilities)
         robot.available = 1 if is_idle(solution, robot_id, timestep) else 0
         robot_features.append(robot.feature_vector())
+    robot_features = np.array(robot_features)
 
     return torch.tensor(robot_features, dtype=torch.float32)
 
@@ -107,7 +113,7 @@ def find_robot_position_from_optimal(problem, solution, timestep, robot_id):
     for t_id, start, end in solution[robot_id]:
         if start <= timestep <= end:
             # Robot is currently executing a task
-            return problem["task_locations"][t_id]
+            return np.array(problem["task_locations"][t_id])
         
         elif end < timestep and end > last_finished_end:
             # Robot is currently not executing a task
@@ -115,11 +121,12 @@ def find_robot_position_from_optimal(problem, solution, timestep, robot_id):
             last_finished_task = t_id
 
     if last_finished_task is not None:
-        return problem["task_locations"][last_finished_task]
+        return np.array(problem["task_locations"][last_finished_task])
         
     else:
         # Still at start task
-        return problem["task_locations"][0]
+        return np.array(problem["task_locations"][0])
+
 
 def get_expert_reward(schedule, decision_time, gamma = 0.99, immediate_reward = 10):
     """
@@ -138,10 +145,8 @@ def get_expert_reward(schedule, decision_time, gamma = 0.99, immediate_reward = 
     n_robots = len(schedule)
     task_ids = sorted({t_id for r_id in schedule for (t_id, _, _) in schedule[r_id]})
 
-
     E = np.zeros((n_robots, len(task_ids))) 
     X = np.zeros((n_robots, len(task_ids)))
-
 
     def is_idle(robot_id, time):
         for t_id, task_start, task_end in schedule[robot_id]:
@@ -160,9 +165,9 @@ def get_expert_reward(schedule, decision_time, gamma = 0.99, immediate_reward = 
             if start_time >= decision_time:
                 # Expert reward is discounted time to completion (task_id-1, because task 0 is the beginning of the mission)
                 E[robot_id, task_id-1] = gamma**(end_time - decision_time) * immediate_reward
-                
 
     return torch.tensor(E), torch.tensor(X) 
+
 
 def load_dataset(problem_dir, solution_dir):
     problems = []
@@ -181,7 +186,7 @@ def load_dataset(problem_dir, solution_dir):
     solutions = [Full_Horizon_Schedule.from_dict(solution) for solution in solutions]
     
     return problems, solutions
-    
+   
 
 def find_decision_points(solution):
     end_time_index = 2
