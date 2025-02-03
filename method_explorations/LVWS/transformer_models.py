@@ -2,6 +2,124 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
+
+# -----------------------------
+# Graph Attention Building Blocks
+# -----------------------------
+class GraphAttentionHead(nn.Module):
+    """
+    A single-head GAT layer (head) that updates each node embedding
+    by attending to its neighbors in the adjacency matrix.
+    """
+    def __init__(self, in_dim, out_dim, negative_slope=0.2):
+        super().__init__()
+        self.in_dim = in_dim
+        self.out_dim = out_dim
+        
+        # Learnable linear transform for node features:
+        self.W = nn.Linear(in_dim, out_dim, bias=False)
+        
+        # Attention projection a: from (out_dim + out_dim) -> scalar
+        # We'll do [W h_i || W h_j] -> a -> e_ij
+        self.a = nn.Linear(2*out_dim, 1, bias=False)
+        
+        self.leaky_relu = nn.LeakyReLU(negative_slope=negative_slope)
+
+    def forward(self, x, adj):
+        """
+        x:   (B, N, in_dim) -- node embeddings for B graphs, each with N nodes
+        adj: (B, N, N)      -- adjacency (0/1) for each pair of nodes
+        Returns: updated node embeddings of shape (B, N, out_dim)
+        """
+        B, N, _ = x.shape
+        
+        # 1) Linear transformation of node features
+        Wh = self.W(x)  # shape (B, N, out_dim)
+        # 2) Prepare pairwise combination for attention: [Wh_i || Wh_j]
+        #    We'll tile Wh so that each node can attend to every other node:
+        Wh_i = Wh.unsqueeze(2).expand(B, N, N, self.out_dim)  # shape (B, N, N, out_dim)
+        Wh_j = Wh.unsqueeze(1).expand(B, N, N, self.out_dim)  # shape (B, N, N, out_dim)
+        # Concatenate along features
+        e_ij = torch.cat([Wh_i, Wh_j], dim=-1)  # (B, N, N, 2*out_dim)
+        
+        # 3) Compute attention logits
+        e_ij = self.leaky_relu(self.a(e_ij))  # (B, N, N, 1)
+        
+        # 4) Mask out non-edges with -inf (so they vanish in softmax)
+        mask = (adj == 0).unsqueeze(-1)  # shape (B, N, N, 1)
+        e_ij = e_ij.masked_fill(mask, float('-inf'))
+        
+        # 5) Softmax over neighbors j
+        alpha_ij = F.softmax(e_ij, dim=2)  # (B, N, N, 1)
+        
+        # 6) Compute final updated node embeddings by summing over neighbors
+        h_prime = alpha_ij * Wh_j  # (B, N, N, out_dim)
+        h_prime = h_prime.sum(dim=2)  # sum over j -> (B, N, out_dim)
+        
+        return h_prime
+
+class MultiHeadGraphAttentionLayer(nn.Module):
+    """
+    A multi-head GAT layer that runs multiple single-head GATs in parallel
+    and concatenates their outputs.
+    """
+    def __init__(self, in_dim, out_dim, num_heads=4, negative_slope=0.2):
+        super().__init__()
+        self.num_heads = num_heads
+        
+        # If we want the final output dimension to be `out_dim`, we typically
+        # let each head produce out_dim // num_heads, then we concat them.
+        assert out_dim % num_heads == 0, \
+            "out_dim must be divisible by num_heads for concatenation."
+        self.head_dim = out_dim // num_heads
+        
+        # Create each single-head GAT
+        self.heads = nn.ModuleList([
+            GraphAttentionHead(in_dim, self.head_dim, negative_slope=negative_slope)
+            for _ in range(num_heads)
+        ])
+
+    def forward(self, x, adj):
+        """
+        x:   (B, N, in_dim)
+        adj: (B, N, N)
+        returns: (B, N, out_dim) 
+           where out_dim = num_heads * head_dim
+        """
+        # Each head returns (B, N, head_dim)
+        head_outputs = [head(x, adj) for head in self.heads]
+        
+        # Concatenate along the feature dimension
+        # shape => (B, N, num_heads * head_dim) = (B, N, out_dim)
+        return torch.cat(head_outputs, dim=-1)
+
+class GATEncoder(nn.Module):
+    """
+    A small GAT network that can have multiple multi-head layers.
+    Each multi-head layer -> (B, N, embed_dim).
+    """
+    def __init__(self, embed_dim, num_heads=4, num_layers=2, negative_slope=0.2):
+        super().__init__()
+        
+        self.layers = nn.ModuleList()
+        
+        for _ in range(num_layers):
+            self.layers.append(
+                MultiHeadGraphAttentionLayer(embed_dim, embed_dim, num_heads, negative_slope)
+            )
+
+    def forward(self, x, adj):
+
+        if adj is None:
+            adj = torch.ones(x.shape[0], x.shape[1], x.shape[1]).to(x.device)
+
+        # Pass through stacked multi-head layers
+        for layer in self.layers:
+            x = layer(x, adj)
+        return x
+
+
 # -----------------------------
 # Transformer Building Blocks
 # -----------------------------
@@ -72,23 +190,23 @@ class TransformerEncoder(nn.Module):
 # TransformerScheduler
 # -----------------------------
 
-class TransformerScheduler(nn.Module):
-    def __init__(self, robot_input_dimensions, task_input_dimension, embed_dim, ff_dim, num_heads, num_layers, dropout=0.0):
+class SchedulerNetwork(nn.Module):
+    def __init__(self, robot_input_dimensions, task_input_dimension, embed_dim, ff_dim, n_transformer_heads, n_transformer_layers, n_gatn_heads, n_gatn_layers,  dropout=0.0):
         """
         robot_input_dimensions: Expected dimensions for robot features (first two must be (x,y))
         task_input_dimension: Expected dimensions for task features (first two must be (x,y))
         """
-        super(TransformerScheduler, self).__init__()
+        super(SchedulerNetwork, self).__init__()
 
-        # Embedding layers for raw features.
         self.robot_embedding = nn.Linear(robot_input_dimensions, embed_dim)
         self.task_embedding = nn.Linear(task_input_dimension, embed_dim)
 
-        # Transformer encoders for robot and task embeddings.
-        self.robot_transformer_encoder = TransformerEncoder(embed_dim, ff_dim, num_heads, num_layers, dropout)
-        self.task_transformer_encoder = TransformerEncoder(embed_dim, ff_dim, num_heads, num_layers, dropout)
+        self.robot_GATN = GATEncoder(embed_dim, n_gatn_heads, n_gatn_layers)
+        self.task_GATN = GATEncoder(embed_dim, n_gatn_heads, n_gatn_layers)
 
-        # Dedicated sub-network to process the relative distance.
+        self.robot_transformer_encoder = TransformerEncoder(embed_dim, ff_dim, n_transformer_heads, n_transformer_layers, dropout)
+        self.task_transformer_encoder = TransformerEncoder(embed_dim, ff_dim, n_transformer_heads, n_transformer_layers, dropout)
+
         self.distance_mlp = nn.Sequential(
             nn.Linear(1, 16),
             nn.ReLU(),
@@ -97,8 +215,8 @@ class TransformerScheduler(nn.Module):
 
         # The final reward MLP now takes robot+task embeddings concatenated with the processed distance.
         self.reward_mlp = nn.Sequential(
-            nn.Linear(2 * embed_dim + 1, ff_dim),
-            nn.LeakyReLU(),
+            nn.Linear(4 * embed_dim + 1, ff_dim),
+            nn.ReLU(),
             nn.Linear(ff_dim, 1)  # outputs scalar per (robot, task) pair
         )
 
@@ -110,18 +228,22 @@ class TransformerScheduler(nn.Module):
         B, N, _ = robot_features.shape
         _, M, _ = task_features.shape
 
-        # 1) Embed robots and tasks.
         robot_emb = self.robot_embedding(robot_features)  # (B, N, embed_dim)
         task_emb  = self.task_embedding(task_features)       # (B, M, embed_dim)
 
-        # 2) Process through transformer encoders.
-        robot_out = self.robot_transformer_encoder(robot_emb)  # (B, N, embed_dim)
-        task_out  = self.task_transformer_encoder(task_emb)    # (B, M, embed_dim)
+        robot_gatn_output = self.robot_GATN(robot_emb, adj=None)  # (B, N, embed_dim)
+        task_gatn_output  = self.task_GATN(task_emb, adj=None)    # (B, M, embed_dim)
+
+        robot_out = self.robot_transformer_encoder(robot_gatn_output)  # (B, N, embed_dim)
+        task_out  = self.task_transformer_encoder(task_gatn_output)    # (B, M, embed_dim)
+
 
         # 3) Build pairwise feature tensor.
-        expanded_robot = robot_out.unsqueeze(2).expand(B, N, M, robot_out.shape[-1])
-        expanded_task  = task_out.unsqueeze(1).expand(B, N, M, task_out.shape[-1])
-        pairwise_features = torch.cat([expanded_robot, expanded_task], dim=-1)  # (B, N, M, 2*embed_dim)
+        expanded_robot_gatn = robot_gatn_output.unsqueeze(2).expand(B, N, M, robot_gatn_output.shape[-1])
+        expanded_task_gatn  = task_gatn_output.unsqueeze(1).expand(B, N, M, task_gatn_output.shape[-1]) 
+
+        expanded_robot_out = robot_out.unsqueeze(2).expand(B, N, M, robot_out.shape[-1])
+        expanded_task_out  = task_out.unsqueeze(1).expand(B, N, M, task_out.shape[-1])
 
         # 4) Compute pairwise relative distances from raw positions.
         #  the first two dimensions of the raw features are (x,y).
@@ -132,13 +254,12 @@ class TransformerScheduler(nn.Module):
         rel_distance = torch.norm(robot_pos_exp - task_pos_exp, dim=-1, keepdim=True)
         rel_distance = rel_distance / torch.max(rel_distance)  # (B, N, M, 1)
 
-        # 5) Process the distance through the dedicated MLP.
         processed_distance = self.distance_mlp(rel_distance)  # (B, N, M, 1)
 
-        # 6) Concatenate processed distance with the pairwise embeddings.
-        final_pairwise_input = torch.cat([pairwise_features, processed_distance], dim=-1)  # (B, N, M, 2*embed_dim+1)
+        # 5) Concatenate all features for the final reward MLP.
+        final_input = torch.cat([expanded_robot_gatn, expanded_task_gatn, expanded_robot_out, expanded_task_out, processed_distance], dim=-1)
 
-        # 7) Compute reward scores.
-        reward_scores = self.reward_mlp(final_pairwise_input).squeeze(-1)  # (B, N, M)
+        reward_scores = self.reward_mlp(final_input).squeeze(-1)  # (B, N, M)
 
-        return F.softplus(reward_scores)  # Ensure positive values
+        return reward_scores
+    
