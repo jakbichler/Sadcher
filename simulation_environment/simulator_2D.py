@@ -4,7 +4,7 @@ import sys
 import yaml
 sys.path.append('..')
 
-from data_generation.problem_generator import ProblemData, generate_random_data, generate_static_data, generate_biased_homogeneous_data
+from data_generation.problem_generator import ProblemData, generate_random_data, generate_static_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data
 from helper_functions.schedules import Full_Horizon_Schedule
 from schedulers.greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
 from schedulers.random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
@@ -276,11 +276,12 @@ if __name__ == '__main__':
     precedence_constraints = config["precedence_constraints"]
 
 
-    problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    #problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
     #problem_instance = generate_biased_homogeneous_data()
     #problem_instance = generate_static_data()
+    problem_instance = generate_heterogeneous_no_coalition_data()
 
-    sim = Simulation(problem_instance, precedence_constraints, scheduler_name=args.scheduler, checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/homogeneous_1r_6t_10000ex/checkpoint_epoch_100.pt", debug=True)
+    sim = Simulation(problem_instance, precedence_constraints, scheduler_name=args.scheduler, checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/het_no_coal_gatn/best_checkpoint.pt", debug=True)
     
     if args.visualize: 
         visualize(sim)

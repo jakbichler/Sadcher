@@ -239,3 +239,49 @@ def generate_biased_homogeneous_data() -> ProblemData:
         task_locations=task_locations,
         precedence_constraints=precedence_constraints
     )
+
+def generate_heterogeneous_no_coalition_data() -> ProblemData:
+    """
+    Generates a simple problem instance for testing multi-robot task allocation.
+    
+    Returns:
+        ProblemData: A dictionary containing:
+            - Q (np.ndarray): Robot skill matrix indicating which robot has which skill.
+            - R (np.ndarray): Task requirements matrix indicating required skills for tasks.
+            - T_e (np.ndarray): Task execution times including start and end tasks.
+            - T_t (np.ndarray): Travel times between tasks based on Euclidean distance.
+            - task_locations (np.ndarray): Randomly generated task locations on a grid.
+            - precedence_constraints (np.ndarray): Task precedence constraints as an array of (task_j, task_k) pairs.
+    """
+    n_tasks = 6 
+    n_skills = 2
+
+    task_type_1 = np.array([1, 0])
+    task_type_2 = np.array([0, 1])
+
+    Q = np.array([[1, 0],  # Robot 0 has skill 0
+                  [0, 1]])  # Robot 1 has skill 1
+    np.random.shuffle(Q)
+
+    random_tasks = np.array([task_type_1, task_type_2])
+    R = random_tasks[np.random.choice(len(random_tasks), n_tasks, replace=True)]  # Randomly choose 6 tasks
+    np.random.shuffle(R)
+    R = np.vstack([np.zeros(n_skills), R, np.zeros(n_skills)])
+
+    T_e = np.random.randint(50, 100, n_tasks)
+    T_e = np.hstack([[0], T_e, [0]])
+
+    grid_size = 100
+    task_locations = np.random.randint(0, grid_size, (n_tasks + 2, 2))
+    T_t = np.linalg.norm(task_locations[:, np.newaxis] - task_locations[np.newaxis, :], axis=2).round(0)
+
+    precedence_constraints = np.array([])
+
+    return ProblemData(
+        Q=Q,
+        R=R,
+        T_e=T_e,
+        T_t=T_t,
+        task_locations=task_locations,
+        precedence_constraints=precedence_constraints
+    )

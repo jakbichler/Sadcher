@@ -8,7 +8,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from tqdm import tqdm
 
-from problem_generator import generate_random_data, generate_simple_data, generate_simple_homogeneous_data, generate_static_data, generate_biased_homogeneous_data
+from problem_generator import generate_random_data, generate_simple_data, generate_simple_homogeneous_data, generate_static_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data
 from baselines.aswale_23.MILP_solver import milp_scheduling
 
 
@@ -32,6 +32,8 @@ def generate_simple_dataset(n_instances: int, output_dir: str, problem_instance_
             problem_instance = generate_random_data(n_tasks=n_tasks, n_robots=n_robots, n_skills=n_skills)
         elif problem_instance_type == "heterogeneous":
             problem_instance = generate_simple_data()
+        elif problem_instance_type == "heterogeneous_no_coalition":
+            problem_instance = generate_heterogeneous_no_coalition_data()
         elif problem_instance_type == "homogeneous":
             problem_instance = generate_simple_homogeneous_data(n_tasks=n_tasks, n_robots=n_robots)  
         elif problem_instance_type == "biased_homogeneous":
@@ -52,14 +54,14 @@ def generate_simple_dataset(n_instances: int, output_dir: str, problem_instance_
         }
         
         problem_instance_path = os.path.join(
-            output_dir, "problem_instances", f"problem_instance_{instance_index}.json"
+            output_dir, "problem_instances", f"problem_instance_{instance_index:06d}.json"
         )
 
         with open(problem_instance_path, "w") as f:
             json.dump(serializable_problem_instance, f)
 
         solution_path = os.path.join(
-            output_dir, "solutions", f"optimal_schedule_{instance_index}.json"
+            output_dir, "solutions", f"optimal_schedule_{instance_index:06d}.json"
         )
         with open(solution_path, "w") as f:
             json.dump(optimal_schedule.to_dict(), f)
