@@ -13,6 +13,7 @@ def solve_bipartite_matching(R, sim):
     n_robots = len(sim.robots)
     n_tasks = len(sim.tasks)
     n_skills = len(sim.robots[0].capabilities)
+    idle_robots_ids = [r.robot_id for r in sim.robots if r.current_task is None or r.current_task.status == 'DONE']
 
     problem = pulp.LpProblem("BipartiteMatching", pulp.LpMaximize)
 
@@ -34,7 +35,7 @@ def solve_bipartite_matching(R, sim):
 
     for robot_idx, robot in enumerate(sim.robots):
         # Constraint: each available robot can take at most one task
-        if robot.available:
+        if robot_idx in idle_robots_ids:
             problem += pulp.lpSum(A[robot_idx][task] for task in range(n_tasks)) <= 1
 
         # unavailable robots cannot take any task
