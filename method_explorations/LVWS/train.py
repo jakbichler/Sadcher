@@ -48,12 +48,12 @@ if __name__ == "__main__":
 
     config = {
         "batch_size": 512,
-        "embedding_dim": 256,
+        "embedding_dim": 128,
         "ff_dim": 256,
         "n_transformer_heads": 4,
         "n_transformer_layers": 4,
         "n_gatn_heads": 4,
-        "n_gatn_layers": 0,
+        "n_gatn_layers": 2,
         "dropout": 0.0,
         "loss_weight_factor": 0.1,
         "learning_rate": 1e-3,
@@ -113,7 +113,7 @@ if __name__ == "__main__":
         # Training loop
         model.train()
         total_train_loss = 0.0
-        for robot_features, task_features, expert_reward, feasibility_mask in tqdm(train_loader, unit="Batch", desc=f"Epoch {epoch+1} - Training"):
+        for robot_features, task_features, expert_reward, feasibility_mask in tqdm(train_loader, unit="Batch", desc=f"Epoch {epoch} - Training"):
             predicted_reward_matrix = model(robot_features.to(device), task_features.to(device))
             loss = loss_fn(expert_reward.to(device), predicted_reward_matrix, feasibility_mask.to(device))
             optimizer.zero_grad()
@@ -123,20 +123,20 @@ if __name__ == "__main__":
 
         avg_train_loss = total_train_loss / max(1, len(train_loader))
         train_losses.append(avg_train_loss)
-        print(f"Epoch {epoch+1} - Avg Train Loss: {avg_train_loss:.5f}")
+        print(f"Epoch {epoch} - Avg Train Loss: {avg_train_loss:.5f}")
 
         # Validation loop
         model.eval()
         total_val_loss = 0.0
         with torch.no_grad():
-            for robot_features, task_features, expert_reward, feasibility_mask in tqdm(val_loader, unit="Batch", desc=f"Epoch {epoch+1} - Validation"):
+            for robot_features, task_features, expert_reward, feasibility_mask in tqdm(val_loader, unit="Batch", desc=f"Epoch {epoch} - Validation"):
                 predicted_reward_matrix = model(robot_features.to(device), task_features.to(device))
                 loss = loss_fn(expert_reward.to(device), predicted_reward_matrix, feasibility_mask.to(device))
                 total_val_loss += loss.item()
 
         avg_val_loss = total_val_loss / max(1, len(val_loader))
         val_losses.append(avg_val_loss)
-        print(f"Epoch {epoch+1} - Avg Val Loss: {avg_val_loss:.5f}")
+        print(f"Epoch {epoch} - Avg Val Loss: {avg_val_loss:.5f}")
 
         # Log losses
         with open(os.path.join(checkpoint_dir, "losses.txt"), "a") as f:

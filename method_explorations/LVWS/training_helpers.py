@@ -4,29 +4,9 @@ import os
 import sys
 sys.path.append("../..")
 from helper_functions.schedules import Full_Horizon_Schedule
+from simulation_environment.task_robot_classes import Robot, Task
 import numpy as np
 import torch 
-
-
-class Robot:
-    def __init__(self, xy_location, capabilities):
-        self.xy_location = np.array(xy_location)
-        self.capability = np.array(capabilities)  
-        self.available = 1  # 0 if not available, 1 if available
-
-    def feature_vector(self, relative_distances = None):
-        return np.concatenate([self.xy_location, self.capability, np.array([self.available])])
-
-class Task:
-    def __init__(self, xy_location, skills_required):
-        self.xy_location = np.array(xy_location)
-        self.skills_required = np.array(skills_required)  
-        self.ready = 1 # 0 if not ready, 1 if ready --> predecessor tasks are finished
-        self.assigned = 0 # 0 if not assigned, 1 if assigned
-        self.incomplete = 1 # 0 if completed, 1 if incomplete  
-
-    def feature_vector(self):
-        return np.concatenate([self.xy_location, self.skills_required, np.array([self.ready, self.assigned, self.incomplete])])
 
 
 def get_task_status(solution, task_id,  timestep):
@@ -51,8 +31,8 @@ def create_task_features_from_optimal(problem_instance, solution,  timestep):
     task_features = []
     for task_id, task_requirements in enumerate(problem_instance["R"][1:-1]): # Exclude start and end task
         xy_location = np.array(problem_instance["task_locations"][task_id + 1])
-        normalized_xy = xy_location / 100
-        task = Task(normalized_xy, task_requirements)
+        duration = problem_instance["T_e"][task_id + 1]
+        task = Task(task_id, xy_location, duration, task_requirements)
         task_status = get_task_status(solution, task_id + 1, timestep)
         task.ready = task_status["ready"]
         task.assigned = task_status["assigned"]
@@ -74,9 +54,8 @@ def create_robot_features_from_optimal(problem_instance, solution, timestep):
     robot_features = []
     for robot_id, robot_capabilities in enumerate(problem_instance["Q"]):
         xy_location = find_robot_position_from_optimal(problem_instance, solution, timestep, robot_id)
-        normalized_xy = xy_location / 100
-        # Other features are binary --> roughly normalize to grid size
-        robot = Robot(normalized_xy, robot_capabilities)
+        speed = 1.0
+        robot = Robot(robot_id, xy_location, speed, robot_capabilities)
         robot.available = 1 if is_idle(solution, robot_id, timestep) else 0
         robot_features.append(robot.feature_vector())
     robot_features = np.array(robot_features)
