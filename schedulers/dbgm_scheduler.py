@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 from schedulers.bigraph_matching import solve_bipartite_matching, filter_redundant_assignments, filter_overassignments
-from method_explorations.LVWS.transformer_models import TransformerScheduler
+from method_explorations.LVWS.transformer_models import SchedulerNetwork
 from helper_functions.schedules import Instantaneous_Schedule
 
 
@@ -11,7 +11,9 @@ from helper_functions.schedules import Instantaneous_Schedule
 class DBGMScheduler:
     def __init__(self, debugging, checkpoint_path):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.trained_model = TransformerScheduler(robot_input_dimensions=4, task_input_dimension=6, embed_dim=128, ff_dim=256, num_heads=4, num_layers=4).to(self.device)
+        self.trained_model = SchedulerNetwork(robot_input_dimensions=5, task_input_dimension=7, 
+                                              embed_dim=128, ff_dim=256, n_transformer_heads=4, 
+                                              n_transformer_layers= 4, n_gatn_heads=4, n_gatn_layers=2).to(self.device)
         self.trained_model.load_state_dict(torch.load(checkpoint_path, weights_only=True))
         self.debug = debugging
 
@@ -29,24 +31,32 @@ class DBGMScheduler:
                 robot.current_task = pending_tasks[0]
             return Instantaneous_Schedule(robot_assignments)
 
-        task_features = [task.feature_vector() for task in sim.tasks[1:-1]]
+        task_features = np.array([task.feature_vector() for task in sim.tasks[1:-1]])
         task_features = torch.tensor(task_features, dtype=torch.float32).unsqueeze(0).to(self.device)
 
-        robot_features = [robot.feature_vector() for robot in sim.robots]
+        robot_features = np.array([robot.feature_vector() for robot in sim.robots])
         robot_features = torch.tensor(robot_features, dtype= torch.float32).unsqueeze(0).to(self.device)
 
-        predicted_reward = self.trained_model(robot_features, task_features).squeeze(0) # remove batch dim
+        predicted_reward_raw = self.trained_model(robot_features, task_features).squeeze(0) # remove batch dim
+
+        # Clamp negative values, since BGM will not work with only negative values
+        predicted_reward = torch.clamp(predicted_reward_raw, min=1e-6)
 
         # Add  negative rewards for for the start and end task --> not to be selected, will be handled by the scheduler
         reward_start_end = torch.ones(n_robots, 1).to(self.device) * (-1000)
         predicted_reward = torch.cat((reward_start_end, predicted_reward, reward_start_end), dim=1)
+
+
+        #Only for debugging
+        predicted_reward_raw = torch.cat((reward_start_end, predicted_reward_raw, reward_start_end), dim=1)
+
 
         if self.debug:
             print(predicted_reward.shape)
 
             for robot_idx, robot in enumerate(sim.robots):
                 for task_idx, task in enumerate(sim.tasks):
-                    print(f"Robot {robot_idx} -> Task {task_idx}: {predicted_reward[robot_idx][task_idx]:.2f}")
+                    print(f"Robot {robot_idx} -> Task {task_idx}: {predicted_reward_raw[robot_idx][task_idx]:.6f} -> {predicted_reward[robot_idx][task_idx]:.6f}")
 
                 print("\n")
 
