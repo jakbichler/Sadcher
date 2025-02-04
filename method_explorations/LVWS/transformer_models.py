@@ -80,6 +80,8 @@ class MultiHeadGraphAttentionLayer(nn.Module):
             for _ in range(num_heads)
         ])
 
+        self.norm = nn.LayerNorm(out_dim)
+
     def forward(self, x, adj):
         """
         x:   (B, N, in_dim)
@@ -89,11 +91,12 @@ class MultiHeadGraphAttentionLayer(nn.Module):
         """
         # Each head returns (B, N, head_dim)
         head_outputs = [head(x, adj) for head in self.heads]
-        
         # Concatenate along the feature dimension
         # shape => (B, N, num_heads * head_dim) = (B, N, out_dim)
-        return torch.cat(head_outputs, dim=-1)
-
+        out = torch.cat(head_outputs, dim=-1)  # (B, N, num_heads * head_dim) 
+        
+        return self.norm(x + out)
+    
 class GATEncoder(nn.Module):
     """
     A small GAT network that can have multiple multi-head layers.
@@ -236,7 +239,6 @@ class SchedulerNetwork(nn.Module):
 
         robot_out = self.robot_transformer_encoder(robot_gatn_output)  # (B, N, embed_dim)
         task_out  = self.task_transformer_encoder(task_gatn_output)    # (B, M, embed_dim)
-
 
         # 3) Build pairwise feature tensor.
         expanded_robot_gatn = robot_gatn_output.unsqueeze(2).expand(B, N, M, robot_gatn_output.shape[-1])
