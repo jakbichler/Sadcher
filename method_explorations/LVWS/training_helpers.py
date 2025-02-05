@@ -9,7 +9,7 @@ import numpy as np
 import torch 
 
 
-def get_task_status(solution, task_id,  timestep):
+def get_task_status(problem, solution, task_id,  timestep):
     for robot_id, assignments in solution.items():
         for assigned_task_id, start_time, end_time in assignments:
             if assigned_task_id == task_id:
@@ -31,9 +31,8 @@ def create_task_features_from_optimal(problem_instance, solution,  timestep):
     task_features = []
     for task_id, task_requirements in enumerate(problem_instance["R"][1:-1]): # Exclude start and end task
         xy_location = np.array(problem_instance["task_locations"][task_id + 1])
-        duration = problem_instance["T_e"][task_id + 1]
-        task = Task(task_id, xy_location, duration, task_requirements)
-        task_status = get_task_status(solution, task_id + 1, timestep)
+        task_status = get_task_status(problem_instance, solution, task_id + 1, timestep)
+        task = Task(task_id, xy_location, problem_instance["T_e"][task_id + 1], task_requirements)
         task.ready = task_status["ready"]
         task.assigned = task_status["assigned"]
         task.incomplete = task_status["incomplete"]

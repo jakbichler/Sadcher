@@ -5,7 +5,8 @@ class Task:
     def __init__(self, task_id, location, duration, requirements):
         self.task_id = task_id
         self.location = np.array(location, dtype=np.float64)
-        self.duration = duration
+        self.overall_duration = duration
+        self.remaining = duration
         self.requirements = np.array(requirements, dtype=bool)
         self.status = 'PENDING'  if task_id != 0 else 'DONE' # could be PENDING, IN_PROGRESS, DONE
         self.ready = True
@@ -22,8 +23,8 @@ class Task:
         self.incomplete = False
 
     def decrement_duration(self):
-        self.duration -= 1
-        if self.duration <= 0:
+        self.remaining_duration -= 1
+        if self.remaining_duration <= 0:
             self.complete()
 
     def predecessors_completed(self, sim):
@@ -38,7 +39,7 @@ class Task:
         return True
     
     def feature_vector(self):
-        return np.concatenate([self.location/100, self.requirements, np.array([self.ready, self.assigned, self.incomplete])], dtype=float)
+        return np.concatenate([self.location/100, self.overall_duration/100, self.requirements, np.array([self.ready, self.assigned, self.incomplete])], dtype=float)
 
 
 class Robot:
@@ -51,6 +52,7 @@ class Robot:
         self.capabilities = np.array(capabilities, dtype=bool)
         self.current_task = None
         self.available = True
+        self.remaining_workload = 0
     
     def update_position(self):
         """Move the robot one step toward its current_task if assigned."""

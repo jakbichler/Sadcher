@@ -50,16 +50,12 @@ class DBGMScheduler:
         #Only for debugging
         predicted_reward_raw = torch.cat((reward_start_end, predicted_reward_raw, reward_start_end), dim=1)
 
-
         if self.debug:
-            print(predicted_reward.shape)
-
             for robot_idx, robot in enumerate(sim.robots):
                 for task_idx, task in enumerate(sim.tasks):
                     print(f"Robot {robot_idx} -> Task {task_idx}: {predicted_reward_raw[robot_idx][task_idx]:.6f} -> {predicted_reward[robot_idx][task_idx]:.6f}")
-
                 print("\n")
-
+        
         bipartite_matching_solution = solve_bipartite_matching(predicted_reward, sim)
         if self.debug:
             print(bipartite_matching_solution)

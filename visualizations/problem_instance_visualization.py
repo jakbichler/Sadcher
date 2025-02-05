@@ -6,8 +6,8 @@ from matplotlib.patches import Wedge
 
 def show_problem_instance(problem_instance):
     
-    Q = problem_instance['Q']
-    R = problem_instance['R']
+    Q = np.array(problem_instance['Q'])
+    R = np.array(problem_instance['R'])
     robots = range(Q.shape[0])
     skills = range(Q.shape[1])
     n_tasks = R.shape[0] - 2
@@ -65,6 +65,7 @@ def plot_task_map(task_locations, T_execution, R):
         total_skills = np.sum(skills_required)
         skill_sizes = skills_required / total_skills if total_skills > 0 else np.zeros_like(skills_required)
         draw_pie(ax, x, y, skill_sizes, marker_sizes[idx-1] / 100)
+        plt.text(x, y, f"Task {idx}", fontsize=10, ha='center')
     
     # Plot start and end points
     ax.scatter(task_locations[0, 0], task_locations[0, 1], color='green', s=150, marker='x', label="Start (Task 0)")

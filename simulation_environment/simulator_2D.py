@@ -153,8 +153,8 @@ class Simulation:
         for task in self.tasks:
             self.update_task(task)
 
-        if self.debugging:
 
+        if self.debugging:
             print(f"############### TIMESTEP {self.timestep} ###############")
             for robot in self.robots:
                 print(f"Robot {robot.robot_id} with available {robot.available} is at location {robot.location}")
@@ -194,6 +194,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--visualize", action='store_true', help="Visualize the simulation")
     parser.add_argument("--scheduler", type=str, help="Scheduler to use (greedy or random_bipartite)")
+    parser.add_argument("--debug", action='store_true', help="Print debug information")
     args = parser.parse_args()
 
     with open("simulation_config.yaml", "r") as file:
@@ -206,12 +207,12 @@ if __name__ == '__main__':
     precedence_constraints = config["precedence_constraints"]
 
 
-    #problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
     #problem_instance = generate_biased_homogeneous_data()
     #problem_instance = generate_static_data()
-    problem_instance = generate_heterogeneous_no_coalition_data()
+    #problem_instance = generate_heterogeneous_no_coalition_data()
 
-    sim = Simulation(problem_instance, precedence_constraints, scheduler_name=args.scheduler, checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/het_no_coal_gatn/best_checkpoint.pt", debug=True)
+    sim = Simulation(problem_instance, precedence_constraints, scheduler_name=args.scheduler, checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/gatn_het_no_coal_6t_2r_2s/best_checkpoint.pt", debug=args.debug)
     
     if args.visualize: 
         visualize(sim)
