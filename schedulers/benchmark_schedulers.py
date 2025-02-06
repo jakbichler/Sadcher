@@ -61,7 +61,7 @@ if __name__ == "__main__":
                         problem_instance, 
                         [],
                         scheduler, 
-                        checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/gatn_het_no_coal_6t_2r_2s/best_checkpoint.pt",
+                        checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/gatn_without_durations_random_6t_2r_2s/best_checkpoint.pt",
                         debug=False
                     )
                 

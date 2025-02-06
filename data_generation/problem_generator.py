@@ -48,7 +48,7 @@ def generate_random_data(n_tasks: int, n_robots: int, n_skills: int,precedence_c
     task_locations = np.random.randint(0, grid_size,(n_tasks + 2, 2))
 
     # Travel times between tasks (appr)
-    T_t = np.linalg.norm(task_locations[:, np.newaxis] - task_locations[np.newaxis, :], axis=2)
+    T_t = np.linalg.norm(task_locations[:, np.newaxis] - task_locations[np.newaxis, :], axis=2).round(0)
 
     return ProblemData(Q=Q, R=R, T_e=T_e, T_t=T_t, task_locations=task_locations, precedence_constraints=precedence_constraints)
 

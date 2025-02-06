@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 from schedulers.bigraph_matching import solve_bipartite_matching, filter_overassignments, filter_redundant_assignments
 from helper_functions.schedules import Instantaneous_Schedule
@@ -22,7 +23,7 @@ class RandomBipartiteMatchingScheduler:
             return Instantaneous_Schedule(robot_assignments)
 
         # Create random reward matrix 
-        R = np.random.randint(0, 10, size=(n_robots, n_tasks))
+        R = torch.randint(0, 10, size=(n_robots, n_tasks))
         bipartite_matching_solution = solve_bipartite_matching(R, sim)
         filtered_solution = filter_redundant_assignments(bipartite_matching_solution, sim)
         filtered_solution = filter_overassignments(filtered_solution, sim)
