@@ -27,7 +27,7 @@ def get_task_status(problem, solution, task_id,  timestep):
     print(f"Task {task_id} not found in the solution")
 
 
-def create_task_features_from_optimal(problem_instance, solution,  timestep):
+def create_task_features_from_optimal(problem_instance, solution,  timestep, location_normalization = 100, duration_normalization = 100):
     task_features = []
     for task_id, task_requirements in enumerate(problem_instance["R"][1:-1]): # Exclude start and end task
         xy_location = np.array(problem_instance["task_locations"][task_id + 1])
@@ -36,7 +36,7 @@ def create_task_features_from_optimal(problem_instance, solution,  timestep):
         task.ready = task_status["ready"]
         task.assigned = task_status["assigned"]
         task.incomplete = task_status["incomplete"]
-        task_features.append(task.feature_vector())
+        task_features.append(task.feature_vector(location_normalization, duration_normalization))
     task_features = np.array(task_features)
 
     return torch.tensor(task_features, dtype=torch.float32)
@@ -49,7 +49,7 @@ def is_idle(solution, robot_id, timestep):
     return True
 
 
-def create_robot_features_from_optimal(problem_instance, solution, timestep):
+def create_robot_features_from_optimal(problem_instance, solution, timestep, location_normalization = 100, duration_normalization = 100):
     robot_features = []
     for robot_id, robot_capabilities in enumerate(problem_instance["Q"]):
         xy_location, remaining_workload = find_robot_position_and_workload_from_optimal(problem_instance, solution, timestep, robot_id)
@@ -57,7 +57,7 @@ def create_robot_features_from_optimal(problem_instance, solution, timestep):
         robot = Robot(robot_id, xy_location, speed, robot_capabilities)
         robot.available = 1 if is_idle(solution, robot_id, timestep) else 0
         robot.remaining_workload = remaining_workload
-        robot_features.append(robot.feature_vector())
+        robot_features.append(robot.feature_vector(location_normalization, duration_normalization))
     robot_features = np.array(robot_features)
 
     return torch.tensor(robot_features, dtype=torch.float32)

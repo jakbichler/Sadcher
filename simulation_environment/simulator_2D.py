@@ -14,13 +14,14 @@ from simulation_environment.display_simulation import visualize
 from visualizations.solution_visualization import plot_gantt_chart
 
 
-
 class Simulation:
     def __init__(self, problem_instance, precedence_constraints, scheduler_name=None, checkpoint_path = None, debug = False):
         self.timestep = 0
         self.robots: list[Robot] = self.create_robots(problem_instance)
         self.tasks: list[Task] = self.create_tasks(problem_instance)
         self.precedence_constraints = precedence_constraints
+        self.duration_normalization = np.max(problem_instance['T_e'])
+        self.location_normalization = np.max(problem_instance['task_locations'])
         self.debugging = debug
         self.sim_done = False
         self.makespan = -1 
@@ -51,7 +52,7 @@ class Simulation:
         elif name == "random_bipartite":
             return RandomBipartiteMatchingScheduler()
         elif name == "dbgm":
-            return DBGMScheduler(debugging = self.debugging,  checkpoint_path = checkpoint_path)
+            return DBGMScheduler(debugging = self.debugging,  checkpoint_path = checkpoint_path, duration_normalization = self.duration_normalization, location_normalization = self.location_normalization)
         else:
             raise ValueError(f"Unknown scheduler '{name}'")
         

@@ -38,10 +38,10 @@ class Task:
                 return False
         return True
     
-    def feature_vector(self):
+    def feature_vector(self, location_normalization = 100, duration_normalization = 100):
         return np.concatenate([
-            np.atleast_1d(self.location / 100), 
-            np.atleast_1d(self.overall_duration / 100), 
+            np.atleast_1d(self.location / location_normalization), 
+            np.atleast_1d(self.overall_duration / duration_normalization), 
             np.atleast_1d(self.requirements), 
             np.array([self.ready, self.assigned, self.incomplete], dtype=float)
         ], dtype=float)
@@ -78,10 +78,10 @@ class Robot:
         self.available = self.current_task is None
         self.remaining_workload = 0 if self.current_task is None else self.current_task.remaining_duration
 
-    def feature_vector(self):
+    def feature_vector(self, location_normalization_factor = 100, workload_normalization_factor = 100):
         return np.concatenate([
-            np.atleast_1d(self.location / 100), 
-            np.atleast_1d(self.remaining_workload / 100), 
+            np.atleast_1d(self.location / location_normalization_factor), 
+            np.atleast_1d(self.remaining_workload / workload_normalization_factor), 
             np.atleast_1d(self.capabilities), 
             np.array([self.available], dtype=float)
         ], dtype=float)

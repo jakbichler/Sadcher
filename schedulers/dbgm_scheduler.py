@@ -9,13 +9,15 @@ from helper_functions.schedules import Instantaneous_Schedule
 
 
 class DBGMScheduler:
-    def __init__(self, debugging, checkpoint_path):
+    def __init__(self, debugging, checkpoint_path, duration_normalization, location_normalization):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.trained_model = SchedulerNetwork(robot_input_dimensions=6, task_input_dimension=8, 
                                               embed_dim=128, ff_dim=256, n_transformer_heads=4, 
                                               n_transformer_layers= 4, n_gatn_heads=4, n_gatn_layers=2).to(self.device)
         self.trained_model.load_state_dict(torch.load(checkpoint_path, weights_only=True))
         self.debug = debugging
+        self.duration_normalization = duration_normalization
+        self.location_normalization = location_normalization
 
 
     def assign_tasks_to_robots(self, sim):
@@ -31,10 +33,10 @@ class DBGMScheduler:
                 robot.current_task = pending_tasks[0]
             return Instantaneous_Schedule(robot_assignments)
 
-        task_features = np.array([task.feature_vector() for task in sim.tasks[1:-1]])
+        task_features = np.array([task.feature_vector(self.location_normalization, self.duration_normalization) for task in sim.tasks[1:-1]])
         task_features = torch.tensor(task_features, dtype=torch.float32).unsqueeze(0).to(self.device)
 
-        robot_features = np.array([robot.feature_vector() for robot in sim.robots])
+        robot_features = np.array([robot.feature_vector(self.location_normalization, self.duration_normalization) for robot in sim.robots])
         robot_features = torch.tensor(robot_features, dtype= torch.float32).unsqueeze(0).to(self.device)
 
         predicted_reward_raw = self.trained_model(robot_features, task_features).squeeze(0) # remove batch dim
