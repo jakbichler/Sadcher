@@ -1,20 +1,21 @@
-
+import torch 
 import pulp
 import numpy as np
 from collections import defaultdict
 
 def solve_bipartite_matching(R, sim):
     """
-    R    : np.array, shape [n_robots, n_tasks], reward matrix
+    R    : torch.tensor [n_robots, n_tasks], reward matrix
     sim  : Simulation object
     Returns: dict of {(i, j): 0/1} solutions indicating the best A_{i,j}.
     """
+
 
     n_robots = len(sim.robots)
     n_tasks = len(sim.tasks)
     n_skills = len(sim.robots[0].capabilities)
     idle_robots_ids = [r.robot_id for r in sim.robots if r.current_task is None or r.current_task.status == 'DONE']
-
+    
     problem = pulp.LpProblem("BipartiteMatching", pulp.LpMaximize)
 
     # Decision variables: A[robot][task] in {0,1}
@@ -53,10 +54,20 @@ def solve_bipartite_matching(R, sim):
             problem += pulp.lpSum(A[robot_idx][task_idx] for robot_idx in range(n_robots)) >= X[task_idx]
 
 
-            # 1) Capability requirement: if c_t[j][p] = 1, subteam must have it
+            # 1 ALL REQUIREMENTS MUST BE MET) Capability requirement: if c_t[j][p] = 1, subteam must have it --> effictively all requirements must be met
             for cap in range(n_skills):
                 if task.requirements[cap] != 0:
                     problem += pulp.lpSum(sim.robots[robot_idx].capabilities[cap] * A[robot_idx][task_idx] for robot_idx in range(n_robots)) >= task.requirements[cap] * X[task_idx]
+            
+            
+            ## 2 AT LEAST ONE REQUIREMENT MUST BE MET
+            #problem += pulp.lpSum(
+                #pulp.lpSum(
+                    #sim.robots[robot_idx].capabilities[cap] * A[robot_idx][task_idx]
+                    #for robot_idx in range(n_robots)
+                #)
+                #for cap in range(n_skills) if task.requirements[cap] != 0
+            #) >= X[task_idx]
 
         else:
             # If task is not ready, force no assignment
@@ -66,14 +77,18 @@ def solve_bipartite_matching(R, sim):
     
 
     problem.solve(pulp.PULP_CBC_CMD(msg=0))
-    #print(f"solver status: {pulp.LpStatus[problem.status]}")
     solution = {(robot_idx, task_idx): int(pulp.value(A[robot_idx][task_idx])) for robot_idx in range(n_robots) for task_idx in range(n_tasks)}
-    #print(f"bipartite matching done with makespan {pulp.value(problem.objective)} and solution {solution}")
-    robot_assignments = {robot: task for (robot, task), val in solution.items() if val == 1}
-    #print(f"robot assignments: {robot_assignments}")
+
+    # To see how good the original reward matrix was, we count how often the optimization gave another result 
+    # compared to the plain argmax over the reward matrix. This is a measure of how good the network understands the problem.
+    argmax_over_reward_matrix = torch.argmax(R, axis=1)
+
+    # Only for availabe robots
+    argmax_over_reward_matrix = argmax_over_reward_matrix[idle_robots_ids]
+    shield_triggered_counter = count_differences(argmax_over_reward_matrix, solution)
+    
+    #return solution, shield_triggered_counter
     return solution
-
-
 
 
 def filter_redundant_assignments(assignment_solution, sim):
@@ -153,3 +168,17 @@ def filter_overassignments(assignment_solution, sim):
                 combined_capabilities = np.logical_or(combined_capabilities, robot_cap)
 
     return filtered_solution
+
+
+def count_differences(pre_shield_solution, post_shield_solution):
+    assigned_tasks = [task_id for (robot_id, task_id), assigned in post_shield_solution.items() if assigned == 1]
+    pre_shield_solution = pre_shield_solution.cpu().numpy() 
+    # Determine the minimum length to compare elements
+    min_len = min(len(assigned_tasks), len(post_shield_solution))
+    # Count differences in the overlapping part
+    diff_count = np.sum(pre_shield_solution[:min_len] != assigned_tasks[:min_len])
+    
+    # Count the extra elements in the longer array
+    diff_count += abs(len(pre_shield_solution) - len(assigned_tasks))
+    
+    return diff_count

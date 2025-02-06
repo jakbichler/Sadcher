@@ -45,7 +45,7 @@ def generate_simple_dataset(n_instances: int, output_dir: str, problem_instance_
         
 
         # Solve the problem instance using the MILP solver
-        optimal_schedule = milp_scheduling(problem_instance, n_threads=8, cutoff_time_seconds=10 * 60)
+        optimal_schedule = milp_scheduling(problem_instance,n_threads=6, cutoff_time_seconds=10 * 60)
 
         # Convert numpy arrays to lists for JSON serialization
         serializable_problem_instance = {
