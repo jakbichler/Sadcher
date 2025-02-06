@@ -6,7 +6,7 @@ class Task:
         self.task_id = task_id
         self.location = np.array(location, dtype=np.float64)
         self.overall_duration = duration
-        self.remaining = duration
+        self.remaining_duration = duration
         self.requirements = np.array(requirements, dtype=bool)
         self.status = 'PENDING'  if task_id != 0 else 'DONE' # could be PENDING, IN_PROGRESS, DONE
         self.ready = True
@@ -39,7 +39,12 @@ class Task:
         return True
     
     def feature_vector(self):
-        return np.concatenate([self.location/100, self.overall_duration/100, self.requirements, np.array([self.ready, self.assigned, self.incomplete])], dtype=float)
+        return np.concatenate([
+            np.atleast_1d(self.location / 100), 
+            np.atleast_1d(self.overall_duration / 100), 
+            np.atleast_1d(self.requirements), 
+            np.array([self.ready, self.assigned, self.incomplete], dtype=float)
+        ], dtype=float)
 
 
 class Robot:
@@ -71,6 +76,12 @@ class Robot:
             self.current_task = None
         
         self.available = self.current_task is None
+        self.remaining_workload = 0 if self.current_task is None else self.current_task.remaining_duration
 
     def feature_vector(self):
-        return np.concatenate([self.location/100, self.capabilities, np.array([self.available])], dtype=float)
+        return np.concatenate([
+            np.atleast_1d(self.location / 100), 
+            np.atleast_1d(self.remaining_workload / 100), 
+            np.atleast_1d(self.capabilities), 
+            np.array([self.available], dtype=float)
+        ], dtype=float)

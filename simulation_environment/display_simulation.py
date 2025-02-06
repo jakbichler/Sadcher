@@ -72,7 +72,7 @@ def update_plot(sim, ax, fig, colors, n_skills):
         if task.status != 'DONE':
             total_skills = np.sum(task.requirements)
             skill_sizes = task.requirements / total_skills if total_skills > 0 else np.zeros_like(task.requirements)
-            draw_pie(ax, task.location[0], task.location[1], skill_sizes, task.duration / 50, colors)
+            draw_pie(ax, task.location[0], task.location[1], skill_sizes, task.remaining_duration / 50, colors)
             ax.text(task.location[0], task.location[1], f"Task {task.task_id}", fontsize=10, ha='center')
 
     for robot_idx, robot in enumerate(sim.robots):
