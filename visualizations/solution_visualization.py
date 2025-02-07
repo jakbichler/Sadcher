@@ -4,14 +4,12 @@ from matplotlib.patches import Patch
 from matplotlib.patches import Wedge
 
 
-def plot_gantt_chart(title, schedule):
-    """Displays a Gantt chart showing the tasks assigned to each robot over time."""
+def plot_gantt_chart(title, schedule, travel_times=None, ax=None):
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 6))
 
-    # Create task colors
-    task_colors = {}  
     task_colors = plt.cm.get_cmap('hsv', schedule.n_tasks + 2)
-
-    fig, ax = plt.subplots(figsize=(10, 6))
+    travel_times = np.array(travel_times)
 
     yticks = []
     yticklabels = []
@@ -20,32 +18,52 @@ def plot_gantt_chart(title, schedule):
     for idx, robot in enumerate(reversed(range(schedule.n_robots))):
         yticks.append(idx)
         yticklabels.append(f"Robot {robot}")
-        for task in schedule.robot_schedules[robot]:
-            task, start_time, end_time = task
+        
+        tasks_for_robot = schedule.robot_schedules[robot]
+        
+        for i, (task_i, start_i, end_i) in enumerate(tasks_for_robot):
             ax.barh(
                 idx,
-                end_time - start_time,
-                left=start_time,
+                end_i - start_i,
+                left=start_i,
                 height=0.4,
                 align='center',
-                color=task_colors(task),
+                color=task_colors(task_i),
                 edgecolor='black',
             )
             ax.text(
-                start_time + (end_time - start_time) / 2,
+                start_i + (end_i - start_i) / 2,
                 idx,
-                f"Task {task}",
+                f"Task {task_i}",
                 va='center',
                 ha='center',
                 color='black',
-                fontsize=6,  # Smaller font size for a large number of tasks
+                fontsize=6,
             )
-            # Add to legend if not already added
-            if task not in [e.get_label() for e in legend_elements]:
+            if task_i not in [e.get_label() for e in legend_elements]:
                 legend_elements.append(
-                    Patch(facecolor=task_colors(task), edgecolor='black', label=f'Task {task}')
+                    Patch(facecolor=task_colors(task_i), edgecolor='black', label=f'Task {task_i}')
                 )
 
+            if i < len(tasks_for_robot) - 1:
+                (task_j, start_j, _) = tasks_for_robot[i + 1]
+                t_ij = travel_times[task_i, task_j]
+                arrow_start = start_j - t_ij
+                arrow_len = t_ij
+                
+                if arrow_len > 0:
+                    ax.arrow(
+                        arrow_start,
+                        idx,
+                        arrow_len,
+                        0,
+                        length_includes_head=True,
+                        head_width=0.03,
+                        head_length=10,
+                        linewidth=3,
+                        color='black',
+                        shape='full',
+                    )
 
     ax.set_yticks(yticks)
     ax.set_yticklabels(yticklabels)
@@ -53,21 +71,25 @@ def plot_gantt_chart(title, schedule):
     ax.set_title(title)
     ax.grid(True)
     ax.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc='upper left')
-    ax.set_xlim(0, schedule.makespan+10)
+    ax.set_xlim(0, schedule.makespan + 10)
     ax.axvline(x=schedule.makespan, color='red', linestyle='--', label='Makespan')
 
-    plt.tight_layout()
-    plt.show()  # Displays the Gantt chart without blocking
+    if ax is None:
+        plt.tight_layout()
+        plt.show()
 
 
 
-def plot_robot_trajectories(task_locations, robot_schedules, T_execution, R):
+def plot_robot_trajectories(task_locations, robot_schedules, T_execution, R, ax=None, Q=None):
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(10, 10))
+
     def draw_arrow(start, end, color, label=""):
         dx, dy = end[0] - start[0], end[1] - start[1]
         length = np.sqrt(dx**2 + dy**2)
         adjusted_dx, adjusted_dy = dx / length * (length - 5), dy / length * (length - 5)
-        plt.arrow(start[0], start[1], adjusted_dx, adjusted_dy, head_width=2, head_length=5,
-                  fc=color, ec=color, alpha=0.7, label=label)
+        ax.arrow(start[0], start[1], adjusted_dx, adjusted_dy, head_width=2, head_length=5,
+                 fc=color, ec=color, alpha=0.7, label=label)
 
     def draw_pie(ax, x, y, sizes, radius):
         start_angle = 0
@@ -80,30 +102,25 @@ def plot_robot_trajectories(task_locations, robot_schedules, T_execution, R):
 
     marker_sizes = T_execution[1:-1] * 2
     n_skills = R.shape[1]
-    colors = plt.cm.Set1(np.linspace(0, 1, n_skills))  # Generate skill color palette
+    colors = plt.cm.Set1(np.linspace(0, 1, n_skills))
 
-    fig, ax = plt.subplots(figsize=(10, 10))
-
-    # Plot tasks with pie-chart representation
     for idx, (x, y) in enumerate(task_locations[1:-1], start=1):
         skills_required = R[idx]
         total_skills = np.sum(skills_required)
         skill_sizes = skills_required / total_skills if total_skills > 0 else np.zeros_like(skills_required)
         draw_pie(ax, x, y, skill_sizes, marker_sizes[idx - 1] / 100)
+        ax.text(x, y+2, f"Task {idx}", fontsize=10, ha='right')
 
-    # Plot start and end points
     ax.scatter(task_locations[0, 0], task_locations[0, 1], color='green', s=150, marker='x', label="Start (Task 0)")
     ax.text(task_locations[0, 0] + 6, task_locations[0, 1] - 1, "Start", fontsize=12, ha='center')
     ax.scatter(task_locations[-1, 0], task_locations[-1, 1], color='red', s=150, marker='x', label="End (Task -1)")
     ax.text(task_locations[-1, 0] + 6, task_locations[-1, 1] - 1, "End", fontsize=12, ha='center')
 
-    # Draw arrows for robot trajectories
-    trajectory_colors = plt.cm.Set1(np.linspace(0, 1, len(robot_schedules.keys())))
+    trajectory_colors = ["black", 'royalblue']
     for idx, (robot_id, tasks) in enumerate(robot_schedules.items()):
         color = trajectory_colors[idx]
         start = task_locations[0]
 
-        # Ensure tasks are sorted by start_time
         tasks_sorted = sorted(tasks, key=lambda x: x[1])
 
         for task_id, _, _ in tasks_sorted:
@@ -114,11 +131,17 @@ def plot_robot_trajectories(task_locations, robot_schedules, T_execution, R):
         end = task_locations[-1]
         draw_arrow(start, end, color)
 
-    # Add legend for skills
-    legend_patches = [
+    legend_patches_skills = [
         plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i], markersize=10, label=f"Skill {i}")
         for i in range(n_skills)
     ]
+    legend_patches_robots = [
+        plt.Line2D([0], [0], color=trajectory_colors[i], lw=2, label=f"R{robot_id}: {Q[robot_id]}")
+        for i, robot_id in enumerate(robot_schedules.keys())
+    ]
+
+    legend_patches = legend_patches_skills + legend_patches_robots
+
     ax.legend(handles=legend_patches, title="Task Skills", loc="upper right")
 
     ax.set_xlabel("X Coordinate")
@@ -126,4 +149,15 @@ def plot_robot_trajectories(task_locations, robot_schedules, T_execution, R):
     ax.set_title("Robot Trajectories with Task Skill Representation")
     ax.set_xlim(0, 100)
     ax.set_ylim(0, 100)
+
+    if ax is None:
+        plt.show()
+
+def plot_gantt_and_trajectories(title, schedule, travel_times, task_locations, T_execution, R, Q):
+    fig, axs = plt.subplots(2, 1, figsize=(12, 12), gridspec_kw={'height_ratios': [1, 5]})
+
+    # Use the modified functions with specific axes
+    plot_gantt_chart(title, schedule, travel_times, ax=axs[0])
+    plot_robot_trajectories(task_locations, schedule.robot_schedules, T_execution, R, ax=axs[1], Q=Q)
+
     plt.show()
