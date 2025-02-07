@@ -122,52 +122,53 @@ def filter_redundant_assignments(assignment_solution, sim):
 
 
 def filter_overassignments(assignment_solution, sim):
-    """
-    For each task:
-    1) Gather the 'existing' robots that already have current_task == that task.
-    2) Gather the 'new' robots assigned to that task in assignment_solution.
-    3) Iteratively see if we already cover the full skill requirements. If so,
-        any additional new robot is unnecessary and removed.
-    """
-    # Copy so we don’t mutate the original while iterating
     filtered_solution = dict(assignment_solution)
+    task_to_new = defaultdict(list)
 
-    # 1) Build a dictionary of task -> [list of newly assigned robot_ids]
-    task_to_new_assignments = defaultdict(list)
+    # Group new assignments by task
     for (robot_id, task_id), val in assignment_solution.items():
         if val == 1:
-            task_to_new_assignments[task_id].append(robot_id)
+            task_to_new[task_id].append(robot_id)
 
-    # 2) Iterate over each task that got new assignments
-    for task_id, new_robot_ids in task_to_new_assignments.items():
+    for task_id, new_robot_ids in task_to_new.items():
         task = sim.tasks[task_id]
-        # If task is incomplete and ready, we want to see if the sub-team is needed
         if not (task.ready and task.incomplete):
             continue
 
-        # - Already assigned (existing) robots
-        existing_robots = [
-            r for r in sim.robots 
-            if r.current_task == task
-        ]
+        # Coverage from existing robots
+        combined_caps = np.zeros_like(task.requirements, dtype=bool)
+        for robot in sim.robots:
+            if robot.current_task == task:
+                combined_caps |= robot.capabilities
 
-        # Combine existing coverage
-        combined_capabilities = np.zeros_like(task.requirements, dtype=bool)
-        for r in existing_robots:
-            combined_capabilities = np.logical_or(combined_capabilities, r.capabilities)
-
-        # 3) For each newly assigned robot, check if they add coverage
-        # We do this in the order we see them, but you can choose a different strategy if you like
+        used_new_robots = []
         for robot_id in new_robot_ids:
-            # If we already fully cover the task’s requirements, no need for another robot
-            if np.all(combined_capabilities[task.requirements]):
+            if np.all(combined_caps[task.requirements]):
                 filtered_solution[(robot_id, task_id)] = 0
             else:
-                # This robot might add something, so incorporate its skills
-                robot_cap = sim.robots[robot_id].capabilities
-                combined_capabilities = np.logical_or(combined_capabilities, robot_cap)
+                used_new_robots.append(robot_id)
+                combined_caps |= sim.robots[robot_id].capabilities
+
+        # Remove any new robot that’s not strictly needed by checking if team coverage remains full if it’s removed
+        for robot_id in used_new_robots:
+            test_coverage = np.zeros_like(task.requirements, dtype=bool)
+            # Add existing coverage
+            for robot in sim.robots:
+                if robot.current_task == task:
+                    test_coverage |= robot.capabilities
+
+            # Add all other new robots
+            for other_rid in used_new_robots:
+                if other_rid != robot_id:
+                    test_coverage |= sim.robots[other_rid].capabilities
+
+            # If still fully covered, remove this robot
+            if np.all(test_coverage[task.requirements]):
+                filtered_solution[(robot_id, task_id)] = 0
+                used_new_robots.remove(robot_id)
 
     return filtered_solution
+
 
 
 def count_differences(pre_shield_solution, post_shield_solution):
