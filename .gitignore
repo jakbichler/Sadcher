@@ -3,3 +3,4 @@ venv_thesis/
 datasets/
 *.pyc
 results/
+checkpoints/

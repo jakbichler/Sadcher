@@ -13,6 +13,51 @@ from random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
 from simulation_environment.simulator_2D import Simulation
 from data_generation.problem_generator import ProblemData, generate_random_data, generate_simple_data, generate_simple_homogeneous_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data
 
+
+def plot_violin(ax, data, labels, ylabel, title):
+    ax.violinplot(data.values(), showmeans=True)
+    ax.set_xticks(range(1, len(labels) + 1))
+    ax.set_xticklabels(labels)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+
+    for i, scheduler in enumerate(labels, start=1):
+        x_jitter = np.random.normal(0, 0.03, len(data[scheduler]))  
+        ax.scatter(np.full_like(data[scheduler], i) + x_jitter, data[scheduler], alpha=0.5, s=10, color='black')
+
+
+def compare_makespans_1v1(ax, makespans1, makespans2, scheduler1, scheduler2):
+    makespans1 = np.array(makespans1)
+    makespans2 = np.array(makespans2)    
+    min_value = min(min(makespans1), min(makespans2))
+    max_value = max(max(makespans1), max(makespans2))
+
+    # Compute deviations from parity line
+    delta = makespans2 - makespans1
+    scheduler_1_wins = delta[delta > 0]
+    scheduler_2_wins = delta[delta < 0]
+
+    # Compute 90th percentiles separately
+    scheduler_1_wins_90p = np.percentile(scheduler_1_wins, 90) if len(scheduler_1_wins) > 0 else 0
+    scheduler_2_wins_90p = np.percentile(np.abs(scheduler_2_wins), 90) if len(scheduler_2_wins) > 0 else 0
+
+    x_vals = np.linspace(min_value, max_value, 100)
+    parity_line = x_vals
+    upper_bound = x_vals + scheduler_1_wins_90p
+    lower_bound = x_vals - scheduler_2_wins_90p
+
+    # Plot scatter and identity line
+    ax.scatter(makespans1, makespans2, alpha=0.7)
+    ax.plot(parity_line, parity_line, color="black", label="Parity", linestyle="--")
+
+    # Fill area between parity and upper/lower bounds
+    ax.fill_between(x_vals, parity_line, upper_bound, color="red", alpha=0.2, label=f"{scheduler1} wins, \u03B4_90p = {scheduler_1_wins_90p:.1f}")
+    ax.fill_between(x_vals, parity_line, lower_bound, color="green", alpha=0.2, label=f"{scheduler2} wins, \u03B4_90p = {scheduler_2_wins_90p:.1f}") 
+    ax.legend()
+    ax.set_xlabel(f"{scheduler1} Makespan")
+    ax.set_ylabel(f"{scheduler2} Makespan")
+
+
 if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("--including_milp", default=False,  action="store_true", help="Include MILP in the comparison")
@@ -21,7 +66,7 @@ if __name__ == "__main__":
     n_tasks = 6
     n_robots = 2 
     n_skills = 2
-    #np.random.seed(1)
+    #np.random.seed(1000)
 
     if args.including_milp:
         scheduler_names = ["milp", "greedy", "dbgm", "random_bipartite"]
@@ -59,12 +104,10 @@ if __name__ == "__main__":
                         checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/145k_samples_gatn_with_durations_normalization_per_instance_random_6t_2r_2s/best_checkpoint.pt",
                         debug=False
                     )
-                
                 else:
                     sim = Simulation(problem_instance, [], scheduler, debug=False)
 
                 start_time = time.time()
-
                 while not sim.sim_done:
                     sim.step()
                     if sim.timestep > worst_case_makespan:
@@ -91,51 +134,21 @@ if __name__ == "__main__":
     fig, axs = plt.subplots(2, 2, figsize=(12, 10))  
 
     # Violin plot for makespans
-    axs[0, 0].violinplot(makespans.values(), showmeans=True)
-    axs[0, 0].set_xticks(range(1, len(scheduler_names) + 1))
-    axs[0, 0].set_xticklabels(scheduler_names)
-    axs[0, 0].set_ylabel("Makespan")
-    axs[0, 0].set_title("Makespan Comparison")
-
-    for i, scheduler in enumerate(scheduler_names, start=1):
-        x_jitter = np.random.normal(0, 0.03, len(makespans[scheduler]))  
-        axs[0, 0].scatter(np.full_like(makespans[scheduler], i) + x_jitter, makespans[scheduler], alpha=0.5, s=10, color='black')
-
+    plot_violin(axs[0, 0], makespans, scheduler_names, "Makespan", "Makespan Comparison")
 
     # Violin plot for computation times
-    axs[1, 0].violinplot(computation_times.values(), showmeans=True)
-    axs[1, 0].set_xticks(range(1, len(scheduler_names) + 1))
-    axs[1, 0].set_xticklabels(scheduler_names)
-    axs[1, 0].set_ylabel("Computation Time (s)")
-    axs[1, 0].set_title("Computation Time Comparison")
-
-    for i, scheduler in enumerate(scheduler_names, start=1):
-        x_jitter = np.random.normal(0, 0.03, len(computation_times[scheduler]))  
-        axs[1, 0].scatter(np.full_like(computation_times[scheduler], i) + x_jitter, computation_times[scheduler], alpha=0.5, s=10, color='black')
-
+    plot_violin(axs[1, 0], computation_times, scheduler_names, "Computation Time (s)", "Computation Time Comparison")
 
     # Direct comparison: Greedy vs DBGMScheduler
-    min_value = min(min(makespans["greedy"]), min(makespans["dbgm"]))
-    max_value = max(max(makespans["greedy"]), max(makespans["dbgm"]))
-    axs[0, 1].scatter(makespans["dbgm"], makespans["greedy"], label="DBGMScheduler vs Greedy", alpha=0.7)
-    axs[0, 1].plot([min_value, max_value], [min_value, max_value], 'r--', label="x = y", linewidth=2)
-    axs[0, 1].set_xlabel("DBGMScheduler Makespan")
-    axs[0, 1].set_ylabel("Greedy Makespan")
-    axs[0, 1].set_title("Direct Comparison")
-    axs[0, 1].legend()
-
+    compare_makespans_1v1(axs[0, 1], makespans["greedy"], makespans["dbgm"], "Greedy", "DBGMScheduler")
 
     # MILP  vs DBGM
     if args.including_milp:
-        min_value = min(min(makespans["dbgm"]), min(makespans["milp"]))
-        max_value = max(max(makespans["dbgm"]), max(makespans["milp"]))
-        axs[1, 1].scatter(makespans["dbgm"], makespans["milp"], label="DBGMScheduler vs MILP", alpha=0.7)
-        axs[1, 1].plot([min_value, max_value], [min_value, max_value], 'r--', label="x = y", linewidth=2)
-        axs[1, 1].set_xlabel("DBGMScheduler Makespan")
-        axs[1, 1].set_ylabel("MILP Makespan")
-        axs[1, 1].legend()
+        compare_makespans_1v1(axs[1, 1], makespans["milp"], makespans["dbgm"], "MILP", "DBGMScheduler")
     else:
         fig.delaxes(axs[1, 1])  
 
     plt.tight_layout()
     plt.show()
+
+
