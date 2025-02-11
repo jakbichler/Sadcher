@@ -21,7 +21,7 @@ if __name__ == "__main__":
     n_tasks = 6
     n_robots = 2 
     n_skills = 2
-    #np.random.seed(1)
+    np.random.seed(1)
 
     if args.including_milp:
         scheduler_names = ["milp", "greedy", "dbgm", "random_bipartite"]
@@ -56,7 +56,7 @@ if __name__ == "__main__":
                         problem_instance, 
                         [],
                         scheduler, 
-                        checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/145k_samples_gatn_with_durations_normalization_per_instance_random_6t_2r_2s/best_checkpoint.pt",
+                        checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/145k_samples_gatn_cross_encoder_random_6t_2r_2s/best_checkpoint.pt",
                         debug=False
                     )
                 
@@ -118,7 +118,7 @@ if __name__ == "__main__":
     min_value = min(min(makespans["greedy"]), min(makespans["dbgm"]))
     max_value = max(max(makespans["greedy"]), max(makespans["dbgm"]))
     axs[0, 1].scatter(makespans["dbgm"], makespans["greedy"], label="DBGMScheduler vs Greedy", alpha=0.7)
-    axs[0, 1].plot([min_value, max_value], [min_value, max_value], 'r--', label="x = y", linewidth=2)
+    axs[0, 1].plot([min_value, max_value], [min_value, max_value], 'r--', label="x = y", linewidth=3)
     axs[0, 1].set_xlabel("DBGMScheduler Makespan")
     axs[0, 1].set_ylabel("Greedy Makespan")
     axs[0, 1].set_title("Direct Comparison")
@@ -130,7 +130,7 @@ if __name__ == "__main__":
         min_value = min(min(makespans["dbgm"]), min(makespans["milp"]))
         max_value = max(max(makespans["dbgm"]), max(makespans["milp"]))
         axs[1, 1].scatter(makespans["dbgm"], makespans["milp"], label="DBGMScheduler vs MILP", alpha=0.7)
-        axs[1, 1].plot([min_value, max_value], [min_value, max_value], 'r--', label="x = y", linewidth=2)
+        axs[1, 1].plot([min_value, max_value], [min_value, max_value], 'r--', label="x = y", linewidth=3)
         axs[1, 1].set_xlabel("DBGMScheduler Makespan")
         axs[1, 1].set_ylabel("MILP Makespan")
         axs[1, 1].legend()
