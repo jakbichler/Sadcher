@@ -45,7 +45,8 @@ def plot_gantt_chart(title, schedule, travel_times=None, ax=None):
                     Patch(facecolor=task_colors(task_i), edgecolor='black', label=f'Task {task_i}')
                 )
 
-            if i < len(tasks_for_robot) - 1:
+            # Add arrows for travel times between normal tasks
+            if i < len(tasks_for_robot)- 1:
                 (task_j, start_j, _) = tasks_for_robot[i + 1]
                 t_ij = travel_times[task_i, task_j]
                 arrow_start = start_j - t_ij
@@ -64,6 +65,23 @@ def plot_gantt_chart(title, schedule, travel_times=None, ax=None):
                         color='black',
                         shape='full',
                     )
+
+            first_task, first_start, _ = tasks_for_robot[0]
+            arrow_start = first_start - travel_times[0, first_task]
+            arrow_len = travel_times[0, first_task]
+            if arrow_len > 0:
+                ax.arrow(
+                    arrow_start,            # starting at time 0
+                    idx,
+                    arrow_len,
+                    0,
+                    length_includes_head=True,
+                    head_width=0.03,
+                    head_length=10,
+                    linewidth=3,
+                    color='black',
+                    shape='full',
+                )
 
     ax.set_yticks(yticks)
     ax.set_yticklabels(yticklabels)
