@@ -1,13 +1,11 @@
 import json
 import os
-
 import sys
 sys.path.append("../..")
 from helper_functions.schedules import Full_Horizon_Schedule
 from simulation_environment.task_robot_classes import Robot, Task
 import numpy as np
 import torch 
-
 
 def get_task_status(problem, solution, task_id,  timestep):
     for robot_id, assignments in solution.items():
@@ -112,7 +110,7 @@ def find_robot_position_and_workload_from_optimal(problem, solution, timestep, r
         remaining_workload = 0
         return location, remaining_workload
 
-def get_expert_reward(schedule, decision_time, gamma = 0.99, immediate_reward = 10):
+def get_expert_reward(schedule, decision_time, travel_times, gamma = 0.99, immediate_reward = 10):
     """
     schedule: dict {robot_id: [(task_id, start_time, end_time), ...]}
     decision_time: float
@@ -129,8 +127,10 @@ def get_expert_reward(schedule, decision_time, gamma = 0.99, immediate_reward = 
     n_robots = len(schedule)
     task_ids = sorted({t_id for r_id in schedule for (t_id, _, _) in schedule[r_id]})
 
-    E = np.zeros((n_robots, len(task_ids))) 
-    X = np.zeros((n_robots, len(task_ids)))
+    E = np.zeros((n_robots, len(task_ids) + 1)) # +1 for the idle task 
+    X = np.zeros((n_robots, len(task_ids) + 1)) # +1 for the idle task
+    X[:, -1] = 1 # Idle task is always feasible
+    travel_times = np.array(travel_times)
 
     def is_idle(robot_id, time):
         for t_id, task_start, task_end in schedule[robot_id]:
@@ -140,6 +140,8 @@ def get_expert_reward(schedule, decision_time, gamma = 0.99, immediate_reward = 
 
 
     for robot_id in schedule.keys():
+
+        # Normal tasks
         if is_idle(robot_id, decision_time):
             # Robot task pair is feasible at decision time 
             X[robot_id, :] = 1
@@ -149,6 +151,27 @@ def get_expert_reward(schedule, decision_time, gamma = 0.99, immediate_reward = 
             if start_time >= decision_time:
                 # Expert reward is discounted time to completion (task_id-1, because task 0 is the beginning of the mission)
                 E[robot_id, task_id-1] = gamma**(end_time - decision_time) * immediate_reward
+
+        # Idle reward for gaps between consecutive tasks
+        TIME_EPSILON = 0.01
+        for i in range(len(schedule[robot_id]) - 1):
+            current_task, _, current_end = schedule[robot_id][i]
+            next_task, next_start, _ = schedule[robot_id][i+1]
+            t_ij = travel_times[current_task, next_task]
+            idle_end = next_start - t_ij  # robot must depart by this time to arrive exactly at next_start
+            if idle_end > current_end + TIME_EPSILON and decision_time < idle_end - TIME_EPSILON:
+                idle_reward = gamma**(idle_end - decision_time) * immediate_reward
+                # If multiple waiting periods exist, choose the best (max reward)
+                E[robot_id, -1] = idle_reward
+
+        # First Task Idle 
+        if len(schedule[robot_id]) == 0:
+            continue
+        first_task, first_start, _ = schedule[robot_id][0]
+        t_01 = travel_times[0, first_task]
+        end_of_idle_task = first_start - t_01
+        if t_01 < first_start - TIME_EPSILON and decision_time < (first_start - t_01) - TIME_EPSILON:
+            E[robot_id, -1] = gamma**(end_of_idle_task - decision_time) * immediate_reward
 
     return torch.tensor(E), torch.tensor(X) 
 
