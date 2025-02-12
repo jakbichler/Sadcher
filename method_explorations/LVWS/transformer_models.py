@@ -216,12 +216,20 @@ class SchedulerNetwork(nn.Module):
             nn.Linear(16, 1)  # Outputs a single scalar per (robot, task) pair.
         )
 
-        # The final reward MLP now takes robot+task embeddings concatenated with the processed distance.
+        # Rewards MLP for normal tasks 
         self.reward_mlp = nn.Sequential(
             nn.Linear(4 * embed_dim + 1, ff_dim),
             nn.ReLU(),
             nn.Linear(ff_dim, 1)  # outputs scalar per (robot, task) pair
         )
+
+        # Rewards MLP for idle tasks
+        self.idle_mlp = nn.Sequential(
+            nn.Linear(2 * embed_dim, ff_dim),
+            nn.ReLU(),
+            nn.Linear(ff_dim, 1) # outputs scalar per robot
+        )
+
 
     def forward(self, robot_features, task_features):
         """
@@ -241,11 +249,11 @@ class SchedulerNetwork(nn.Module):
         task_out  = self.task_transformer_encoder(task_gatn_output)    # (B, M, embed_dim)
 
         # 3) Build pairwise feature tensor.
-        expanded_robot_gatn = robot_gatn_output.unsqueeze(2).expand(B, N, M, robot_gatn_output.shape[-1])
-        expanded_task_gatn  = task_gatn_output.unsqueeze(1).expand(B, N, M, task_gatn_output.shape[-1]) 
+        expanded_robot_gatn = robot_gatn_output.unsqueeze(2).expand(B, N, M, robot_gatn_output.shape[-1]) # (B, N, M, embed_dim)
+        expanded_task_gatn  = task_gatn_output.unsqueeze(1).expand(B, N, M, task_gatn_output.shape[-1])  # (B, N, M, embed_dim)
 
-        expanded_robot_out = robot_out.unsqueeze(2).expand(B, N, M, robot_out.shape[-1])
-        expanded_task_out  = task_out.unsqueeze(1).expand(B, N, M, task_out.shape[-1])
+        expanded_robot_out = robot_out.unsqueeze(2).expand(B, N, M, robot_out.shape[-1]) # (B, N, M, embed_dim)
+        expanded_task_out  = task_out.unsqueeze(1).expand(B, N, M, task_out.shape[-1]) # (B, N, M, embed_dim)
 
         # 4) Compute pairwise relative distances from raw positions.
         #  the first two dimensions of the raw features are (x,y).
@@ -261,7 +269,19 @@ class SchedulerNetwork(nn.Module):
         # 5) Concatenate all features for the final reward MLP.
         final_input = torch.cat([expanded_robot_gatn, expanded_task_gatn, expanded_robot_out, expanded_task_out, processed_distance], dim=-1)
 
-        reward_scores = self.reward_mlp(final_input).squeeze(-1)  # (B, N, M)
+        task_rewards = self.reward_mlp(final_input).squeeze(-1)  # (B, N, M)
 
-        return reward_scores
+
+        # --- Idle Task Branch ---
+        agg_task = torch.mean(task_out, dim=1)  # (B, embed_dim)
+        agg_task_exp = agg_task.unsqueeze(1).expand(B, N, agg_task.shape[-1])  # (B, N, embed_dim)
+
+        # Concatenate robot's transformer output with aggregated task features.
+        idle_input = torch.cat([robot_out, agg_task_exp], dim=-1)  # (B, N, 2*embed_dim)
+        idle_reward = self.idle_mlp(idle_input)  # (B, N, 1)
+
+        # Concatenate the idle reward with task rewards, so final shape is (B, N, M+1)
+        final_reward = torch.cat([task_rewards, idle_reward], dim=-1)
+        
+        return final_reward
     
