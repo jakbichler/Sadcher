@@ -240,7 +240,7 @@ def generate_biased_homogeneous_data() -> ProblemData:
         precedence_constraints=precedence_constraints
     )
 
-def generate_heterogeneous_no_coalition_data() -> ProblemData:
+def generate_heterogeneous_no_coalition_data(n_tasks) -> ProblemData:
     """
     Generates a simple problem instance for testing multi-robot task allocation.
     
@@ -253,7 +253,6 @@ def generate_heterogeneous_no_coalition_data() -> ProblemData:
             - task_locations (np.ndarray): Randomly generated task locations on a grid.
             - precedence_constraints (np.ndarray): Task precedence constraints as an array of (task_j, task_k) pairs.
     """
-    n_tasks = 6 
     n_skills = 2
 
     task_type_1 = np.array([1, 0])

@@ -10,9 +10,8 @@ from simulation_environment.task_robot_classes import Robot, Task
 from schedulers.greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
 from schedulers.random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
 from schedulers.dbgm_scheduler import DBGMScheduler
-from simulation_environment.display_simulation import visualize
-from visualizations.solution_visualization import plot_gantt_chart
-
+from simulation_environment.display_simulation import visualize, run_video_mode
+from visualizations.solution_visualization import plot_gantt_chart, plot_robot_trajectories, plot_gantt_and_trajectories
 
 
 class Simulation:
@@ -21,12 +20,15 @@ class Simulation:
         self.robots: list[Robot] = self.create_robots(problem_instance)
         self.tasks: list[Task] = self.create_tasks(problem_instance)
         self.precedence_constraints = precedence_constraints
+        self.duration_normalization = np.max(problem_instance['T_e'])
+        self.location_normalization = np.max(problem_instance['task_locations'])
         self.debugging = debug
         self.sim_done = False
         self.makespan = -1 
         self.robot_schedules = {robot.robot_id: [] for robot in self.robots}
         self.n_tasks = len(self.tasks)
         self.last_task_id = self.n_tasks - 1
+        self.scheduler_name = scheduler_name
         self.scheduler = self.create_scheduler(scheduler_name, checkpoint_path)
 
     def create_robots(self, problem_instance):
@@ -51,7 +53,7 @@ class Simulation:
         elif name == "random_bipartite":
             return RandomBipartiteMatchingScheduler()
         elif name == "dbgm":
-            return DBGMScheduler(debugging = self.debugging,  checkpoint_path = checkpoint_path)
+            return DBGMScheduler(debugging = self.debugging,  checkpoint_path = checkpoint_path, duration_normalization = self.duration_normalization, location_normalization = self.location_normalization)
         else:
             raise ValueError(f"Unknown scheduler '{name}'")
         
@@ -153,8 +155,8 @@ class Simulation:
         for task in self.tasks:
             self.update_task(task)
 
-        if self.debugging:
 
+        if self.debugging:
             print(f"############### TIMESTEP {self.timestep} ###############")
             for robot in self.robots:
                 print(f"Robot {robot.robot_id} with available {robot.available} is at location {robot.location}")
@@ -193,7 +195,9 @@ class Simulation:
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--visualize", action='store_true', help="Visualize the simulation")
+    parser.add_argument("--video", action='store_true', help="Generate a video of the simulation")
     parser.add_argument("--scheduler", type=str, help="Scheduler to use (greedy or random_bipartite)")
+    parser.add_argument("--debug", action='store_true', help="Print debug information")
     args = parser.parse_args()
 
     with open("simulation_config.yaml", "r") as file:
@@ -206,21 +210,25 @@ if __name__ == '__main__':
     precedence_constraints = config["precedence_constraints"]
 
 
-    #problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
     #problem_instance = generate_biased_homogeneous_data()
     #problem_instance = generate_static_data()
-    problem_instance = generate_heterogeneous_no_coalition_data()
+    #problem_instance = generate_heterogeneous_no_coalition_data(n_tasks=10)
 
-    sim = Simulation(problem_instance, precedence_constraints, scheduler_name=args.scheduler, checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/het_no_coal_gatn/best_checkpoint.pt", debug=True)
-    
-    if args.visualize: 
+    sim = Simulation(problem_instance, precedence_constraints, scheduler_name=args.scheduler, checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/145k_samples_gatn_with_durations_normalization_per_instance_random_6t_2r_2s/best_checkpoint.pt", debug=True)
+
+    if args.video:
+        # Step simulation, saving frames each time, then generate .mp4
+        run_video_mode(sim)
+    elif args.visualize:
+        # The normal interactive mode
         visualize(sim)
-
     else:
+        # Just run until done with no visualization
         while not sim.sim_done:
             sim.step()
 
     print(sim.robot_schedules)
     rolled_out_schedule = Full_Horizon_Schedule(sim.makespan, sim.robot_schedules, n_tasks)
     print(rolled_out_schedule)
-    plot_gantt_chart(f"{sim.scheduler} Rolled-Out Schedule", rolled_out_schedule)
+    plot_gantt_and_trajectories(f"{sim.scheduler_name}: MS, {sim.makespan}, \n nt: {n_tasks}, nr: {n_robots}, sn: {n_skills}, seed: {config['random_seed']}", rolled_out_schedule,problem_instance['T_t'], problem_instance['task_locations'],problem_instance['T_e'], problem_instance['R'], problem_instance['Q'])

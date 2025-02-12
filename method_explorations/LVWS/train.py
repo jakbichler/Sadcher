@@ -75,15 +75,15 @@ if __name__ == "__main__":
     val_size = dataset_size - train_size
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
     
+    print(f"Loaded {len(problems)} problems and {len(solutions)} solutions...............")
     print(f"Dataset split into {train_size} training samples and {val_size} validation samples.")
 
     train_loader = DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size= config["batch_size"], shuffle=False)
 
-    print(f"Loaded {len(problems)} problems and {len(solutions)} solutions...............")
     
-    robot_input_dim = len(problems[0]["Q"][0]) + 1 + 2   # e.g., capabilities + 'available' + xy_location
-    task_input_dim = len(problems[0]["R"][0]) + 3 + 2     # e.g., skill requirements + (ready, assigned, incomplete) + xy_location
+    robot_input_dim = len(problems[0]["Q"][0]) + 4   # e.g., capabilities + xy_location (2) + remaining_workload (1) + 'available' (1)
+    task_input_dim = len(problems[0]["R"][0]) + 6     # e.g., skill requirements + xy_location (2), duration (1), + (ready, assigned, incomplete) (3)
     
     model = SchedulerNetwork(
         robot_input_dimensions=robot_input_dim,

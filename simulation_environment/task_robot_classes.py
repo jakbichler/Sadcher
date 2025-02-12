@@ -5,7 +5,8 @@ class Task:
     def __init__(self, task_id, location, duration, requirements):
         self.task_id = task_id
         self.location = np.array(location, dtype=np.float64)
-        self.duration = duration
+        self.overall_duration = duration
+        self.remaining_duration = duration
         self.requirements = np.array(requirements, dtype=bool)
         self.status = 'PENDING'  if task_id != 0 else 'DONE' # could be PENDING, IN_PROGRESS, DONE
         self.ready = True
@@ -22,8 +23,8 @@ class Task:
         self.incomplete = False
 
     def decrement_duration(self):
-        self.duration -= 1
-        if self.duration <= 0:
+        self.remaining_duration -= 1
+        if self.remaining_duration <= 0:
             self.complete()
 
     def predecessors_completed(self, sim):
@@ -37,8 +38,13 @@ class Task:
                 return False
         return True
     
-    def feature_vector(self):
-        return np.concatenate([self.location/100, self.requirements, np.array([self.ready, self.assigned, self.incomplete])], dtype=float)
+    def feature_vector(self, location_normalization = 100, duration_normalization = 100):
+        return np.concatenate([
+            np.atleast_1d(self.location / location_normalization), 
+            np.atleast_1d(self.overall_duration / duration_normalization), 
+            np.atleast_1d(self.requirements), 
+            np.array([self.ready, self.assigned, self.incomplete], dtype=float)
+        ], dtype=float)
 
 
 class Robot:
@@ -51,6 +57,7 @@ class Robot:
         self.capabilities = np.array(capabilities, dtype=bool)
         self.current_task = None
         self.available = True
+        self.remaining_workload = 0
     
     def update_position(self):
         """Move the robot one step toward its current_task if assigned."""
@@ -69,6 +76,12 @@ class Robot:
             self.current_task = None
         
         self.available = self.current_task is None
+        self.remaining_workload = 0 if self.current_task is None else self.current_task.remaining_duration
 
-    def feature_vector(self):
-        return np.concatenate([self.location/100, self.capabilities, np.array([self.available])], dtype=float)
+    def feature_vector(self, location_normalization_factor = 100, workload_normalization_factor = 100):
+        return np.concatenate([
+            np.atleast_1d(self.location / location_normalization_factor), 
+            np.atleast_1d(self.remaining_workload / workload_normalization_factor), 
+            np.atleast_1d(self.capabilities), 
+            np.array([self.available], dtype=float)
+        ], dtype=float)

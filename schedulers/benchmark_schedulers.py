@@ -13,35 +13,75 @@ from random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
 from simulation_environment.simulator_2D import Simulation
 from data_generation.problem_generator import ProblemData, generate_random_data, generate_simple_data, generate_simple_homogeneous_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data
 
-if __name__ == "__main__":
 
+def plot_violin(ax, data, labels, ylabel, title):
+    ax.violinplot(data.values(), showmeans=True)
+    ax.set_xticks(range(1, len(labels) + 1))
+    ax.set_xticklabels(labels)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+
+    for i, scheduler in enumerate(labels, start=1):
+        x_jitter = np.random.normal(0, 0.03, len(data[scheduler]))  
+        ax.scatter(np.full_like(data[scheduler], i) + x_jitter, data[scheduler], alpha=0.5, s=10, color='black')
+
+
+def compare_makespans_1v1(ax, makespans1, makespans2, scheduler1, scheduler2):
+    makespans1 = np.array(makespans1)
+    makespans2 = np.array(makespans2)    
+    min_value = min(min(makespans1), min(makespans2))
+    max_value = max(max(makespans1), max(makespans2))
+
+    # Compute deviations from parity line
+    delta = makespans2 - makespans1
+    scheduler_1_wins = delta[delta > 0]
+    scheduler_2_wins = delta[delta < 0]
+
+    # Compute 90th percentiles separately
+    scheduler_1_wins_90p = np.percentile(scheduler_1_wins, 90) if len(scheduler_1_wins) > 0 else 0
+    scheduler_2_wins_90p = np.percentile(np.abs(scheduler_2_wins), 90) if len(scheduler_2_wins) > 0 else 0
+
+    x_vals = np.linspace(min_value, max_value, 100)
+    parity_line = x_vals
+    upper_bound = x_vals + scheduler_1_wins_90p
+    lower_bound = x_vals - scheduler_2_wins_90p
+
+    # Plot scatter and identity line
+    ax.scatter(makespans1, makespans2, alpha=0.7)
+    ax.plot(parity_line, parity_line, color="black", label="Parity", linestyle="--")
+
+    # Fill area between parity and upper/lower bounds
+    ax.fill_between(x_vals, parity_line, upper_bound, color="red", alpha=0.2, label=f"{scheduler1} wins, \u03B4_90p = {scheduler_1_wins_90p:.1f}")
+    ax.fill_between(x_vals, parity_line, lower_bound, color="green", alpha=0.2, label=f"{scheduler2} wins, \u03B4_90p = {scheduler_2_wins_90p:.1f}") 
+    ax.legend()
+    ax.set_xlabel(f"{scheduler1} Makespan")
+    ax.set_ylabel(f"{scheduler2} Makespan")
+
+
+if __name__ == "__main__":
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("--including_milp", default=False,  action="store_true", help="Include MILP in the comparison")
     arg_parser.add_argument("--n_iterations", type=int, default=50, help="Number of iterations to run")
     args = arg_parser.parse_args()
-    n_robots = 2
-    n_tasks = 6  
+    n_tasks = 6
+    n_robots = 2 
     n_skills = 2
-    np.random.seed(1)
+    #np.random.seed(1000)
 
     if args.including_milp:
         scheduler_names = ["milp", "greedy", "dbgm", "random_bipartite"]
     else: 
         scheduler_names = ["greedy", "dbgm", "random_bipartite"]
 
-
     makespans = {scheduler: [] for scheduler in scheduler_names}
     computation_times = {scheduler: [] for scheduler in scheduler_names}
     infeasible_count = {scheduler: 0 for scheduler in scheduler_names}
-
-    # Track the placements: ranking[scheduler] = [#1st, #2nd, #3rd, 4th]    
-    ranking = {scheduler: [0, 0, 0, 0] for scheduler in scheduler_names}
 
     for iteration in tqdm(range(args.n_iterations)):
         # Generate a problem instance
         problem_instance = generate_random_data(n_tasks, n_robots, n_skills, [])
         #problem_instance = generate_simple_data()
-        #problem_instance = generate_simple_homogeneous_data(n_tasks=n_qtasks, n_robots=n_robots)
+        #problem_instance = generate_simple_homogeneous_data(n_tasks=n_tasks, n_robots=n_robots)
         #problem_instance = generate_biased_homogeneous_data()
         #problem_instance = generate_heterogeneous_no_coalition_data(n_tasks)
 
@@ -61,15 +101,13 @@ if __name__ == "__main__":
                         problem_instance, 
                         [],
                         scheduler, 
-                        checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/gatn_without_durations_random_6t_2r_2s/best_checkpoint.pt",
+                        checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/145k_samples_gatn_with_durations_normalization_per_instance_random_6t_2r_2s/best_checkpoint.pt",
                         debug=False
                     )
-                
                 else:
                     sim = Simulation(problem_instance, [], scheduler, debug=False)
 
                 start_time = time.time()
-
                 while not sim.sim_done:
                     sim.step()
                     if sim.timestep > worst_case_makespan:
@@ -80,32 +118,8 @@ if __name__ == "__main__":
                 computation_times[scheduler].append(time.time() - start_time)
                 makespans[scheduler].append(sim.makespan)
         
-        # Rank them for this iteration
-        # Build (makespan, scheduler) pairs and sort by makespan
         results = sorted((makespans[scheduler][-1], scheduler) for scheduler in scheduler_names)
-
         print(results)
-        previous_score = None
-        previous_rank = 0
-        count_processed = 0
-
-        for score, scheduler in results:
-            # If tied with the previous score, assign the same rank;
-            # otherwise, current rank = (# already processed) + 1.
-            if previous_score is None or score != previous_score:
-                current_rank = count_processed + 1
-            else:
-                current_rank = previous_rank
-
-            # Award the scheduler the current rank (convert 1-based rank to 0-based index)
-            ranking[scheduler][current_rank - 1] += 1
-
-            previous_score = score
-            previous_rank = current_rank
-            count_processed += 1
-                
-            # Current standings
-        [print(f"{scheduler.capitalize()} : {ranking[scheduler]}") for scheduler in scheduler_names]
 
     # Summary
     avg_makespans = {s: np.mean(makespans[s]) for s in scheduler_names}
@@ -113,36 +127,28 @@ if __name__ == "__main__":
     print("\nSummary of Results after {iterations} runs:")
     for scheduler in scheduler_names:
         print(f"{scheduler.capitalize()}:")
-        print(f"  1st Place: {ranking[scheduler][0]} times")
-        print(f"  2nd Place: {ranking[scheduler][1]} times")
-        print(f"  3rd Place: {ranking[scheduler][2]} times")
         print(f"  Average Makespan: {avg_makespans[scheduler]:.2f}")
         print(f"  Average Computation Time: {avg_computation_times[scheduler]:.4f} seconds\n")
         print(f"  Infeasible Count: {infeasible_count[scheduler]}")
 
-    fig, axs = plt.subplots(2, 1, figsize=(10, 12))
+    fig, axs = plt.subplots(2, 2, figsize=(12, 10))  
 
     # Violin plot for makespans
-    axs[0].violinplot(makespans.values(), showmeans=True)
-    axs[0].set_xticks(range(1, len(scheduler_names) + 1))
-    axs[0].set_xticklabels(scheduler_names)
-    axs[0].set_ylabel("Makespan")
-    axs[0].set_title("Makespan Comparison of Different Schedulers")
-
-    for i, scheduler in enumerate(scheduler_names, start=1):
-        x_jitter = np.random.normal(0, 0.03, len(makespans[scheduler]))  
-        axs[0].scatter(np.full_like(makespans[scheduler], i) + x_jitter, makespans[scheduler], alpha=0.5, s=10, color='black')
+    plot_violin(axs[0, 0], makespans, scheduler_names, "Makespan", "Makespan Comparison")
 
     # Violin plot for computation times
-    axs[1].violinplot(computation_times.values(), showmeans=True)
-    axs[1].set_xticks(range(1, len(scheduler_names) + 1))
-    axs[1].set_xticklabels(scheduler_names)
-    axs[1].set_ylabel("Computation Time (s)")
-    axs[1].set_title("Computation Time Comparison of Different Schedulers")
+    plot_violin(axs[1, 0], computation_times, scheduler_names, "Computation Time (s)", "Computation Time Comparison")
 
-    for i, scheduler in enumerate(scheduler_names, start=1):
-        x_jitter = np.random.normal(0, 0.03, len(computation_times[scheduler]))  
-        axs[1].scatter(np.full_like(computation_times[scheduler], i) + x_jitter, computation_times[scheduler], alpha=0.5, s=10, color='black')
+    # Direct comparison: Greedy vs DBGMScheduler
+    compare_makespans_1v1(axs[0, 1], makespans["greedy"], makespans["dbgm"], "Greedy", "DBGMScheduler")
+
+    # MILP  vs DBGM
+    if args.including_milp:
+        compare_makespans_1v1(axs[1, 1], makespans["milp"], makespans["dbgm"], "MILP", "DBGMScheduler")
+    else:
+        fig.delaxes(axs[1, 1])  
 
     plt.tight_layout()
     plt.show()
+
+
