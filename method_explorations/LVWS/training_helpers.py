@@ -131,6 +131,9 @@ def get_expert_reward(schedule, decision_time, travel_times, gamma = 0.99, immed
     X = np.zeros((n_robots, len(task_ids) + 1)) # +1 for the idle task
     X[:, -1] = 1 # Idle task is always feasible
     travel_times = np.array(travel_times)
+    
+    TIME_EPSILON = 0.01
+    IMMEDIATE_IDLE_REWARD = 10
 
     def is_idle(robot_id, time):
         for t_id, task_start, task_end in schedule[robot_id]:
@@ -153,16 +156,13 @@ def get_expert_reward(schedule, decision_time, travel_times, gamma = 0.99, immed
                 E[robot_id, task_id-1] = gamma**(end_time - decision_time) * immediate_reward
 
         # Idle reward for gaps between consecutive tasks
-        TIME_EPSILON = 0.01
         for i in range(len(schedule[robot_id]) - 1):
             current_task, _, current_end = schedule[robot_id][i]
             next_task, next_start, _ = schedule[robot_id][i+1]
             t_ij = travel_times[current_task, next_task]
             idle_end = next_start - t_ij  # robot must depart by this time to arrive exactly at next_start
             if idle_end > current_end + TIME_EPSILON and decision_time < idle_end - TIME_EPSILON:
-                idle_reward = gamma**(idle_end - decision_time) * immediate_reward
-                # If multiple waiting periods exist, choose the best (max reward)
-                E[robot_id, -1] = idle_reward
+                E[robot_id, -1] = gamma**(idle_end - decision_time) * IMMEDIATE_IDLE_REWARD
 
         # First Task Idle 
         if len(schedule[robot_id]) == 0:
@@ -171,7 +171,7 @@ def get_expert_reward(schedule, decision_time, travel_times, gamma = 0.99, immed
         t_01 = travel_times[0, first_task]
         end_of_idle_task = first_start - t_01
         if t_01 < first_start - TIME_EPSILON and decision_time < (first_start - t_01) - TIME_EPSILON:
-            E[robot_id, -1] = gamma**(end_of_idle_task - decision_time) * immediate_reward
+            E[robot_id, -1] = gamma**(end_of_idle_task - decision_time) * IMMEDIATE_IDLE_REWARD
 
     return torch.tensor(E), torch.tensor(X) 
 
