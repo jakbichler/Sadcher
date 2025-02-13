@@ -6,7 +6,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
-
+from icecream import ic 
 from dataset import SchedulingDataset
 from training_helpers import load_dataset, find_decision_points
 from transformer_models import SchedulerNetwork
@@ -35,13 +35,16 @@ def initialize_weights(model):
 if __name__ == "__main__":
     argument_parser = argparse.ArgumentParser(description="Train the LVWS model on a dataset of problem instances.")
     argument_parser.add_argument("--dataset_dir", type=str, required=True, help="Directory containing problem instances.")
-    argument_parser.add_argument("--checkpoint_dir", type=str, required=True, help="Directory to save model checkpoints.")
+    argument_parser.add_argument("--out_checkpoint_dir", type=str, required=True, help="Directory to save model checkpoints.")
+    argument_parser.add_argument("--continue_training", action="store_true", default= False, help="Continue training from a checkpoint.")
+    argument_parser.add_argument("--in_checkpoint_path", type=str, help="Path to a checkpoint to continue training from.")
+
 
     args = argument_parser.parse_args()
     problem_dir = os.path.join(args.dataset_dir, "problem_instances/")
     solution_dir = os.path.join(args.dataset_dir, "solutions/")
-    checkpoint_dir = args.checkpoint_dir
-    os.makedirs(checkpoint_dir, exist_ok=True)
+    out_checkpoint_dir = args.out_checkpoint_dir
+    os.makedirs(out_checkpoint_dir, exist_ok=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
@@ -62,13 +65,13 @@ if __name__ == "__main__":
         }
 
     # Log config
-    with open(os.path.join(checkpoint_dir, "run_description.txt"), "w") as f:
+    with open(os.path.join(out_checkpoint_dir, "run_description.txt"), "w") as f:
         f.write(f"Training Run - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Config: {config}\n")
 
+    ic("loading dataset")
     problems, solutions = load_dataset(problem_dir, solution_dir)
     dataset = SchedulingDataset(problems, solutions, gamma=config["reward_gamma"], immediate_reward=10)
-    
     # Train-validation split (80% train, 20% validation)
     dataset_size = len(dataset)
     train_size = int(0.8 * dataset_size)
@@ -96,7 +99,10 @@ if __name__ == "__main__":
         n_gatn_layers=config["n_gatn_layers"],
     ).to(device)
 
-    initialize_weights(model)
+    if args.continue_training:
+        model.load_state_dict(torch.load(args.in_checkpoint_path))
+    else:
+        initialize_weights(model)
 
     loss_fn = LVWS_Loss(weight_factor=config["loss_weight_factor"])
     optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
@@ -139,14 +145,14 @@ if __name__ == "__main__":
         print(f"Epoch {epoch} - Avg Val Loss: {avg_val_loss:.5f}")
 
         # Log losses
-        with open(os.path.join(checkpoint_dir, "losses.txt"), "a") as f:
+        with open(os.path.join(out_checkpoint_dir, "losses.txt"), "a") as f:
             f.write(f"Epoch - {epoch}, Train loss {avg_train_loss}, Val loss - {avg_val_loss}\n")
 
         # Check early stopping condition (has to be at least 0.0001 better)
         if avg_val_loss < (best_val_loss - 1e-4):
             best_val_loss = avg_val_loss
             epochs_without_improvement = 0  
-            best_model_path = os.path.join(checkpoint_dir, "best_checkpoint.pt")
+            best_model_path = os.path.join(out_checkpoint_dir, "best_checkpoint.pt")
             torch.save(model.state_dict(), best_model_path)
             print(f"New best model saved at epoch {epoch}")
         else:
