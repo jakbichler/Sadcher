@@ -284,3 +284,63 @@ def generate_heterogeneous_no_coalition_data(n_tasks) -> ProblemData:
         task_locations=task_locations,
         precedence_constraints=precedence_constraints
     )
+
+
+def generate_idle_data() -> ProblemData:
+    n_skills = 2
+    # Define task types
+    task_type_1 = np.array([1, 0])
+    task_type_2 = np.array([0, 1])
+    task_type_3 = np.array([1, 1])
+    
+    # Two robots with different skills
+    Q = np.array([[1, 0], [0, 1]])
+    np.random.shuffle(Q)
+
+    # Define 5 tasks (to be permuted) and add dummy start/end tasks later
+    tasks_R = np.array([task_type_1, task_type_2, task_type_3, task_type_1, task_type_2])
+    T_e_tasks = np.array([30, 40, 50, 200, 200])
+    T_e_tasks = np.array([t + np.random.randint(-20, 50) for t in T_e_tasks])
+    T_e_tasks[1] = T_e_tasks[2] + 20 + np.random.randint(-10, 10)  
+    # Base locations for 7 points: index 0 = start, indices 1-5 = tasks, index 6 = finish
+    base_locations = np.array([
+        [50, 10],
+        [55, 15],
+        [45, 15],
+        [50, 40],
+        [55, 90],
+        [45, 90],
+        [50, 95]
+    ])
+
+    # Apply random perturbation and rotation around (50,50)
+    randomized_locations = base_locations + np.random.uniform(-5, 5, base_locations.shape)
+    theta = np.random.uniform(0, 2 * np.pi)
+    rot_matrix = np.array([[np.cos(theta), -np.sin(theta)],
+                           [np.sin(theta),  np.cos(theta)]])
+    rotated_locations = (randomized_locations - np.array([50, 50])) @ rot_matrix.T + np.array([50, 50])
+
+    # Permute the tasks (indices 0...4) consistently in R, T_e, and task_locations
+    n_tasks = tasks_R.shape[0]
+    perm = np.random.permutation(n_tasks)
+    tasks_R_perm = tasks_R[perm]
+    T_e_tasks_perm = T_e_tasks[perm]
+    task_locations_tasks = rotated_locations[1:-1]  # tasks locations (exclude start & finish)
+    task_locations_tasks_perm = task_locations_tasks[perm]
+
+    # Rebuild full arrays with fixed start and finish
+    R_full = np.vstack([np.zeros(n_skills), tasks_R_perm, np.zeros(n_skills)])
+    T_e_full = np.hstack([[0], T_e_tasks_perm, [0]])
+    task_locations_full = np.vstack([rotated_locations[0], task_locations_tasks_perm, rotated_locations[-1]])
+    T_t = np.linalg.norm(task_locations_full[:, None] - task_locations_full[None, :], axis=2).round(0)
+
+    precedence_constraints = np.array([])
+
+    return ProblemData(
+        Q=Q,
+        R=R_full,
+        T_e=T_e_full,
+        T_t=T_t,
+        task_locations=task_locations_full,
+        precedence_constraints=precedence_constraints
+    )

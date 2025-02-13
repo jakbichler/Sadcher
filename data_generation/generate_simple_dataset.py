@@ -8,7 +8,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from tqdm import tqdm
 
-from problem_generator import generate_random_data, generate_simple_data, generate_simple_homogeneous_data, generate_static_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data
+from problem_generator import generate_random_data, generate_simple_data, generate_simple_homogeneous_data, generate_static_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data, generate_idle_data
 from baselines.aswale_23.MILP_solver import milp_scheduling
 
 
@@ -40,6 +40,8 @@ def generate_simple_dataset(n_instances: int, output_dir: str, problem_instance_
             problem_instance = generate_biased_homogeneous_data()
         elif problem_instance_type == "static":
             problem_instance = generate_static_data()
+        elif problem_instance_type == "idle":
+            problem_instance = generate_idle_data()
         else:
             raise ValueError(f"Invalid problem instance type: {problem_instance_type}")
         
