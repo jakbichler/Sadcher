@@ -51,8 +51,8 @@ if __name__ == "__main__":
 
     config = {
         "batch_size": 512,
-        "embedding_dim": 128,
-        "ff_dim": 256,
+        "embedding_dim": 256,
+        "ff_dim": 512,
         "n_transformer_heads": 4,
         "n_transformer_layers": 4,
         "n_gatn_heads": 4,
@@ -100,7 +100,7 @@ if __name__ == "__main__":
     ).to(device)
 
     if args.continue_training:
-        model.load_state_dict(torch.load(args.in_checkpoint_path))
+        model.load_state_dict(torch.load(args.in_checkpoint_path, weights_only=True))
     else:
         initialize_weights(model)
 
