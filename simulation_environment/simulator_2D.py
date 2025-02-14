@@ -4,7 +4,7 @@ import sys
 import yaml
 sys.path.append('..')
 
-from data_generation.problem_generator import ProblemData, generate_random_data, generate_static_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data
+from data_generation.problem_generator import ProblemData, generate_random_data, generate_static_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data, generate_idle_data
 from helper_functions.schedules import Full_Horizon_Schedule
 from simulation_environment.task_robot_classes import Robot, Task
 from schedulers.greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
@@ -28,6 +28,7 @@ class Simulation:
         self.robot_schedules = {robot.robot_id: [] for robot in self.robots}
         self.n_tasks = len(self.tasks)
         self.last_task_id = self.n_tasks - 1
+        self.idle_task_id = self.n_tasks - 2
         self.scheduler_name = scheduler_name
         self.scheduler = self.create_scheduler(scheduler_name, checkpoint_path)
 
@@ -42,10 +43,16 @@ class Simulation:
         locations = problem_instance['task_locations']
         durations = problem_instance['T_e']
         requirements = problem_instance['R']
-        return [
-            Task(idx, loc, dur, req) 
-            for idx, (loc, dur, req) in enumerate(zip(locations, durations, requirements))
-        ]
+        
+        # Insert the idle task 
+        locations = np.insert(locations, -1, np.zeros_like(locations[0]), axis=0)
+        durations = np.insert(durations, -1, 0, axis=0)
+        requirements = np.insert(requirements, -1, np.zeros_like(requirements[0]), axis=0)
+        
+        tasks = [Task(idx, loc, dur, req) for idx, (loc, dur, req) in enumerate(zip(locations, durations, requirements))]
+        tasks[-2].status = 'DONE' # Idle task
+        
+        return tasks
 
     def create_scheduler(self,name: str, checkpoint_path = None):
         if name == "greedy":
@@ -57,15 +64,11 @@ class Simulation:
         else:
             raise ValueError(f"Unknown scheduler '{name}'")
         
-    def update_robot(self, robot):
-        robot.update_position()
-        robot.check_task_status()
-
     def update_task(self, task):
         previous_status = task.status
 
         # Check if task is ready to start based on precedence constraints
-        if task.task_id == 0 or task.predecessors_completed(self):
+        if task.task_id in [0, self.idle_task_id] or task.predecessors_completed(self):
             task.ready = True
         else:
             task.ready = False
@@ -74,7 +77,7 @@ class Simulation:
             return
 
         # Special handling of last task
-        if task.task_id == len(self.tasks) - 1:
+        if task.task_id == self.last_task_id:
             if self.all_robots_at_exit_location(threshold=0.01):
                 task.status = 'DONE'
                 self.finish_simulation()
@@ -149,31 +152,33 @@ class Simulation:
 
     def step(self):
         """Advance the simulation by one timestep, moving robots and updating tasks."""
+
         for robot in self.robots:   
-            self.update_robot(robot)
+            if robot.current_task:
+                if robot.current_task.task_id is not self.idle_task_id:
+                    robot.update_position()
 
         for task in self.tasks:
             self.update_task(task)
 
+        for robot in self.robots:
+            robot.check_task_status()
 
         if self.debugging:
             print(f"############### TIMESTEP {self.timestep} ###############")
             for robot in self.robots:
-                print(f"Robot {robot.robot_id} with available {robot.available} is at location {robot.location}")
+                print(f"R{robot.robot_id}:\n {robot.feature_vector(self.location_normalization, self.duration_normalization)}")
 
-            for task in self.tasks:
-                print(f"Task {task.task_id} with status {task.status}, ready {task.ready}, assigned {task.assigned}, incomplete {task.incomplete}")
-        
+            for task in self.tasks[1:-2]:
+                print(f"T{task.task_id}:\n {task.feature_vector(self.location_normalization, self.duration_normalization)}")
+
             print ("\n")
-
 
         idle_robots = [r for r in self.robots if not r.current_task or r.current_task.status == 'DONE']
 
         if idle_robots:
             instantaneous_assignment = self.scheduler.assign_tasks_to_robots(self)
             self.assign_tasks_to_robots(instantaneous_assignment, self.robots)
-
-
 
         self.timestep += 1
 
@@ -189,7 +194,7 @@ class Simulation:
             if task_id is not None:
                 task = self.tasks[task_id]
                 robot.current_task = task
-                task.assigned = True
+                task.assigned = True if task_id != self.idle_task_id else False
 
 
 if __name__ == '__main__':
@@ -210,12 +215,13 @@ if __name__ == '__main__':
     precedence_constraints = config["precedence_constraints"]
 
 
-    problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    #problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
     #problem_instance = generate_biased_homogeneous_data()
     #problem_instance = generate_static_data()
     #problem_instance = generate_heterogeneous_no_coalition_data(n_tasks=10)
+    problem_instance = generate_idle_data()
 
-    sim = Simulation(problem_instance, precedence_constraints, scheduler_name=args.scheduler, checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/145k_samples_gatn_with_durations_normalization_per_instance_random_6t_2r_2s/best_checkpoint.pt", debug=True)
+    sim = Simulation(problem_instance, precedence_constraints, scheduler_name=args.scheduler, checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/idle_model1_scratch_decision_point_extraction_1_shift/best_checkpoint.pt", debug=True)
 
     if args.video:
         # Step simulation, saving frames each time, then generate .mp4

@@ -116,7 +116,10 @@ def filter_redundant_assignments(assignment_solution, sim):
                 # If all requirements are covered by the existing sub-team:
                 if np.all(combined_capabilities[task.requirements]):
                     # Then this new assignment doesn't add value; remove it.
-                    filtered_solution[(robot_id, task_id)] = 0
+                    if np.all(sim.tasks[task_id].requirements ==0):
+                        continue # Idle task should not be filtered
+                    else:
+                        filtered_solution[(robot_id, task_id)] = 0
 
     return filtered_solution
 
@@ -132,6 +135,11 @@ def filter_overassignments(assignment_solution, sim):
 
     for task_id, new_robot_ids in task_to_new.items():
         task = sim.tasks[task_id]
+
+        # If this task is the Idle task, don't filter
+        if np.all(task.requirements == 0):
+            continue
+
         if not (task.ready and task.incomplete):
             continue
 
