@@ -198,7 +198,7 @@ def load_dataset(problem_dir, solution_dir):
 def find_decision_points(solution):
     end_time_index = 2
     end_times_of_tasks = np.array([task[end_time_index] for tasks in solution.robot_schedules.values() for task in tasks])
-    decision_points = np.unique(end_times_of_tasks)
+    decision_points = np.unique(end_times_of_tasks) + 0.1 # Small offset, since robot will only be available after task is completed
 
     # Also beginning of mission is decsision point --> append 0, round up to nearest integer
     return np.ceil(np.append([0],decision_points))
