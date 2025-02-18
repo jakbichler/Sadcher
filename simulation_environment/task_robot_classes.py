@@ -23,7 +23,7 @@ class Task:
         self.incomplete = False
 
     def decrement_duration(self):
-        self.remaining_duration -= 1
+        self.remaining_duration -= 1.0
         if self.remaining_duration <= 0:
             self.complete()
 
@@ -59,17 +59,19 @@ class Robot:
         self.available = True
         self.remaining_workload = 0
     
-    def update_position(self):
+    def update_position_on_task(self):
         """Move the robot one step toward its current_task if assigned."""
         if self.current_task:
-            # Simple step in the direction of goal based on speed
-            movement_vector = self.current_task.location - self.location
-            dist = np.linalg.norm(movement_vector)
-            if dist > self.speed:  
-                normalized_mv = movement_vector / dist + 1e-9
-                self.location += normalized_mv * self.speed
-            else: # Arrived at task
-                self.location = np.copy(self.current_task.location)
+            self.position_towards_task(self.current_task)
+
+    def position_towards_task(self, task):
+        movement_vector = task.location - self.location
+        dist = np.linalg.norm(movement_vector)
+        if dist > self.speed:  
+            normalized_mv = movement_vector / dist + 1e-9
+            self.location += normalized_mv * self.speed
+        else:
+            self.location = np.copy(task.location)
 
     def check_task_status(self):
         if self.current_task and self.current_task.status == 'DONE':

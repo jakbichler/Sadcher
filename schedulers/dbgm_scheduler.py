@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 from schedulers.bigraph_matching import solve_bipartite_matching, filter_redundant_assignments, filter_overassignments
-from method_explorations.LVWS.transformer_models import SchedulerNetwork
+from method_explorations.DBGM.transformer_models import SchedulerNetwork
 from helper_functions.schedules import Instantaneous_Schedule
 
 
@@ -12,7 +12,7 @@ class DBGMScheduler:
     def __init__(self, debugging, checkpoint_path, duration_normalization, location_normalization):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.trained_model = SchedulerNetwork(robot_input_dimensions=6, task_input_dimension=8, 
-                                              embed_dim=256, ff_dim=512, n_transformer_heads=4, 
+                                              embed_dim=256, ff_dim=256, n_transformer_heads=4, 
                                               n_transformer_layers= 4, n_gatn_heads=4, n_gatn_layers=2).to(self.device)
         self.trained_model.load_state_dict(torch.load(checkpoint_path, weights_only=True))
         self.debug = debugging
@@ -31,7 +31,7 @@ class DBGMScheduler:
             for robot in idle_robots:
                 robot_assignments[robot.robot_id] = pending_tasks[0].task_id
                 robot.current_task = pending_tasks[0]
-            return Instantaneous_Schedule(robot_assignments)
+            return torch.zeros((n_robots, len(sim.tasks))), Instantaneous_Schedule(robot_assignments)
 
         task_features = np.array([task.feature_vector(self.location_normalization, self.duration_normalization) for task in sim.tasks[1:-2]])
         task_features = torch.tensor(task_features, dtype=torch.float32).unsqueeze(0).to(self.device)
@@ -72,5 +72,5 @@ class DBGMScheduler:
         robot_assignments = {robot: task for (robot, task), val in filtered_solution.items() if val == 1}
         
 
-        return Instantaneous_Schedule(robot_assignments)
+        return predicted_reward, Instantaneous_Schedule(robot_assignments)
     

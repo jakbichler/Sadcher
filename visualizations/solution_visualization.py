@@ -134,7 +134,7 @@ def plot_robot_trajectories(task_locations, robot_schedules, T_execution, R, ax=
     ax.scatter(task_locations[-1, 0], task_locations[-1, 1], color='red', s=150, marker='x', label="End (Task -1)")
     ax.text(task_locations[-1, 0] + 6, task_locations[-1, 1] - 1, "End", fontsize=12, ha='center')
 
-    trajectory_colors = ["black", 'royalblue']
+    trajectory_colors = ["black", 'royalblue', 'darkorange', 'green']
     for idx, (robot_id, tasks) in enumerate(robot_schedules.items()):
         color = trajectory_colors[idx]
         start = task_locations[0]

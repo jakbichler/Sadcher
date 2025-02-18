@@ -22,7 +22,8 @@ class RandomBipartiteMatchingScheduler:
             return Instantaneous_Schedule(robot_assignments)
 
         # Create random reward matrix 
-        R = torch.randint(0, 10, size=(n_robots, n_tasks))
+        R = torch.randint(0, 10, size=(n_robots, n_tasks-2))
+        R = torch.cat((torch.zeros(n_robots, 1), R, torch.zeros(n_robots, 1)), dim=1)
         bipartite_matching_solution = solve_bipartite_matching(R, sim)
         filtered_solution = filter_redundant_assignments(bipartite_matching_solution, sim)
         filtered_solution = filter_overassignments(filtered_solution, sim)
