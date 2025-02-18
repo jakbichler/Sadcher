@@ -3,6 +3,8 @@ import numpy as np
 import sys
 import yaml
 sys.path.append('..')
+from icecream import ic
+import torch
 
 from data_generation.problem_generator import ProblemData, generate_random_data, generate_static_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data, generate_idle_data
 from helper_functions.schedules import Full_Horizon_Schedule
@@ -15,7 +17,7 @@ from visualizations.solution_visualization import plot_gantt_chart, plot_robot_t
 
 
 class Simulation:
-    def __init__(self, problem_instance, precedence_constraints, scheduler_name=None, checkpoint_path = None, debug = False):
+    def __init__(self, problem_instance, precedence_constraints, scheduler_name=None, checkpoint_path = None, debug = False, move_while_waiting = False):
         self.timestep = 0
         self.robots: list[Robot] = self.create_robots(problem_instance)
         self.tasks: list[Task] = self.create_tasks(problem_instance)
@@ -31,6 +33,7 @@ class Simulation:
         self.idle_task_id = self.n_tasks - 2
         self.scheduler_name = scheduler_name
         self.scheduler = self.create_scheduler(scheduler_name, checkpoint_path)
+        self.move_while_waiting = move_while_waiting
 
     def create_robots(self, problem_instance):
         # For example, Q is a list of robot capabilities
@@ -44,7 +47,7 @@ class Simulation:
         durations = problem_instance['T_e']
         requirements = problem_instance['R']
         
-        # Insert the idle task 
+        
         locations = np.insert(locations, -1, np.zeros_like(locations[0]), axis=0)
         durations = np.insert(durations, -1, 0, axis=0)
         requirements = np.insert(requirements, -1, np.zeros_like(requirements[0]), axis=0)
@@ -156,7 +159,11 @@ class Simulation:
         for robot in self.robots:   
             if robot.current_task:
                 if robot.current_task.task_id is not self.idle_task_id:
-                    robot.update_position()
+                    robot.update_position_on_task()
+                
+                elif robot.current_task.task_id is self.idle_task_id and self.move_while_waiting and self.scheduler_name == "dbgm":
+                    second_highest_reward_task_id = self.second_highest_rewards_idx[robot.robot_id]
+                    robot.position_towards_task(self.tasks[second_highest_reward_task_id])
 
         for task in self.tasks:
             self.update_task(task)
@@ -164,20 +171,17 @@ class Simulation:
         for robot in self.robots:
             robot.check_task_status()
 
-        if self.debugging:
-            print(f"############### TIMESTEP {self.timestep} ###############")
-            for robot in self.robots:
-                print(f"R{robot.robot_id}:\n {robot.feature_vector(self.location_normalization, self.duration_normalization)}")
-
-            for task in self.tasks[1:-2]:
-                print(f"T{task.task_id}:\n {task.feature_vector(self.location_normalization, self.duration_normalization)}")
-
-            print ("\n")
-
         idle_robots = [r for r in self.robots if not r.current_task or r.current_task.status == 'DONE']
 
         if idle_robots:
-            instantaneous_assignment = self.scheduler.assign_tasks_to_robots(self)
+            if self.scheduler_name == "dbgm":
+                predicted_reward, instantaneous_assignment = self.scheduler.assign_tasks_to_robots(self)
+
+                if self.move_while_waiting:
+                    self.second_highest_rewards, self.second_highest_rewards_idx = self.extract_second_highest_rewards(predicted_reward)
+            else:
+                instantaneous_assignment = self.scheduler.assign_tasks_to_robots(self)
+
             self.assign_tasks_to_robots(instantaneous_assignment, self.robots)
 
         self.timestep += 1
@@ -197,12 +201,21 @@ class Simulation:
                 task.assigned = True if task_id != self.idle_task_id else False
 
 
+    def extract_second_highest_rewards(self, predicted_rewards):
+        top2_rewards, top2_rewards_idx = torch.topk(predicted_rewards, 2, dim=1)
+        second_highest_rewards = top2_rewards[:, 1].detach().cpu().numpy()
+        second_highest_rewards_idx = top2_rewards_idx[:, 1].detach().cpu().numpy()
+        return second_highest_rewards, second_highest_rewards_idx
+
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument("--visualize", action='store_true', help="Visualize the simulation")
     parser.add_argument("--video", action='store_true', help="Generate a video of the simulation")
     parser.add_argument("--scheduler", type=str, help="Scheduler to use (greedy or random_bipartite)")
     parser.add_argument("--debug", action='store_true', help="Print debug information")
+    parser.add_argument("--move_while_waiting", action='store_true', help="Move robots towards second highest reward task while waiting")
     args = parser.parse_args()
 
     with open("simulation_config.yaml", "r") as file:
@@ -215,13 +228,17 @@ if __name__ == '__main__':
     precedence_constraints = config["precedence_constraints"]
 
 
-    #problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
     #problem_instance = generate_biased_homogeneous_data()
     #problem_instance = generate_static_data()
     #problem_instance = generate_heterogeneous_no_coalition_data(n_tasks=10)
-    problem_instance = generate_idle_data()
+    #problem_instance = generate_idle_data()
 
-    sim = Simulation(problem_instance, precedence_constraints, scheduler_name=args.scheduler, checkpoint_path="/home/jakob/thesis/method_explorations/LVWS/checkpoints/idle_model1_scratch_decision_point_extraction_1_shift/best_checkpoint.pt", debug=True)
+    sim = Simulation(problem_instance, precedence_constraints, 
+                    scheduler_name=args.scheduler, 
+                    checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/model1_random6t2r2s_300k_decision_point_shift/best_checkpoint.pt",
+                    debug=True,
+                    move_while_waiting=args.move_while_waiting)
 
     if args.video:
         # Step simulation, saving frames each time, then generate .mp4
