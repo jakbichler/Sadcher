@@ -61,32 +61,38 @@ if __name__ == "__main__":
         "loss_weight_factor": 0.1,
         "learning_rate": 1e-3,
         "reward_gamma": 0.99,
-        "early_stopping_patience": 5,
+        "early_stopping_patience": 3,
         }
 
-    # Log config
-    with open(os.path.join(out_checkpoint_dir, "run_description.txt"), "w") as f:
-        f.write(f"Training Run - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Config: {config}\n")
+
 
     ic("loading dataset")
-    problems, solutions = load_dataset(problem_dir, solution_dir)
-    dataset = SchedulingDataset(problems, solutions, gamma=config["reward_gamma"], immediate_reward=10)
+    #problems, solutions = load_dataset(problem_dir, solution_dir)
+    dataset = SchedulingDataset(problem_dir, solution_dir, gamma=config["reward_gamma"], immediate_reward=10)
     # Train-validation split (80% train, 20% validation)
     dataset_size = len(dataset)
     train_size = int(0.8 * dataset_size)
     val_size = dataset_size - train_size
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
-    
-    print(f"Loaded {len(problems)} problems and {len(solutions)} solutions...............")
+
+     # Log config
+    with open(os.path.join(out_checkpoint_dir, "run_description.txt"), "w") as f:
+        f.write(f"Training Run - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Config: {config}\n")   
+        f.write(f"Dataset: {args.dataset_dir}\n")
+#        f.write(f"N_problems: {len(problems)}\n")
+        f.write(f"N_samples: {dataset_size}\n")
+
+    #print(f"Loaded {len(problems)} problems and {len(solutions)} solutions...............")
     print(f"Dataset split into {train_size} training samples and {val_size} validation samples.")
 
     train_loader = DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size= config["batch_size"], shuffle=False)
 
-    
-    robot_input_dim = len(problems[0]["Q"][0]) + 4   # e.g., capabilities + xy_location (2) + remaining_workload (1) + 'available' (1)
-    task_input_dim = len(problems[0]["R"][0]) + 6     # e.g., skill requirements + xy_location (2), duration (1), + (ready, assigned, incomplete) (3)
+    #robot_input_dim = len(problems[0]["Q"][0]) + 4   # e.g., capabilities + xy_location (2) + remaining_workload (1) + 'available' (1)
+    #task_input_dim = len(problems[0]["R"][0]) + 6     # e.g., skill requirements + xy_location (2), duration (1), + (ready, assigned, incomplete) (3)
+    robot_input_dim = 2+4
+    task_input_dim = 2+6
     
     model = SchedulerNetwork(
         robot_input_dimensions=robot_input_dim,
