@@ -1,16 +1,25 @@
+from collections import defaultdict
+import numpy as np
 import torch
-from .bigraph_matching import solve_bipartite_matching
-from method_explorations.LVWS.transformer_models import TransformerScheduler
+from tqdm import tqdm
+from schedulers.bigraph_matching import solve_bipartite_matching, filter_redundant_assignments, filter_overassignments
+from method_explorations.DBGM.transformer_models import SchedulerNetwork
 from helper_functions.schedules import Instantaneous_Schedule
 
 
 
 class DBGMScheduler:
-    def __init__(self):
+    def __init__(self, debugging, checkpoint_path, duration_normalization, location_normalization):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.trained_model = TransformerScheduler(robot_input_dimensions=3, task_input_dimension=5, embed_dim=64, ff_dim=128, num_layers=2).to(self.device)
-        self.trained_model.load_state_dict(torch.load("/home/jakob/thesis/method_explorations/LVWS/checkpoints/checkpoint_epoch_10.pt")
-                                    )
+        self.trained_model = SchedulerNetwork(robot_input_dimensions=6, task_input_dimension=8, 
+                                              embed_dim=256, ff_dim=256, n_transformer_heads=4, 
+                                              n_transformer_layers= 4, n_gatn_heads=4, n_gatn_layers=2).to(self.device)
+        self.trained_model.load_state_dict(torch.load(checkpoint_path, weights_only=True))
+        self.debug = debugging
+        self.duration_normalization = duration_normalization
+        self.location_normalization = location_normalization
+
+
     def assign_tasks_to_robots(self, sim):
         n_robots = len(sim.robots)
         robot_assignments = {}
@@ -22,28 +31,46 @@ class DBGMScheduler:
             for robot in idle_robots:
                 robot_assignments[robot.robot_id] = pending_tasks[0].task_id
                 robot.current_task = pending_tasks[0]
-            return Instantaneous_Schedule(robot_assignments)
+            return torch.zeros((n_robots, len(sim.tasks))), Instantaneous_Schedule(robot_assignments)
 
-        task_features = [task.feature_vector() for task in sim.tasks[1:-1]]
+        task_features = np.array([task.feature_vector(self.location_normalization, self.duration_normalization) for task in sim.tasks[1:-2]])
         task_features = torch.tensor(task_features, dtype=torch.float32).unsqueeze(0).to(self.device)
 
-        robot_features = [robot.feature_vector() for robot in sim.robots]
+        robot_features = np.array([robot.feature_vector(self.location_normalization, self.duration_normalization) for robot in sim.robots])
         robot_features = torch.tensor(robot_features, dtype= torch.float32).unsqueeze(0).to(self.device)
 
+        predicted_reward_raw = self.trained_model(robot_features, task_features).squeeze(0) # remove batch dim
 
-        predicted_reward = self.trained_model(robot_features, task_features).squeeze()
+        # Clamp negative values, since BGM will not work with only negative values
+        predicted_reward = torch.clamp(predicted_reward_raw, min=1e-6)
 
         # Add  negative rewards for for the start and end task --> not to be selected, will be handled by the scheduler
         reward_start_end = torch.ones(n_robots, 1).to(self.device) * (-1000)
         predicted_reward = torch.cat((reward_start_end, predicted_reward, reward_start_end), dim=1)
 
 
-        for robot_idx, robot in enumerate(sim.robots):
-            for task_idx, task in enumerate(sim.tasks[1:-1]):
-                print(f"Robot {robot_idx} -> Task {task_idx}: {predicted_reward[robot_idx][task_idx]:.2f}")
+        #Only for debugging
+        predicted_reward_raw = torch.cat((reward_start_end, predicted_reward_raw, reward_start_end), dim=1)
 
+        if self.debug:
+            for robot_idx, robot in enumerate(sim.robots):
+                for task_idx, task in enumerate(sim.tasks):
+                    print(f"Robot {robot_idx} -> Task {task_idx}: {predicted_reward_raw[robot_idx][task_idx]:.6f} -> {predicted_reward[robot_idx][task_idx]:.6f}")
+                print("\n")
+        
         bipartite_matching_solution = solve_bipartite_matching(predicted_reward, sim)
+        if self.debug:
+            print(bipartite_matching_solution)
+        filtered_solution = filter_redundant_assignments(bipartite_matching_solution, sim)
+        if self.debug:
+            print(filtered_solution)
+        filtered_solution = filter_overassignments(filtered_solution, sim)
+        if self.debug:
+            print(filtered_solution)
+            print("##############################################\n\n")
+        
+        robot_assignments = {robot: task for (robot, task), val in filtered_solution.items() if val == 1}
+        
 
-        robot_assignments = {robot: task for (robot, task), val in bipartite_matching_solution.items() if val == 1}
-
-        return Instantaneous_Schedule(robot_assignments)
+        return predicted_reward, Instantaneous_Schedule(robot_assignments)
+    

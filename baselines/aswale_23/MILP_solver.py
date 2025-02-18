@@ -14,9 +14,10 @@ import numpy as np
 import pulp
 from data_generation.problem_generator import read_problem_instance
 from helper_functions.schedules import Full_Horizon_Schedule
+from icecream import ic
 
 
-def milp_scheduling(problem_instance, n_threads = 2):
+def milp_scheduling(problem_instance, n_threads = 2, cutoff_time_seconds = 10 * 60):
     Q, R, T_execution, T_travel, task_locations, precedence_constraints = read_problem_instance(problem_instance)
     n_robots = Q.shape[0]
     n_tasks = R.shape[0] - 2
@@ -26,8 +27,7 @@ def milp_scheduling(problem_instance, n_threads = 2):
     tasks = range(n_tasks + 2)
     skills = range(n_skills)
 
-    M_time = 2 * (np.sum(T_execution) + np.sum(T_travel))
-
+    M_time = (np.sum(T_execution) + np.sum([np.max(T_travel[task]) for task in range(n_tasks + 1)]))
     prob = pulp.LpProblem("Coalition_Formation_and_Scheduling", pulp.LpMinimize)
     X = pulp.LpVariable.dicts(
         "X", (robots, tasks, tasks), 0, 1, pulp.LpBinary
@@ -197,18 +197,24 @@ def milp_scheduling(problem_instance, n_threads = 2):
 
 
     # Solve the problem
-    prob.solve(pulp.PULP_CBC_CMD(timeLimit=60*10, msg = False, threads = n_threads)) 
-    print("Status:", pulp.LpStatus[prob.status])
-    # Check if the problem is feasible
-    if pulp.LpStatus[prob.status] in ['Optimal', 'Feasible']:
+    prob.solve(pulp.PULP_CBC_CMD(timeLimit=cutoff_time_seconds, 
+                                 msg = False, 
+                                 threads = n_threads,     
+                                 options=[
+                                "ratioGap 0",      # Enforces 0% relative gap
+                                "allowableGap 0",  # Enforces 0 absolute gap
+                                ]))
+    
+    # Check if the problem is optimal
+    if prob.sol_status == 1: # Optimal solution
         makespan = pulp.value(prob.objective)
-        print(f"MILP time to complete all tasks: {makespan}")
+        print(f"Optimal MILP time to complete all tasks: {makespan}")
 
         robot_schedules = {robot: [] for robot in robots}
 
         for robot in robots:
             for task in tasks:
-                # Check if robot i visits task k
+                # Check if robot i visits task kasible
                 if any(pulp.value(X[robot][previous_task][task]) > 0.5 for previous_task in tasks if previous_task != task):
                     start_time = pulp.value(Y_max[task])
                     end_time = start_time + T_execution[task]
@@ -217,7 +223,7 @@ def milp_scheduling(problem_instance, n_threads = 2):
                     if task != 0 and task != n_tasks + 1:
                         robot_schedules[robot].append((task, start_time, end_time))
 
+        return Full_Horizon_Schedule(makespan, robot_schedules, n_tasks)
     else:
         print("No feasible solution found.")
-
-    return Full_Horizon_Schedule(makespan, robot_schedules, n_tasks)
+        return None

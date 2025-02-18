@@ -1,9 +1,12 @@
+import os
+import shutil
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 from matplotlib.table import Table
 from matplotlib.patches import Wedge
 from matplotlib.widgets import Button
-
+import imageio
 
 
 def visualize(sim):
@@ -14,8 +17,9 @@ def visualize(sim):
     plt.subplots_adjust(bottom=0.3)  # Make space for buttons
 
     # Create buttons
-    ax_button_next = plt.axes([0.3, 0.92, 0.2, 0.07])  # Position for 'Next Timestep' button
-    ax_button_10 = plt.axes([0.5, 0.92, 0.2, 0.07])    # Position for 'Advance 10 Timesteps' button
+    ax_button_next = plt.axes([0.3, 0.92, 0.2, 0.07])   # 'Next Timestep' button
+    ax_button_10   = plt.axes([0.5, 0.92, 0.2, 0.07])   # 'Advance 10 Timesteps' button
+
 
     btn_next = Button(ax_button_next, 'Next Timestep')
     btn_next.on_clicked(lambda event: next_step_callback(sim, ax, fig, colors, n_skills))
@@ -23,12 +27,11 @@ def visualize(sim):
     btn_advance_10 = Button(ax_button_10, '10 Timesteps')
     btn_advance_10.on_clicked(lambda event: advance_10_steps_callback(sim, ax, fig, colors, n_skills))
 
+
     fig.canvas.mpl_connect(
         'key_press_event',
         lambda event: key_press(event, sim, ax, fig, colors, n_skills)
     )
-
-    # Initial draw
     update_plot(sim, ax, fig, colors, n_skills)
     plt.show()
 
@@ -72,7 +75,7 @@ def update_plot(sim, ax, fig, colors, n_skills):
         if task.status != 'DONE':
             total_skills = np.sum(task.requirements)
             skill_sizes = task.requirements / total_skills if total_skills > 0 else np.zeros_like(task.requirements)
-            draw_pie(ax, task.location[0], task.location[1], skill_sizes, task.duration / 50, colors)
+            draw_pie(ax, task.location[0], task.location[1], skill_sizes, task.remaining_duration / 50, colors)
             ax.text(task.location[0], task.location[1], f"Task {task.task_id}", fontsize=10, ha='center')
 
     for robot_idx, robot in enumerate(sim.robots):
@@ -108,13 +111,45 @@ def next_step_callback(sim, ax, fig, colors, n_skills):
     sim.step()
     update_plot(sim, ax, fig, colors, n_skills)
 
+
 def advance_10_steps_callback(sim, ax, fig, colors, n_skills):
     for _ in range(10):
         sim.step()
     update_plot(sim, ax, fig, colors, n_skills)
+
 
 def key_press(event, sim, ax, fig, colors, n_skills):
     if event.key == 'n':  # Press 'n' for Next Timestep
         next_step_callback(sim, ax, fig, colors, n_skills)
     elif event.key == 'm':  # Press 'm' for Advance 10 Timesteps
         advance_10_steps_callback(sim, ax, fig, colors, n_skills)
+
+
+def make_video_from_frames(frame_dir, output="simulation.mp4", fps=5):
+    images = []
+    for fname in sorted(os.listdir(frame_dir)):
+        if fname.endswith(".png"):
+            images.append(imageio.imread(os.path.join(frame_dir, fname)))
+    imageio.mimsave(output, images, fps=fps)
+    # Delete the frames directory
+    shutil.rmtree(frame_dir)
+
+
+def run_video_mode(sim):
+    colors = plt.cm.Set1(np.linspace(0, 1, len(sim.tasks[0].requirements)))
+    n_skills = len(sim.tasks[0].requirements)
+    frame_dir = f"frames_{sim.scheduler_name}"
+    os.makedirs(frame_dir, exist_ok=True)
+
+    fig, ax = plt.subplots(figsize=(8, 8))
+    while not sim.sim_done:
+        for _ in range(5):
+            sim.step()
+        update_plot(sim, ax, fig, colors, n_skills)
+        plt.show(block=False)
+        fig.canvas.draw()
+        fig.savefig(os.path.join(frame_dir, f"frame_{sim.timestep:04d}.png"))
+
+    # Make final video
+    make_video_from_frames(frame_dir, output=f"{sim.scheduler_name}.mp4", fps=2)
+    print("Video saved as simulation.mp4")

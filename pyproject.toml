@@ -14,6 +14,8 @@ dependencies = [
     "tqdm>=4.67.1",
     "pyqt5>=5.15.11",
     "pyyaml>=6.0.2",
+    "imageio[ffmpeg]>=2.37.0",
+    "icecream>=2.1.4",
 ]
 
 [dependency-groups]
