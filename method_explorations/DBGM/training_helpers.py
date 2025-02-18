@@ -179,7 +179,6 @@ def get_expert_reward(schedule, decision_time, travel_times, gamma = 0.99, immed
 def load_dataset(problem_dir, solution_dir):
     problems = []
     solutions = []
-    
     # Load all problem instances
     for file_name in sorted(os.listdir(problem_dir)):
         with open(os.path.join(problem_dir, file_name), "r") as f:

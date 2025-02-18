@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
 # -----------------------------
 # Graph Attention Building Blocks
 # -----------------------------
@@ -262,7 +261,6 @@ class SchedulerNetwork(nn.Module):
         task_pos_exp  = task_positions.unsqueeze(1).expand(B, N, M, 2)
         rel_distance = torch.norm(robot_pos_exp - task_pos_exp, dim=-1, keepdim=True)
         rel_distance = rel_distance / torch.max(rel_distance)  # (B, N, M, 1)
-
         processed_distance = self.distance_mlp(rel_distance)  # (B, N, M, 1)
 
         # 5) Concatenate all features for the final reward MLP.
@@ -272,9 +270,7 @@ class SchedulerNetwork(nn.Module):
         idle_rewards_per_task = self.idle_mlp(final_input).squeeze(-1)  # (B, N, M)
         idle_rewards = idle_rewards_per_task.sum(dim=-1, keepdim=True)  # (B, N, 1)
 
-
         # Concatenate the idle reward with task rewards, so final shape is (B, N, M+1)
         final_reward = torch.cat([task_rewards, idle_rewards], dim=-1)
-        
         return final_reward
     

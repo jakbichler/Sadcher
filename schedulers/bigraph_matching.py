@@ -52,15 +52,15 @@ def solve_bipartite_matching(R, sim):
             # Link A to X with big-M constraints
             problem += pulp.lpSum(A[robot_idx][task_idx] for robot_idx in range(n_robots)) <= M_robots * X[task_idx]
             problem += pulp.lpSum(A[robot_idx][task_idx] for robot_idx in range(n_robots)) >= X[task_idx]
-
-
+#
+#
             # 1 ALL REQUIREMENTS MUST BE MET) Capability requirement: if c_t[j][p] = 1, subteam must have it --> effictively all requirements must be met
             for cap in range(n_skills):
                 if task.requirements[cap] != 0:
                     problem += pulp.lpSum(sim.robots[robot_idx].capabilities[cap] * A[robot_idx][task_idx] for robot_idx in range(n_robots)) >= task.requirements[cap] * X[task_idx]
-            
-            
-            ## 2 AT LEAST ONE REQUIREMENT MUST BE MET
+#            
+#            
+           ## 2 AT LEAST ONE REQUIREMENT MUST BE MET
             #problem += pulp.lpSum(
                 #pulp.lpSum(
                     #sim.robots[robot_idx].capabilities[cap] * A[robot_idx][task_idx]
