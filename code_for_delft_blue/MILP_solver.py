@@ -1,21 +1,7 @@
-"""Implementation inspired by the paper "Heterogeneous Coalition Formation and Scheduling with Multi-Skilled Robots", Aswale 2023
-https://arxiv.org/abs/2306.11936
-
---> precedence constraints are added, which the paper does not mention
-
-
-TODO:
-- Algorithm 1/subtour elimination to reject looping candidate solutions  (maybe lazy constraint as callback funciton )
-- Stochastic task execution times (if needed))
-"""
-
-import matplotlib.pyplot as plt
 import numpy as np
 import pulp
-from data_generation.problem_generator import read_problem_instance
-from helper_functions.schedules import Full_Horizon_Schedule
-from icecream import ic
-
+from problem_generator import read_problem_instance
+from schedules import Full_Horizon_Schedule
 
 def milp_scheduling(problem_instance, n_threads = 2, cutoff_time_seconds = 10 * 60):
     Q, R, T_execution, T_travel, task_locations, precedence_constraints = read_problem_instance(problem_instance)
