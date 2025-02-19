@@ -2,6 +2,7 @@ import os
 import json
 import numpy as np
 from tqdm import tqdm
+import torch
 from torch.utils.data import Dataset
 from training_helpers import (
     create_robot_features_from_optimal, 
@@ -11,7 +12,7 @@ from training_helpers import (
 )
 from helper_functions.schedules import Full_Horizon_Schedule  # Ensure this import is correct
 
-class SchedulingDataset(Dataset):
+class LazyLoadedSchedulingDataset(Dataset):
     def __init__(self, problem_dir, solution_dir, gamma=0.99, immediate_reward=10):
         """
         Lazy loading version of the dataset.
@@ -73,3 +74,16 @@ class SchedulingDataset(Dataset):
         expert_reward, feasibility_mask = get_expert_reward(solution_obj.robot_schedules, decision_time, problem["T_t"], gamma=self.gamma, immediate_reward=self.immediate_reward)
 
         return robot_feats, task_feats, expert_reward, feasibility_mask
+
+
+class PrecomputedDataset(Dataset):
+    def __init__(self, precomputed_dir):
+        self.precomputed_dir = precomputed_dir
+        self.files = sorted(os.listdir(precomputed_dir))
+    
+    def __len__(self):
+        return len(self.files)
+    
+    def __getitem__(self, idx):
+        sample = torch.load(os.path.join(self.precomputed_dir, self.files[idx]))
+        return sample['robot_feats'], sample['task_feats'], sample['expert_reward'], sample['feasibility_mask']
