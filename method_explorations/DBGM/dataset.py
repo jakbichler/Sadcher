@@ -80,6 +80,14 @@ class PrecomputedDataset(Dataset):
     def __init__(self, precomputed_dir):
         self.precomputed_dir = precomputed_dir
         self.files = sorted(os.listdir(precomputed_dir))
+        
+        first_sample = torch.load(os.path.join(precomputed_dir, self.files[0]))
+        
+        self.n_robots = first_sample['robot_feats'].shape[0]
+        self.robot_dim = first_sample['robot_feats'].shape[1]
+
+        self.n_tasks = first_sample['task_feats'].shape[0]
+        self.task_dim = first_sample['task_feats'].shape[1]
     
     def __len__(self):
         return len(self.files)

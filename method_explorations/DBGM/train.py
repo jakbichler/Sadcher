@@ -89,14 +89,9 @@ if __name__ == "__main__":
     train_loader = DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size= config["batch_size"], shuffle=False)
 
-    #robot_input_dim = len(problems[0]["Q"][0]) + 4   # e.g., capabilities + xy_location (2) + remaining_workload (1) + 'available' (1)
-    #task_input_dim = len(problems[0]["R"][0]) + 6     # e.g., skill requirements + xy_location (2), duration (1), + (ready, assigned, incomplete) (3)
-    robot_input_dim = 2+4
-    task_input_dim = 2+6
-    
     model = SchedulerNetwork(
-        robot_input_dimensions=robot_input_dim,
-        task_input_dimension=task_input_dim,
+        robot_input_dimensions=dataset.robot_dim,
+        task_input_dimension=dataset.task_dim,
         embed_dim=config["embedding_dim"],
         ff_dim=config["ff_dim"],
         n_transformer_heads=config["n_transformer_heads"],

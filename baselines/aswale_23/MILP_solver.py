@@ -9,7 +9,6 @@ TODO:
 - Stochastic task execution times (if needed))
 """
 
-import matplotlib.pyplot as plt
 import numpy as np
 import pulp
 from data_generation.problem_generator import read_problem_instance
