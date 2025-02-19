@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 from icecream import ic 
-from dataset import SchedulingDataset
+from dataset import LazyLoadedSchedulingDataset, PrecomputedDataset
 from training_helpers import load_dataset, find_decision_points
 from transformer_models import SchedulerNetwork
 
@@ -51,8 +51,8 @@ if __name__ == "__main__":
 
     config = {
         "batch_size": 512,
-        "embedding_dim": 256,
-        "ff_dim": 512,
+        "embedding_dim": 128,
+        "ff_dim": 256,
         "n_transformer_heads": 4,
         "n_transformer_layers": 4,
         "n_gatn_heads": 4,
@@ -68,7 +68,8 @@ if __name__ == "__main__":
 
     ic("loading dataset")
     #problems, solutions = load_dataset(problem_dir, solution_dir)
-    dataset = SchedulingDataset(problem_dir, solution_dir, gamma=config["reward_gamma"], immediate_reward=10)
+    #dataset = LazyLoadedSchedulingDataset(problem_dir, solution_dir, gamma=config["reward_gamma"], immediate_reward=10)
+    dataset = PrecomputedDataset(args.dataset_dir)
     # Train-validation split (80% train, 20% validation)
     dataset_size = len(dataset)
     train_size = int(0.8 * dataset_size)
@@ -84,7 +85,7 @@ if __name__ == "__main__":
         f.write(f"N_samples: {dataset_size}\n")
 
     #print(f"Loaded {len(problems)} problems and {len(solutions)} solutions...............")
-    print(f"Dataset split into {train_size} training samples and {val_size} validation samples.")
+    print(f"Dataset of {dataset_size} decision points split into {train_size} training samples and {val_size} validation samples.")
 
     train_loader = DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size= config["batch_size"], shuffle=False)
