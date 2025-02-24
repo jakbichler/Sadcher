@@ -8,11 +8,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 
 from tqdm import tqdm
 
-from problem_generator import generate_random_data, generate_simple_data, generate_simple_homogeneous_data, generate_static_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data, generate_idle_data
+from problem_generator import generate_random_data, generate_simple_data, generate_simple_homogeneous_data, generate_static_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data, generate_idle_data, generate_random_data_with_precedence
 from baselines.aswale_23.MILP_solver import milp_scheduling
 
 
-def generate_dataset(n_instances: int, output_dir: str, problem_instance_type: str, n_robots=2, n_tasks=6, n_skills=1) -> None:
+def generate_dataset(n_instances: int, output_dir: str, problem_instance_type: str, n_robots=2, n_tasks=6, n_skills=1, n_precedence = 0) -> None:
     if not os.path.exists(output_dir):
         os.makedirs(os.path.join(output_dir, "problem_instances"))
         os.makedirs(os.path.join(output_dir, "solutions"))
@@ -29,6 +29,8 @@ def generate_dataset(n_instances: int, output_dir: str, problem_instance_type: s
         while successful < n_instances:
             if problem_instance_type == "random":
                 problem_instance = generate_random_data(n_tasks=n_tasks, n_robots=n_robots, n_skills=n_skills)
+            elif problem_instance_type == "random_with_precedence":
+                problem_instance = generate_random_data_with_precedence(n_tasks=n_tasks, n_robots=n_robots, n_skills=n_skills, n_precedence=n_precedence)
             elif problem_instance_type == "heterogeneous":
                 problem_instance = generate_simple_data()
             elif problem_instance_type == "heterogeneous_no_coalition":
@@ -137,7 +139,14 @@ if __name__ == "__main__":
         help="Number of skills in the problem instance.",
     )
 
+    parser.add_argument(
+        "--n_precedence",
+        type=int,
+        required=False,
+        help="Number of precedence constraints in the problem instance.",
+    )
+
     args = parser.parse_args()
 
     generate_dataset(args.num_instances, args.output_dir, problem_instance_type=args.problem_instance_type, 
-                            n_robots=args.n_robots, n_tasks=args.n_tasks, n_skills=args.n_skills)
+                            n_robots=args.n_robots, n_tasks=args.n_tasks, n_skills=args.n_skills, n_precedence=args.n_precedence)
