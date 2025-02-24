@@ -71,7 +71,7 @@ if __name__ == "__main__":
     arg_parser.add_argument("--move_while_waiting", default=False, action="store_true",
                             help="Allow robots to move while waiting for tasks")
     args = arg_parser.parse_args()
-    n_tasks = 6
+    n_tasks = 5
     n_robots = 2 
     n_skills = 2
     np.random.seed(1)
@@ -89,8 +89,8 @@ if __name__ == "__main__":
 
     for iteration in tqdm(range(args.n_iterations)):
         # Generate a problem instance
-        problem_instance = generate_random_data(n_tasks, n_robots, n_skills, [])
-        #problem_instance = generate_idle_data()
+        #problem_instance = generate_random_data(n_tasks, n_robots, n_skills, [])
+        problem_instance = generate_idle_data()
         #problem_instance = generate_simple_data()
         #problem_instance = generate_simple_homogeneous_data(n_tasks=n_tasks, n_robots=n_robots)
         #problem_instance = generate_biased_homogeneous_data()
@@ -116,7 +116,7 @@ if __name__ == "__main__":
                         problem_instance, 
                         [],
                         scheduler, 
-                        checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/model1_random6t2r2s_300k_decision_point_shift/best_checkpoint.pt",
+                        checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/researching_waiting/IDLE21/best_checkpoint.pt",
                         debug=False,
                         move_while_waiting=args.move_while_waiting
                     )

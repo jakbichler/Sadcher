@@ -12,7 +12,7 @@ class DBGMScheduler:
     def __init__(self, debugging, checkpoint_path, duration_normalization, location_normalization):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.trained_model = SchedulerNetwork(robot_input_dimensions=6, task_input_dimension=8, 
-                                              embed_dim=256, ff_dim=256, n_transformer_heads=4, 
+                                              embed_dim=128, ff_dim=256, n_transformer_heads=4, 
                                               n_transformer_layers= 4, n_gatn_heads=4, n_gatn_layers=2).to(self.device)
         self.trained_model.load_state_dict(torch.load(checkpoint_path, weights_only=True))
         self.debug = debugging
@@ -21,6 +21,10 @@ class DBGMScheduler:
 
 
     def assign_tasks_to_robots(self, sim):
+
+        IDLE_PROBABILITY_THRESHOLD = 0.8
+
+
         n_robots = len(sim.robots)
         robot_assignments = {}
         # Special case for the last task
@@ -44,11 +48,21 @@ class DBGMScheduler:
         # Clamp negative values, since BGM will not work with only negative values
         predicted_reward = torch.clamp(predicted_reward_raw, min=1e-6)
 
+        predicted_task_rewards = predicted_reward[:, :-1]
+        predicted_idle_probability = predicted_reward[:, -1]
+
+        if self.debug:
+            print(predicted_task_rewards)
+            print(predicted_idle_probability)
+
+
         # Add  negative rewards for for the start and end task --> not to be selected, will be handled by the scheduler
         reward_start_end = torch.ones(n_robots, 1).to(self.device) * (-1000)
-        predicted_reward = torch.cat((reward_start_end, predicted_reward, reward_start_end), dim=1)
+        masked_reward_idle = torch.ones(n_robots, 1).to(self.device) * (-1000)
 
-
+        #predicted_reward = torch.cat((reward_start_end, predicted_reward, reward_start_end), dim=1)
+        predicted_reward = torch.cat((reward_start_end, predicted_task_rewards, masked_reward_idle, reward_start_end), dim=1)
+        
         #Only for debugging
         predicted_reward_raw = torch.cat((reward_start_end, predicted_reward_raw, reward_start_end), dim=1)
 
@@ -59,9 +73,13 @@ class DBGMScheduler:
                 print("\n")
         
         bipartite_matching_solution = solve_bipartite_matching(predicted_reward, sim)
+
         if self.debug:
             print(bipartite_matching_solution)
-        filtered_solution = filter_redundant_assignments(bipartite_matching_solution, sim)
+        filtered_solution = replace_assignment_with_idling(bipartite_matching_solution, predicted_idle_probability, IDLE_PROBABILITY_THRESHOLD)
+        if self.debug:
+            print(filtered_solution)
+        filtered_solution = filter_redundant_assignments(filtered_solution, sim)
         if self.debug:
             print(filtered_solution)
         filtered_solution = filter_overassignments(filtered_solution, sim)
@@ -74,3 +92,62 @@ class DBGMScheduler:
 
         return predicted_reward, Instantaneous_Schedule(robot_assignments)
     
+
+def replace_assignment_with_idling(robot_assignments, predicted_idle_probability, idle_threshold):
+    """
+    If for a given robot the idle_probability is higher than idle_threshold,
+    *and* the robot is the only one assigned to that task,
+    set all assignments for that robot to 0, then assign 1 to the
+    "idle" (second-to-last) task.
+
+    Args:
+        robot_assignments (dict): {(robot_id, task_id): 0 or 1}.
+        predicted_idle_probability (Tensor or np.ndarray): shape (n_robots,).
+        idle_threshold (float): threshold for deciding to force idle.
+
+    Returns:
+        dict: A modified dictionary of robot assignments.
+    """
+    # Copy the assignments to avoid mutating the input directly.
+    modified_assignments = dict(robot_assignments)
+
+    if not modified_assignments:
+        return modified_assignments
+
+    # Find the maximum task ID to infer "idle" as second-to-last
+    max_task_id = max(task for (_, task) in modified_assignments.keys())
+    idle_task_id = max_task_id - 1  # "Idle" by convention
+
+    # 1) Determine which task each robot is currently assigned to (if any).
+    #    Also tally how many robots are assigned to each task.
+    robot_to_task = {}
+    task_count = {}
+
+    for (r, t), val in modified_assignments.items():
+        if val == 1: 
+            robot_to_task[r] = t
+            task_count[t] = task_count.get(t, 0) + 1
+
+    n_robots = len(predicted_idle_probability)
+
+    # 2) For each robot:
+    #    - If idle_probability[r] > idle_threshold
+    #    - AND that robot is the *only* occupant of its assigned task
+    #      => reassign to idle.
+    for r in range(n_robots):
+        if predicted_idle_probability[r] > idle_threshold:
+            # Check if the robot has an assigned task, and how many occupy it
+            if r in robot_to_task:
+                assigned_task = robot_to_task[r]
+                num_assignees_for_that_task = task_count.get(assigned_task, 0)
+
+                # Only if exactly one occupant is assigned => reassign to idle
+                if num_assignees_for_that_task == 1:
+                    # Zero out all assignments for this robot
+                    for t in range(max_task_id + 1):
+                        if (r, t) in modified_assignments:
+                            modified_assignments[(r, t)] = 0
+                    # Now set the idle task to 1
+                    modified_assignments[(r, idle_task_id)] = 1
+
+    return modified_assignments

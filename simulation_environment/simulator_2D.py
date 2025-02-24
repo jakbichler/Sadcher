@@ -178,7 +178,7 @@ class Simulation:
                 predicted_reward, instantaneous_assignment = self.scheduler.assign_tasks_to_robots(self)
 
                 if self.move_while_waiting:
-                    self.second_highest_rewards, self.second_highest_rewards_idx = self.extract_second_highest_rewards(predicted_reward)
+                    self.second_highest_rewards, self.second_highest_rewards_idx = self.extract_highest_reward_besides_idling(predicted_reward)
             else:
                 instantaneous_assignment = self.scheduler.assign_tasks_to_robots(self)
 
@@ -191,7 +191,6 @@ class Simulation:
         Example scheduling logic:
         - Check for any idle robots
         - Assign them tasks if any are PENDING
-        This could be replaced by a call to your NN or heuristic.
         """
         for robot in robots:
             task_id = instantaneous_schedule.robot_assignments.get(robot.robot_id)
@@ -207,6 +206,10 @@ class Simulation:
         second_highest_rewards_idx = top2_rewards_idx[:, 1].detach().cpu().numpy()
         return second_highest_rewards, second_highest_rewards_idx
 
+
+    def extract_highest_reward_besides_idling(self, predicted_rewards):
+        top_reward, top_reward_idx = torch.max(predicted_rewards, dim=1)
+        return top_reward, top_reward_idx
 
 
 if __name__ == '__main__':
@@ -228,15 +231,15 @@ if __name__ == '__main__':
     precedence_constraints = config["precedence_constraints"]
 
 
-    problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    #problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
     #problem_instance = generate_biased_homogeneous_data()
     #problem_instance = generate_static_data()
     #problem_instance = generate_heterogeneous_no_coalition_data(n_tasks=10)
-    #problem_instance = generate_idle_data()
+    problem_instance = generate_idle_data()
 
     sim = Simulation(problem_instance, precedence_constraints, 
                     scheduler_name=args.scheduler, 
-                    checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/model1_random6t2r2s_300k_decision_point_shift/best_checkpoint.pt",
+                    checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/researching_waiting/IDLE21/best_checkpoint.pt",
                     debug=True,
                     move_while_waiting=args.move_while_waiting)
 

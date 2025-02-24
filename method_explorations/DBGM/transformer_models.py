@@ -43,7 +43,7 @@ class GraphAttentionHead(nn.Module):
         
         # 3) Compute attention logits
         e_ij = self.leaky_relu(self.a(e_ij))  # (B, N, N, 1)
-        
+        print(e_ij)
         # 4) Mask out non-edges with -inf (so they vanish in softmax)
         mask = (adj == 0).unsqueeze(-1)  # shape (B, N, N, 1)
         e_ij = e_ij.masked_fill(mask, float('-inf'))
@@ -227,6 +227,7 @@ class SchedulerNetwork(nn.Module):
             nn.ReLU(),
             nn.Linear(ff_dim, 1) # outputs scalar per robot
         )
+        self.idle_attention = nn.Linear(4 * embed_dim + 1, 1)  # scores for each (robot, task) pair.
 
 
     def forward(self, robot_features, task_features):
@@ -266,11 +267,20 @@ class SchedulerNetwork(nn.Module):
         # 5) Concatenate all features for the final reward MLP.
         final_input = torch.cat([expanded_robot_gatn, expanded_task_gatn, expanded_robot_out, expanded_task_out, processed_distance], dim=-1) # (B, N, M, 4*embed_dim + 1)
 
-        task_rewards = self.reward_mlp(final_input).squeeze(-1)  # (B, N, M)
-        idle_rewards_per_task = self.idle_mlp(final_input).squeeze(-1)  # (B, N, M)
-        idle_rewards = idle_rewards_per_task.sum(dim=-1, keepdim=True)  # (B, N, 1)
 
-        # Concatenate the idle reward with task rewards, so final shape is (B, N, M+1)
-        final_reward = torch.cat([task_rewards, idle_rewards], dim=-1)
+        # Normal task rewards.
+        task_rewards = self.reward_mlp(final_input).squeeze(-1)  # (B, N, M)
+
+        # Idle branch:
+        idle_logits_per_task = self.idle_mlp(final_input)  # (B, N, M, 1)
+
+        # Attention over tasks for idle branch.
+        attn_scores = self.idle_attention(final_input)  # (B, N, M, 1)
+        attn_weights = F.softmax(attn_scores, dim=2)         # (B, N, M, 1)
+        idle_logit = (idle_logits_per_task * attn_weights).sum(dim=2)  # (B, N, 1)
+        idle_prob = torch.sigmoid(idle_logit)         # (B, N, 1)
+
+        # Concatenate the idle probability as the final column.
+        final_reward = torch.cat([task_rewards, idle_prob], dim=-1)  # (B, N, M+1)
+        
         return final_reward
-    

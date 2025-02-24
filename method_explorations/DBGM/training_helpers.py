@@ -133,7 +133,6 @@ def get_expert_reward(schedule, decision_time, travel_times, gamma = 0.99, immed
     travel_times = np.array(travel_times)
     
     TIME_EPSILON = 0.01
-    IMMEDIATE_IDLE_REWARD = 10
 
     def is_idle(robot_id, time):
         for t_id, task_start, task_end in schedule[robot_id]:
@@ -143,6 +142,11 @@ def get_expert_reward(schedule, decision_time, travel_times, gamma = 0.99, immed
 
 
     for robot_id in schedule.keys():
+        if len(schedule[robot_id]) == 0:
+            # Robot has no tasks
+            E[robot_id, -1] = 1 # No tasks, robot always idle
+            continue
+
 
         # Normal tasks
         if is_idle(robot_id, decision_time):
@@ -155,23 +159,22 @@ def get_expert_reward(schedule, decision_time, travel_times, gamma = 0.99, immed
                 # Expert reward is discounted time to completion (task_id-1, because task 0 is the beginning of the mission)
                 E[robot_id, task_id-1] = gamma**(end_time - decision_time) * immediate_reward
 
+
         # Idle reward for gaps between consecutive tasks
         for i in range(len(schedule[robot_id]) - 1):
             current_task, _, current_end = schedule[robot_id][i]
             next_task, next_start, _ = schedule[robot_id][i+1]
             t_ij = travel_times[current_task, next_task]
             idle_end = next_start - t_ij  # robot must depart by this time to arrive exactly at next_start
-            if idle_end > current_end + TIME_EPSILON and decision_time < idle_end - TIME_EPSILON:
-                E[robot_id, -1] = gamma**(idle_end - decision_time) * IMMEDIATE_IDLE_REWARD
+            if (idle_end > current_end + TIME_EPSILON) and (current_end + TIME_EPSILON < decision_time < idle_end - TIME_EPSILON):
+                E[robot_id, -1] = 1 # Robot should wait at current task
+                break
 
         # First Task Idle 
-        if len(schedule[robot_id]) == 0:
-            continue
         first_task, first_start, _ = schedule[robot_id][0]
         t_01 = travel_times[0, first_task]
-        end_of_idle_task = first_start - t_01
         if t_01 < first_start - TIME_EPSILON and decision_time < (first_start - t_01) - TIME_EPSILON:
-            E[robot_id, -1] = gamma**(end_of_idle_task - decision_time) * IMMEDIATE_IDLE_REWARD
+            E[robot_id, -1] = 1 # Robot should wait at the start task
 
     return torch.tensor(E), torch.tensor(X) 
 

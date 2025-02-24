@@ -1,7 +1,7 @@
 n_tasks: 6
 n_robots: 2
 n_skills: 2
-random_seed:  
+random_seed: 12
 precedence_constraints:
   #- [1, 2]
   #- [2, 1
