@@ -43,6 +43,25 @@ class LazyLoadedSchedulingDataset(Dataset):
             decision_points = find_decision_points(solution_obj)
             self.data_indices.extend([(i, dec_time) for dec_time in decision_points])
 
+        
+        first_problem_path = os.path.join(problem_dir, self.problem_files[0])
+        first_solution_path = os.path.join(solution_dir, self.solution_files[0])
+        with open(first_problem_path, "r") as f:
+            first_problem = json.load(f)
+        with open(first_solution_path, "r") as f:
+            first_solution = Full_Horizon_Schedule.from_dict(json.load(f))
+
+        first_robot_feats = create_robot_features_from_optimal(first_problem, first_solution.robot_schedules, 0, 100, 100)
+        first_task_feats = create_task_features_from_optimal(first_problem, first_solution.robot_schedules, 0, 100, 100)
+
+        self.n_robots = first_robot_feats.shape[0]
+        self.robot_dim = first_robot_feats.shape[1]
+        
+        self.n_tasks = first_task_feats.shape[0]
+        self.task_dim = first_task_feats.shape[1]
+
+
+
     def __len__(self):
         return len(self.data_indices)
 
