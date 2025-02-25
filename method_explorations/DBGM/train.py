@@ -120,8 +120,8 @@ if __name__ == "__main__":
         # Training loop
         model.train()
         total_train_loss = 0.0
-        for robot_features, task_features, expert_reward, feasibility_mask in tqdm(train_loader, unit="Batch", desc=f"Epoch {epoch} - Training"):
-            predicted_reward_matrix = model(robot_features.to(device), task_features.to(device))
+        for robot_features, task_features, expert_reward, feasibility_mask, task_adjacency in tqdm(train_loader, unit="Batch", desc=f"Epoch {epoch} - Training"):
+            predicted_reward_matrix = model(robot_features.to(device), task_features.to(device), task_adjacency.to(device))
             loss = loss_fn(expert_reward.to(device), predicted_reward_matrix, feasibility_mask.to(device))
             optimizer.zero_grad()
             loss.backward()
@@ -136,8 +136,8 @@ if __name__ == "__main__":
         model.eval()
         total_val_loss = 0.0
         with torch.no_grad():
-            for robot_features, task_features, expert_reward, feasibility_mask in tqdm(val_loader, unit="Batch", desc=f"Epoch {epoch} - Validation"):
-                predicted_reward_matrix = model(robot_features.to(device), task_features.to(device))
+            for robot_features, task_features, expert_reward, feasibility_mask, task_adjacency in tqdm(val_loader, unit="Batch", desc=f"Epoch {epoch} - Validation"):
+                predicted_reward_matrix = model(robot_features.to(device), task_features.to(device), task_adjacency.to(device))
                 loss = loss_fn(expert_reward.to(device), predicted_reward_matrix, feasibility_mask.to(device))
                 total_val_loss += loss.item()
 

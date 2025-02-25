@@ -17,11 +17,13 @@ class GraphAttentionHead(nn.Module):
         self.leaky_relu = nn.LeakyReLU(negative_slope=negative_slope)
 
     def forward(self, x, adj):
+        
         B, N, _ = x.shape
         device = x.device
 
         # Add self-loops
-        self_loops = torch.eye(N, device=device).unsqueeze(0).expand(B, N, N)
+        self_loops = torch.eye(N, device=device).expand(B, N, N)
+        
         adj = (adj + self_loops).clamp(max=1)
 
         # Linear transformation: W_e * h
@@ -40,16 +42,14 @@ class GraphAttentionHead(nn.Module):
         alpha = F.softmax(e_ij, dim=2)  # (B, N, N, 1)
 
         # Self-loop contribution: α_{i,i} * W_e h_i
-        alpha_self = torch.diagonal(alpha, dim1=1, dim2=2).unsqueeze(-1)  # (B, N, 1)
+        alpha_self = torch.diagonal(alpha.squeeze(-1), dim1=1, dim2=2).unsqueeze(-1)
         self_contrib = alpha_self * Wh  # (B, N, out_dim)
-        ic (self_contrib.shape)
+
         # Neighbor contribution: LeakyReLU(∑_{j≠i} α_{i,j} * W_e h_j)
         mask_diag = torch.eye(N, dtype=torch.bool, device=device).unsqueeze(0).unsqueeze(-1)
         alpha_neighbors = alpha.masked_fill(mask_diag, 0)
         neighbor_sum = torch.sum(alpha_neighbors * Wh_j, dim=2)  # (B, N, out_dim)
-        ic (neighbor_sum.shape)
         neighbor_contrib = self.leaky_relu(neighbor_sum)  # (B, N, out_dim)
-        ic (neighbor_contrib.shape)
         return self_contrib + neighbor_contrib
 
 
@@ -111,7 +111,6 @@ class GATEncoder(nn.Module):
 
         if adj is None:
             adj = torch.ones(x.shape[0], x.shape[1], x.shape[1]).to(x.device)
-
         # Pass through stacked multi-head layers
         for layer in self.layers:
             x = layer(x, adj)
@@ -198,7 +197,6 @@ class SchedulerNetwork(nn.Module):
 
         self.robot_embedding = nn.Linear(robot_input_dimensions, embed_dim)
         self.task_embedding = nn.Linear(task_input_dimension, embed_dim)
-
         self.robot_GATN = GATEncoder(embed_dim, n_gatn_heads, n_gatn_layers)
         self.task_GATN = GATEncoder(embed_dim, n_gatn_heads, n_gatn_layers)
 
@@ -226,7 +224,7 @@ class SchedulerNetwork(nn.Module):
         )
 
 
-    def forward(self, robot_features, task_features):
+    def forward(self, robot_features, task_features, task_adjacencies=None):
         """
         robot_features: Tensor of shape (B, N, robot_input_dimensions) where first 2 dims are (x,y)
         task_features:  Tensor of shape (B, M, task_input_dimension) where first 2 dims are (x,y)
@@ -238,7 +236,7 @@ class SchedulerNetwork(nn.Module):
         task_emb  = self.task_embedding(task_features)       # (B, M, embed_dim)
 
         robot_gatn_output = self.robot_GATN(robot_emb, adj=None)  # (B, N, embed_dim)
-        task_gatn_output  = self.task_GATN(task_emb, adj=None)    # (B, M, embed_dim)
+        task_gatn_output  = self.task_GATN(task_emb, adj=task_adjacencies)    # (B, M, embed_dim)
 
         robot_out = self.robot_transformer_encoder(robot_gatn_output)  # (B, N, embed_dim)
         task_out  = self.task_transformer_encoder(task_gatn_output)    # (B, M, embed_dim)
