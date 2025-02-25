@@ -6,7 +6,7 @@ sys.path.append('..')
 from icecream import ic
 import torch
 
-from data_generation.problem_generator import ProblemData, generate_random_data, generate_static_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data, generate_idle_data
+from data_generation.problem_generator import ProblemData, generate_random_data, generate_static_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data, generate_idle_data, generate_random_data_with_precedence
 from helper_functions.schedules import Full_Horizon_Schedule
 from simulation_environment.task_robot_classes import Robot, Task
 from schedulers.greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
@@ -17,20 +17,21 @@ from visualizations.solution_visualization import plot_gantt_chart, plot_robot_t
 
 
 class Simulation:
-    def __init__(self, problem_instance, precedence_constraints, scheduler_name=None, checkpoint_path = None, debug = False, move_while_waiting = False):
+    def __init__(self, problem_instance, scheduler_name=None, checkpoint_path = None, debug = False, move_while_waiting = False):
         self.timestep = 0
+        self.precedence_constraints = problem_instance['precedence_constraints']
         self.robots: list[Robot] = self.create_robots(problem_instance)
         self.tasks: list[Task] = self.create_tasks(problem_instance)
-        self.precedence_constraints = precedence_constraints
+        self.n_tasks = len(self.tasks)
+        self.last_task_id = self.n_tasks - 1
+        self.idle_task_id = self.n_tasks - 2
+        [self.update_task(task) for task in self.tasks]
         self.duration_normalization = np.max(problem_instance['T_e'])
         self.location_normalization = np.max(problem_instance['task_locations'])
         self.debugging = debug
         self.sim_done = False
         self.makespan = -1 
         self.robot_schedules = {robot.robot_id: [] for robot in self.robots}
-        self.n_tasks = len(self.tasks)
-        self.last_task_id = self.n_tasks - 1
-        self.idle_task_id = self.n_tasks - 2
         self.scheduler_name = scheduler_name
         self.scheduler = self.create_scheduler(scheduler_name, checkpoint_path)
         self.move_while_waiting = move_while_waiting
@@ -53,7 +54,9 @@ class Simulation:
         requirements = np.insert(requirements, -1, np.zeros_like(requirements[0]), axis=0)
         
         tasks = [Task(idx, loc, dur, req) for idx, (loc, dur, req) in enumerate(zip(locations, durations, requirements))]
+        
         tasks[-2].status = 'DONE' # Idle task
+
         
         return tasks
 
@@ -68,6 +71,7 @@ class Simulation:
             raise ValueError(f"Unknown scheduler '{name}'")
         
     def update_task(self, task):
+
         previous_status = task.status
 
         # Check if task is ready to start based on precedence constraints
@@ -90,7 +94,7 @@ class Simulation:
             return
 
         # Normal tasks
-        if self.all_skills_assigned(task) and self.all_robots_at_task(task, threshold=0.01):
+        if self.all_skills_assigned(task) and self.all_robots_at_task(task, threshold=0.01) and task.ready:
             if task.status == 'PENDING':
                 task.start()
             task.decrement_duration()
@@ -224,19 +228,21 @@ if __name__ == '__main__':
     n_tasks = config["n_tasks"]
     n_robots = config["n_robots"]
     n_skills = config["n_skills"]
+    n_precedence = config["n_precedence"]
     np.random.seed(config["random_seed"])
     precedence_constraints = config["precedence_constraints"]
 
 
-    problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    #problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    problem_instance = generate_random_data_with_precedence(n_tasks, n_robots, n_skills, n_precedence)
     #problem_instance = generate_biased_homogeneous_data()
     #problem_instance = generate_static_data()
     #problem_instance = generate_heterogeneous_no_coalition_data(n_tasks=10)
     #problem_instance = generate_idle_data()
 
-    sim = Simulation(problem_instance, precedence_constraints, 
+    sim = Simulation(problem_instance, 
                     scheduler_name=args.scheduler, 
-                    checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/researching_waiting/RANDOM11/best_checkpoint.pt",
+                    checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/researching_precedence/RANDOM11_FineTune_80k_6t2r2s2p/best_checkpoint.pt",
                     debug=True,
                     move_while_waiting=args.move_while_waiting)
 
