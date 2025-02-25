@@ -57,6 +57,15 @@ def add_robot_skills_table(fig, robots):
     ax_table.add_table(table)
 
 
+def add_precedence_constraints_text(fig, precedence_constraints):
+    """Display precedence constraints as a single line of text below the robot table."""
+    ax_text = plt.axes([0.1, 0.0, 0.8, 0.05])  # Position below the robot table
+    ax_text.axis("off")  # Hide the axes
+
+    precedence_text = f"Precedence Constraints: {precedence_constraints}"
+    ax_text.text(0.5, 0.5, precedence_text, ha='center', va='center', fontsize=10, wrap=True)
+
+
 def draw_pie(ax, x, y, sizes, radius, colors):
     """Draw a pie chart at the specified (x, y) position."""
     start_angle = 0
@@ -88,6 +97,7 @@ def update_plot(sim, ax, fig, colors, n_skills):
     ax.text(sim.tasks[-1].location[0] + 6, sim.tasks[-1].location[1] - 1, "End", fontsize=15, ha='center')
 
     add_robot_skills_table(fig, sim.robots)
+    add_precedence_constraints_text(fig, sim.precedence_constraints)
 
     legend_patches = [
         plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i], markersize=10, label=f"Skill {i}")

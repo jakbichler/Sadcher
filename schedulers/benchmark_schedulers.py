@@ -14,7 +14,7 @@ from simulation_environment.simulator_2D import Simulation
 from data_generation.problem_generator import (
     ProblemData, generate_random_data, generate_simple_data,
     generate_simple_homogeneous_data, generate_biased_homogeneous_data,
-    generate_heterogeneous_no_coalition_data, generate_idle_data
+    generate_heterogeneous_no_coalition_data, generate_idle_data, generate_random_data_with_precedence
 )
 
 
@@ -74,6 +74,7 @@ if __name__ == "__main__":
     n_tasks = 6
     n_robots = 2 
     n_skills = 2
+    n_precedence = 2
     np.random.seed(1)
 
     if args.including_milp:
@@ -89,7 +90,8 @@ if __name__ == "__main__":
 
     for iteration in tqdm(range(args.n_iterations)):
         # Generate a problem instance
-        problem_instance = generate_random_data(n_tasks, n_robots, n_skills, [])
+        #problem_instance = generate_random_data(n_tasks, n_robots, n_skills, [])
+        problem_instance = generate_random_data_with_precedence(n_tasks, n_robots, n_skills, n_precedence)
         #problem_instance = generate_idle_data()
         #problem_instance = generate_simple_data()
         #problem_instance = generate_simple_homogeneous_data(n_tasks=n_tasks, n_robots=n_robots)
@@ -114,14 +116,13 @@ if __name__ == "__main__":
                 if scheduler == "dbgm":
                     sim = Simulation(
                         problem_instance, 
-                        [],
                         scheduler, 
                         checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/researching_precedence/RANDOM11_FineTune_80k_6t2r2s2p/best_checkpoint.pt",
                         debug=False,
                         move_while_waiting=args.move_while_waiting
                     )
                 else:
-                    sim = Simulation(problem_instance, [], scheduler, debug=False)
+                    sim = Simulation(problem_instance, scheduler, debug=False)
 
                 start_time = time.time()
                 feasible = True
