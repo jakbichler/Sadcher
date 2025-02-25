@@ -25,7 +25,9 @@ class Simulation:
         self.n_tasks = len(self.tasks)
         self.last_task_id = self.n_tasks - 1
         self.idle_task_id = self.n_tasks - 2
+        self.n_real_tasks = self.n_tasks - 3 # Excluding start, exit and idle task
         [self.update_task(task) for task in self.tasks]
+        self.task_adjacency = self.create_task_adjacency_matrix()
         self.duration_normalization = np.max(problem_instance['T_e'])
         self.location_normalization = np.max(problem_instance['task_locations'])
         self.debugging = debug
@@ -35,6 +37,18 @@ class Simulation:
         self.scheduler_name = scheduler_name
         self.scheduler = self.create_scheduler(scheduler_name, checkpoint_path)
         self.move_while_waiting = move_while_waiting
+
+    
+    def create_task_adjacency_matrix(self):
+        task_adjacency = torch.zeros((self.n_real_tasks, self.n_real_tasks))
+        print(task_adjacency.shape)
+
+        if self.precedence_constraints:
+            for precedence in self.precedence_constraints:
+                # Precedence is 1-indexed 
+                task_adjacency[precedence[0] - 1, precedence[1] - 1] = 1
+
+        return task_adjacency
 
     def create_robots(self, problem_instance):
         # For example, Q is a list of robot capabilities
@@ -233,8 +247,8 @@ if __name__ == '__main__':
     precedence_constraints = config["precedence_constraints"]
 
 
-    #problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
-    problem_instance = generate_random_data_with_precedence(n_tasks, n_robots, n_skills, n_precedence)
+    problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    #problem_instance = generate_random_data_with_precedence(n_tasks, n_robots, n_skills, n_precedence)
     #problem_instance = generate_biased_homogeneous_data()
     #problem_instance = generate_static_data()
     #problem_instance = generate_heterogeneous_no_coalition_data(n_tasks=10)
@@ -242,7 +256,7 @@ if __name__ == '__main__':
 
     sim = Simulation(problem_instance, 
                     scheduler_name=args.scheduler, 
-                    checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/researching_precedence/RANDOM11_FineTune_80k_6t2r2s2p/best_checkpoint.pt",
+                    checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/researching_precedence/NEW_GATN11_RANDOM/best_checkpoint.pt",
                     debug=True,
                     move_while_waiting=args.move_while_waiting)
 

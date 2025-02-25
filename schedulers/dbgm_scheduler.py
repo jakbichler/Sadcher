@@ -38,8 +38,8 @@ class DBGMScheduler:
 
         robot_features = np.array([robot.feature_vector(self.location_normalization, self.duration_normalization) for robot in sim.robots])
         robot_features = torch.tensor(robot_features, dtype= torch.float32).unsqueeze(0).to(self.device)
-
-        predicted_reward_raw = self.trained_model(robot_features, task_features).squeeze(0) # remove batch dim
+        
+        predicted_reward_raw = self.trained_model(robot_features, task_features, sim.task_adjacency.to(self.device)).squeeze(0) # remove batch dim
 
         # Clamp negative values, since BGM will not work with only negative values
         predicted_reward = torch.clamp(predicted_reward_raw, min=1e-6)
