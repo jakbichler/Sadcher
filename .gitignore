@@ -5,3 +5,4 @@ datasets/
 results/
 checkpoints/
 *.ipynb
+*.json

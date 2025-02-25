@@ -7,16 +7,48 @@ from simulation_environment.task_robot_classes import Robot, Task
 import numpy as np
 import torch 
 
+
+def predecessors_completed(problem, solution, task_id, timestep):
+    precedence_constraints = problem["precedence_constraints"]
+    if precedence_constraints is None:
+        return True
+    
+    predecessors = [j for (j, k) in precedence_constraints if k == task_id]
+    for preceding_task in predecessors:
+        if not task_is_completed(solution, preceding_task, timestep):
+            return False
+    return True
+
+
+def is_idle(solution, robot_id, timestep):
+    for t_id, task_start, task_end in solution[robot_id]:
+        if task_start <= timestep <= task_end:
+            return False
+    return True
+
+
+def task_is_completed(solution, task_id, timestep):
+    for robot_id, assignments in solution.items():
+        for assigned_task_id, start_time, end_time in assignments:
+            if assigned_task_id == task_id:
+                if timestep > end_time:
+                    return True
+    return False
+
+
 def get_task_status(problem, solution, task_id,  timestep):
     for robot_id, assignments in solution.items():
         for assigned_task_id, start_time, end_time in assignments:
             if assigned_task_id == task_id:
                 if timestep < start_time:
-                    # Task is ready but not yet started
-                    return {"ready": 1, "assigned": 0, "incomplete": 1}
+                    # Task is not yet started
+                    ready = 1 if predecessors_completed(problem, solution, task_id, timestep) else 0
+                    return {"ready": ready, "assigned": 0, "incomplete": 1}
+                
                 elif start_time <= timestep <= end_time:
                     # Task is currently being worked on
                     return {"ready": 1, "assigned": 1, "incomplete": 1}
+                
                 elif timestep > end_time:
                     # Task is completed
                     return {"ready": 1, "assigned": 0, "incomplete": 0}
@@ -40,11 +72,6 @@ def create_task_features_from_optimal(problem_instance, solution,  timestep, loc
     return torch.tensor(task_features, dtype=torch.float32)
     
 
-def is_idle(solution, robot_id, timestep):
-    for t_id, task_start, task_end in solution[robot_id]:
-        if task_start <= timestep <= task_end:
-            return False
-    return True
 
 
 def create_robot_features_from_optimal(problem_instance, solution, timestep, location_normalization = 100, duration_normalization = 100):

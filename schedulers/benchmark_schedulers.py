@@ -116,7 +116,7 @@ if __name__ == "__main__":
                         problem_instance, 
                         [],
                         scheduler, 
-                        checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/model1_random6t2r2s_300k_decision_point_shift/best_checkpoint.pt",
+                        checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/researching_waiting/RANDOM11/best_checkpoint.pt",
                         debug=False,
                         move_while_waiting=args.move_while_waiting
                     )
