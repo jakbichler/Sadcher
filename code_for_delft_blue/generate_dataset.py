@@ -19,7 +19,6 @@ def generate_dataset(n_instances: int, output_dir: str, n_robots=2, n_tasks=6, n
     while successful < n_instances:
         problem_instance = generate_random_data(n_tasks=n_tasks, n_robots=n_robots, n_skills=n_skills)
         optimal_schedule = milp_scheduling(problem_instance, n_threads=n_threads, cutoff_time_seconds= 60*10)
-        instance_index = get_next_available_index(output_dir)
 
         if optimal_schedule is None:
             print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
@@ -30,6 +29,10 @@ def generate_dataset(n_instances: int, output_dir: str, n_robots=2, n_tasks=6, n
             key: value.tolist() if isinstance(value, np.ndarray) else value
             for key, value in problem_instance.items()
         }
+        
+
+        instance_index = get_next_available_index(output_dir)
+
         problem_instance_path = os.path.join(
             output_dir, "problem_instances", f"problem_instance_{instance_index:06d}.json"
         )
@@ -68,10 +71,10 @@ def get_next_available_index(output_dir: str) -> int:
 if __name__ == "__main__":
 
     num_instances = 100
-    output_dir = "random_8t3r3rs"
-    n_tasks = 3
-    n_robots = 3
-    n_skills = 3
+    output_dir = "random_6t2r2s"
+    n_tasks = 6
+    n_robots = 2
+    n_skills = 2
     n_threads = 4
 
     generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads)
