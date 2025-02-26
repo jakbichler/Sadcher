@@ -3,10 +3,10 @@ import os
 import numpy as np
 
 from MILP_solver import milp_scheduling
-from problem_generator import generate_random_data
+from problem_generator import generate_random_data, generate_random_data_with_precedence
 
 
-def generate_dataset(n_instances: int, output_dir: str, n_robots=2, n_tasks=6, n_skills=2, n_threads=6) -> None:
+def generate_dataset(n_instances: int, output_dir: str, n_robots=2, n_tasks=6, n_skills=2, n_threads=6, n_precedence=0) -> None:
     problem_instances_dir = os.path.join(output_dir, "problem_instances")
     solutions_dir = os.path.join(output_dir, "solutions")
 
@@ -17,7 +17,8 @@ def generate_dataset(n_instances: int, output_dir: str, n_robots=2, n_tasks=6, n
 
 
     while successful < n_instances:
-        problem_instance = generate_random_data(n_tasks=n_tasks, n_robots=n_robots, n_skills=n_skills)
+        #problem_instance = generate_random_data(n_tasks=n_tasks, n_robots=n_robots, n_skills=n_skills)
+        problem_instance = generate_random_data_with_precedence(n_tasks, n_robots, n_skills, n_precedence)
         optimal_schedule = milp_scheduling(problem_instance, n_threads=n_threads, cutoff_time_seconds= 60*10)
 
         if optimal_schedule is None:
@@ -46,6 +47,7 @@ def generate_dataset(n_instances: int, output_dir: str, n_robots=2, n_tasks=6, n
             json.dump(optimal_schedule.to_dict(), f)
 
         successful += 1
+        print(f"Wrote {instance_index} successfully")
 
 
 
@@ -71,10 +73,11 @@ def get_next_available_index(output_dir: str) -> int:
 if __name__ == "__main__":
 
     num_instances = 100
-    output_dir = "random_6t2r2s"
-    n_tasks = 6
-    n_robots = 2
-    n_skills = 2
-    n_threads = 4
+    output_dir = "/scratch/jbichler/generate_mrta_datasets/10t3r3s3p"
+    n_tasks = 10
+    n_robots = 3
+    n_skills = 3
+    n_threads = 1
+    n_precedence = 3
 
-    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads)
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)

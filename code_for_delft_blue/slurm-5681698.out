@@ -1,0 +1,144 @@
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+srun: error: cmp146: tasks 0,2-4,6-8,10,12-19,21: Exited with exit code 1
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+srun: launch/slurm: _step_signal: Terminating StepId=5681698.0
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+                                                       ^^^^^^^^^^^^^^
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+                                                       ^^^^^^^^^^^^^^
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+No feasible solution found.
+Traceback (most recent call last):
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 83, in <module>
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+    generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
+  File "/scratch/jbichler/generate_mrta_datasets/code_for_delft_blue/generate_dataset.py", line 25, in generate_dataset
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+    print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+                                                       ^^^^^^^^^^^^^^
+UnboundLocalError: cannot access local variable 'instance_index' where it is not associated with a value
+slurmstepd: error: *** STEP 5681698.0 ON cmp146 CANCELLED AT 2025-02-25T16:28:37 ***
+srun: error: cmp146: tasks 1,5,9,20: Terminated
+srun: error: cmp167: tasks 22-35,37-47: Terminated
+srun: error: cmp146: task 11: Terminated
+srun: error: cmp167: task 36: Terminated
+srun: Force Terminated StepId=5681698.0

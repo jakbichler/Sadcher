@@ -3,7 +3,7 @@ import pulp
 from problem_generator import read_problem_instance
 from schedules import Full_Horizon_Schedule
 
-def milp_scheduling(problem_instance, n_threads = 2, cutoff_time_seconds = 10 * 60):
+def milp_scheduling(problem_instance, n_threads = 1, cutoff_time_seconds = 60 * 60):
     Q, R, T_execution, T_travel, task_locations, precedence_constraints = read_problem_instance(problem_instance)
     n_robots = Q.shape[0]
     n_tasks = R.shape[0] - 2
