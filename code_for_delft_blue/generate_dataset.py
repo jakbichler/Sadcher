@@ -22,7 +22,7 @@ def generate_dataset(n_instances: int, output_dir: str, n_robots=2, n_tasks=6, n
         optimal_schedule = milp_scheduling(problem_instance, n_threads=n_threads, cutoff_time_seconds= 60*10)
 
         if optimal_schedule is None:
-            print(f"Failed to solve problem instance at index {instance_index}. Retrying with a new instance...")
+            print(f"Failed to solve problem instance at index. Retrying with a new instance...")
             continue  # Do not increment instance_index; try again
 
         # Prepare instance for JSON serialization
@@ -73,11 +73,11 @@ def get_next_available_index(output_dir: str) -> int:
 if __name__ == "__main__":
 
     num_instances = 100
-    output_dir = "/scratch/jbichler/generate_mrta_datasets/10t3r3s3p"
-    n_tasks = 10
+    output_dir = "/scratch/jbichler/generate_mrta_datasets/8t3r3s6p"
+    n_tasks = 8
     n_robots = 3
     n_skills = 3
     n_threads = 1
-    n_precedence = 3
+    n_precedence = 6
 
     generate_dataset(num_instances, output_dir, n_robots, n_tasks, n_skills, n_threads, n_precedence)
