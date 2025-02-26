@@ -85,6 +85,14 @@ class LazyLoadedSchedulingDataset(Dataset):
         location_normalization = np.max(problem["task_locations"])
         duration_normalization = np.max(problem["T_e"])
 
+        adjacency_matrix = torch.zeros((self.n_tasks, self.n_tasks))
+        precedence_constraints = problem['precedence_constraints']
+
+        if precedence_constraints:
+            for precedence in precedence_constraints:
+                # Precedence is 1-indexed 
+                adjacency_matrix[precedence[0] - 1, precedence[1] - 1] = 1
+
         # Generate features
         robot_feats = create_robot_features_from_optimal(problem, solution_obj.robot_schedules, decision_time, location_normalization, duration_normalization)
         task_feats = create_task_features_from_optimal(problem, solution_obj.robot_schedules, decision_time, location_normalization, duration_normalization)
@@ -92,7 +100,9 @@ class LazyLoadedSchedulingDataset(Dataset):
         # Compute expert reward and feasibility mask
         expert_reward, feasibility_mask = get_expert_reward(solution_obj.robot_schedules, decision_time, problem["T_t"], gamma=self.gamma, immediate_reward=self.immediate_reward)
 
-        return robot_feats, task_feats, expert_reward, feasibility_mask
+        return robot_feats, task_feats, expert_reward, feasibility_mask, adjacency_matrix
+
+
 
 
 class PrecomputedDataset(Dataset):

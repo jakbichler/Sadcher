@@ -7,7 +7,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 from icecream import ic 
-from dataset import SchedulingDataset
+from dataset import LazyLoadedSchedulingDataset
 from training_helpers import load_dataset, find_decision_points
 from transformer_models import SchedulerNetwork
 
@@ -51,8 +51,8 @@ if __name__ == "__main__":
 
     config = {
         "batch_size": 512,
-        "embedding_dim": 256,
-        "ff_dim": 512,
+        "embedding_dim": 128,
+        "ff_dim": 256,
         "n_transformer_heads": 4,
         "n_transformer_layers": 4,
         "n_gatn_heads": 4,
@@ -68,7 +68,7 @@ if __name__ == "__main__":
 
     ic("loading dataset")
     #problems, solutions = load_dataset(problem_dir, solution_dir)
-    dataset = SchedulingDataset(problem_dir, solution_dir, gamma=config["reward_gamma"], immediate_reward=10)
+    dataset = LazyLoadedSchedulingDataset(problem_dir, solution_dir, gamma=config["reward_gamma"], immediate_reward=10)
     # Train-validation split (80% train, 20% validation)
     dataset_size = len(dataset)
     train_size = int(0.8 * dataset_size)
@@ -120,8 +120,8 @@ if __name__ == "__main__":
         # Training loop
         model.train()
         total_train_loss = 0.0
-        for robot_features, task_features, expert_reward, feasibility_mask in tqdm(train_loader, unit="Batch", desc=f"Epoch {epoch} - Training"):
-            predicted_reward_matrix = model(robot_features.to(device), task_features.to(device))
+        for robot_features, task_features, expert_reward, feasibility_mask, task_adjacency in tqdm(train_loader, unit="Batch", desc=f"Epoch {epoch} - Training"):
+            predicted_reward_matrix = model(robot_features.to(device), task_features.to(device), task_adjacency.to(device))
             loss = loss_fn(expert_reward.to(device), predicted_reward_matrix, feasibility_mask.to(device))
             optimizer.zero_grad()
             loss.backward()
@@ -136,8 +136,8 @@ if __name__ == "__main__":
         model.eval()
         total_val_loss = 0.0
         with torch.no_grad():
-            for robot_features, task_features, expert_reward, feasibility_mask in tqdm(val_loader, unit="Batch", desc=f"Epoch {epoch} - Validation"):
-                predicted_reward_matrix = model(robot_features.to(device), task_features.to(device))
+            for robot_features, task_features, expert_reward, feasibility_mask, task_adjacency in tqdm(val_loader, unit="Batch", desc=f"Epoch {epoch} - Validation"):
+                predicted_reward_matrix = model(robot_features.to(device), task_features.to(device), task_adjacency.to(device))
                 loss = loss_fn(expert_reward.to(device), predicted_reward_matrix, feasibility_mask.to(device))
                 total_val_loss += loss.item()
 
@@ -166,4 +166,5 @@ if __name__ == "__main__":
     plt.xlabel("Epoch")
     plt.ylabel("Loss")
     plt.legend()
+    plt.savefig(os.path.join(out_checkpoint_dir, "loss_plot.png"))
     plt.show()

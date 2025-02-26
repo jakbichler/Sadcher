@@ -1,61 +1,57 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from icecream import ic
 
 # -----------------------------
 # Graph Attention Building Blocks
 # -----------------------------
 class GraphAttentionHead(nn.Module):
-    """
-    A single-head GAT layer (head) that updates each node embedding
-    by attending to its neighbors in the adjacency matrix.
-    """
     def __init__(self, in_dim, out_dim, negative_slope=0.2):
         super().__init__()
         self.in_dim = in_dim
         self.out_dim = out_dim
         
-        # Learnable linear transform for node features:
         self.W = nn.Linear(in_dim, out_dim, bias=False)
-        
-        # Attention projection a: from (out_dim + out_dim) -> scalar
-        # We'll do [W h_i || W h_j] -> a -> e_ij
-        self.a = nn.Linear(2*out_dim, 1, bias=False)
-        
+        self.a = nn.Linear(2 * out_dim, 1, bias=False)
         self.leaky_relu = nn.LeakyReLU(negative_slope=negative_slope)
 
     def forward(self, x, adj):
-        """
-        x:   (B, N, in_dim) -- node embeddings for B graphs, each with N nodes
-        adj: (B, N, N)      -- adjacency (0/1) for each pair of nodes
-        Returns: updated node embeddings of shape (B, N, out_dim)
-        """
+        
         B, N, _ = x.shape
-        
-        # 1) Linear transformation of node features
-        Wh = self.W(x)  # shape (B, N, out_dim)
-        # 2) Prepare pairwise combination for attention: [Wh_i || Wh_j]
-        #    We'll tile Wh so that each node can attend to every other node:
-        Wh_i = Wh.unsqueeze(2).expand(B, N, N, self.out_dim)  # shape (B, N, N, out_dim)
-        Wh_j = Wh.unsqueeze(1).expand(B, N, N, self.out_dim)  # shape (B, N, N, out_dim)
-        # Concatenate along features
-        e_ij = torch.cat([Wh_i, Wh_j], dim=-1)  # (B, N, N, 2*out_dim)
-        
-        # 3) Compute attention logits
-        e_ij = self.leaky_relu(self.a(e_ij))  # (B, N, N, 1)
-        
-        # 4) Mask out non-edges with -inf (so they vanish in softmax)
-        mask = (adj == 0).unsqueeze(-1)  # shape (B, N, N, 1)
+        device = x.device
+
+        # Add self-loops
+        self_loops = torch.eye(N, device=device).expand(B, N, N)
+        adj = (adj + self_loops).clamp(max=1)
+
+        # Linear transformation: W_e * h
+        Wh = self.W(x)  # shape: (B, N, out_dim)
+
+        # Compute pairwise combinations: [W_e h_i || W_e h_j]
+        Wh_i = Wh.unsqueeze(2).expand(B, N, N, self.out_dim)  # (B, N, N, out_dim)
+        Wh_j = Wh.unsqueeze(1).expand(B, N, N, self.out_dim)  # (B, N, N, out_dim)
+        e_ij = self.a(torch.cat([Wh_i, Wh_j], dim=-1))  # (B, N, N, 1)
+
+        # Mask non-adjacent nodes
+        mask = (adj == 0).unsqueeze(-1)
         e_ij = e_ij.masked_fill(mask, float('-inf'))
-        
-        # 5) Softmax over neighbors j
-        alpha_ij = F.softmax(e_ij, dim=2)  # (B, N, N, 1)
-        
-        # 6) Compute final updated node embeddings by summing over neighbors
-        h_prime = alpha_ij * Wh_j  # (B, N, N, out_dim)
-        h_prime = h_prime.sum(dim=2)  # sum over j -> (B, N, out_dim)
-        
-        return h_prime
+
+        # Softmax over neighbor dimension (dim=2)
+        alpha = F.softmax(e_ij, dim=2)  # (B, N, N, 1)
+
+        # Self-loop contribution: α_{i,i} * W_e h_i
+        alpha_self = torch.diagonal(alpha.squeeze(-1), dim1=1, dim2=2).unsqueeze(-1)
+        self_contrib = alpha_self * Wh  # (B, N, out_dim)
+
+        # Neighbor contribution: LeakyReLU(∑_{j≠i} α_{i,j} * W_e h_j)
+        mask_diag = torch.eye(N, dtype=torch.bool, device=device).unsqueeze(0).unsqueeze(-1)
+        alpha_neighbors = alpha.masked_fill(mask_diag, 0)
+        neighbor_sum = torch.sum(alpha_neighbors * Wh_j, dim=2)  # (B, N, out_dim)
+        neighbor_contrib = self.leaky_relu(neighbor_sum)  # (B, N, out_dim)
+        return self_contrib + neighbor_contrib
+
+
 
 class MultiHeadGraphAttentionLayer(nn.Module):
     """
@@ -114,7 +110,6 @@ class GATEncoder(nn.Module):
 
         if adj is None:
             adj = torch.ones(x.shape[0], x.shape[1], x.shape[1]).to(x.device)
-
         # Pass through stacked multi-head layers
         for layer in self.layers:
             x = layer(x, adj)
@@ -201,7 +196,6 @@ class SchedulerNetwork(nn.Module):
 
         self.robot_embedding = nn.Linear(robot_input_dimensions, embed_dim)
         self.task_embedding = nn.Linear(task_input_dimension, embed_dim)
-
         self.robot_GATN = GATEncoder(embed_dim, n_gatn_heads, n_gatn_layers)
         self.task_GATN = GATEncoder(embed_dim, n_gatn_heads, n_gatn_layers)
 
@@ -229,7 +223,7 @@ class SchedulerNetwork(nn.Module):
         )
 
 
-    def forward(self, robot_features, task_features):
+    def forward(self, robot_features, task_features, task_adjacencies=None):
         """
         robot_features: Tensor of shape (B, N, robot_input_dimensions) where first 2 dims are (x,y)
         task_features:  Tensor of shape (B, M, task_input_dimension) where first 2 dims are (x,y)
@@ -241,7 +235,7 @@ class SchedulerNetwork(nn.Module):
         task_emb  = self.task_embedding(task_features)       # (B, M, embed_dim)
 
         robot_gatn_output = self.robot_GATN(robot_emb, adj=None)  # (B, N, embed_dim)
-        task_gatn_output  = self.task_GATN(task_emb, adj=None)    # (B, M, embed_dim)
+        task_gatn_output  = self.task_GATN(task_emb, adj=task_adjacencies)    # (B, M, embed_dim)
 
         robot_out = self.robot_transformer_encoder(robot_gatn_output)  # (B, N, embed_dim)
         task_out  = self.task_transformer_encoder(task_gatn_output)    # (B, M, embed_dim)
