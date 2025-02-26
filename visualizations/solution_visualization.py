@@ -171,11 +171,24 @@ def plot_robot_trajectories(task_locations, robot_schedules, T_execution, R, ax=
     if ax is None:
         plt.show()
 
-def plot_gantt_and_trajectories(title, schedule, travel_times, task_locations, T_execution, R, Q):
+
+def add_precedence_constraints_text(fig, precedence_constraints):
+    """Display precedence constraints as a single line of text below the robot table."""
+    ax_text = plt.axes([0.1, 0.0, 0.8, 0.05])  # Position below the robot table
+    ax_text.axis("off")  # Hide the axes
+
+    precedence_text = f"Precedence Constraints: {precedence_constraints}"
+    ax_text.text(0.5, 0.5, precedence_text, ha='center', va='center', fontsize=10, wrap=True)
+
+
+def plot_gantt_and_trajectories(title, schedule, travel_times, task_locations, T_execution, R, Q, precedence_constraints = None):
     fig, axs = plt.subplots(2, 1, figsize=(12, 12), gridspec_kw={'height_ratios': [1, 5]})
 
     # Use the modified functions with specific axes
     plot_gantt_chart(title, schedule, travel_times, ax=axs[0])
     plot_robot_trajectories(task_locations, schedule.robot_schedules, T_execution, R, ax=axs[1], Q=Q)
+
+    if precedence_constraints:
+        add_precedence_constraints_text(fig, precedence_constraints)
 
     plt.show()

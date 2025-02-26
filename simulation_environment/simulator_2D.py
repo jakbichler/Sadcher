@@ -1,4 +1,5 @@
 import argparse
+import json
 import numpy as np
 import sys
 import yaml
@@ -26,7 +27,7 @@ class Simulation:
         self.last_task_id = self.n_tasks - 1
         self.idle_task_id = self.n_tasks - 2
         self.n_real_tasks = self.n_tasks - 3 # Excluding start, exit and idle task
-        [self.update_task(task) for task in self.tasks]
+        self.update_task_status()
         self.task_adjacency = self.create_task_adjacency_matrix()
         self.duration_normalization = np.max(problem_instance['T_e'])
         self.location_normalization = np.max(problem_instance['task_locations'])
@@ -41,7 +42,6 @@ class Simulation:
     
     def create_task_adjacency_matrix(self):
         task_adjacency = torch.zeros((self.n_real_tasks, self.n_real_tasks))
-        print(task_adjacency.shape)
 
         if self.precedence_constraints:
             for precedence in self.precedence_constraints:
@@ -71,7 +71,6 @@ class Simulation:
         
         tasks[-2].status = 'DONE' # Idle task
 
-        
         return tasks
 
     def create_scheduler(self,name: str, checkpoint_path = None):
@@ -84,37 +83,40 @@ class Simulation:
         else:
             raise ValueError(f"Unknown scheduler '{name}'")
         
-    def update_task(self, task):
-
-        previous_status = task.status
-
-        # Check if task is ready to start based on precedence constraints
-        if task.task_id in [0, self.idle_task_id] or task.predecessors_completed(self):
-            task.ready = True
-        else:
-            task.ready = False
-
-        if task.status == 'DONE':
-            return
-
-        # Special handling of last task
-        if task.task_id == self.last_task_id:
-            if self.all_robots_at_exit_location(threshold=0.01):
-                task.status = 'DONE'
-                self.finish_simulation()
+    def update_task_status(self):
+        for task in self.tasks:
+            # Check if task is ready to start based on precedence constraints for this timestep
+            if task.task_id in [0, self.idle_task_id] or task.predecessors_completed(self):
+                task.ready = True
             else:
-                task.status = 'PENDING'
                 task.ready = False
-            return
 
-        # Normal tasks
-        if self.all_skills_assigned(task) and self.all_robots_at_task(task, threshold=0.01) and task.ready:
-            if task.status == 'PENDING':
-                task.start()
-            task.decrement_duration()
-        else:
-            task.status = 'PENDING'
-        self.log_into_full_horizon_schedule(task, previous_status)
+            # Special handling of last task
+            if task.task_id == self.last_task_id:
+                if self.all_robots_at_exit_location(threshold=0.01):
+                    task.status = 'DONE'
+                    self.finish_simulation()
+                else:
+                    task.status = 'PENDING'
+                    task.ready = False
+
+    def update_task_duration(self):
+        for task in self.tasks:
+            if task.status == 'DONE':
+                continue
+
+            elif task.status == 'PENDING':
+                if self.all_skills_assigned(task) and self.all_robots_at_task(task, threshold=0.01) and task.ready:
+                    previous_status = task.status
+                    task.start()
+                    task.decrement_duration()
+                    self.log_into_full_horizon_schedule(task, previous_status)
+
+            elif task.status == 'IN_PROGRESS':
+                    task.decrement_duration()
+                    # If decrementing just switched it to DONE, log the transition:
+                    if task.status == 'DONE':
+                        self.log_into_full_horizon_schedule(task, 'IN_PROGRESS')
 
     def finish_simulation(self):
         self.sim_done = True
@@ -183,8 +185,10 @@ class Simulation:
                     second_highest_reward_task_id = self.second_highest_rewards_idx[robot.robot_id]
                     robot.position_towards_task(self.tasks[second_highest_reward_task_id])
 
-        for task in self.tasks:
-            self.update_task(task)
+        self.update_task_status()
+        self.update_task_duration()
+        # Task durations hvae been updated, checking task_status again
+        self.update_task_status()
 
         for robot in self.robots:
             robot.check_task_status()
@@ -193,6 +197,7 @@ class Simulation:
 
         if idle_robots:
             if self.scheduler_name == "dbgm":
+
                 predicted_reward, instantaneous_assignment = self.scheduler.assign_tasks_to_robots(self)
 
                 if self.move_while_waiting:
@@ -247,16 +252,17 @@ if __name__ == '__main__':
     precedence_constraints = config["precedence_constraints"]
 
 
-    problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    #problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
     #problem_instance = generate_random_data_with_precedence(n_tasks, n_robots, n_skills, n_precedence)
     #problem_instance = generate_biased_homogeneous_data()
     #problem_instance = generate_static_data()
     #problem_instance = generate_heterogeneous_no_coalition_data(n_tasks=10)
     #problem_instance = generate_idle_data()
+    problem_instance = json.load(open("/home/jakob/thesis/benchmarking/precedence_6t2r2s2p/problem_instances/problem_instance_000044.json", "r"))
 
     sim = Simulation(problem_instance, 
                     scheduler_name=args.scheduler, 
-                    checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/researching_precedence/NEW_GATN11_RANDOM/best_checkpoint.pt",
+                    checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/researching_precedence/NEW_GATN11_RANDOM_FINETUNE_PRECEDENCE/best_checkpoint.pt",
                     debug=True,
                     move_while_waiting=args.move_while_waiting)
 
@@ -274,4 +280,4 @@ if __name__ == '__main__':
     print(sim.robot_schedules)
     rolled_out_schedule = Full_Horizon_Schedule(sim.makespan, sim.robot_schedules, n_tasks)
     print(rolled_out_schedule)
-    plot_gantt_and_trajectories(f"{sim.scheduler_name}: MS, {sim.makespan}, \n nt: {n_tasks}, nr: {n_robots}, sn: {n_skills}, seed: {config['random_seed']}", rolled_out_schedule,problem_instance['T_t'], problem_instance['task_locations'],problem_instance['T_e'], problem_instance['R'], problem_instance['Q'])
+    plot_gantt_and_trajectories(f"{sim.scheduler_name}: MS, {sim.makespan}, \n nt: {n_tasks}, nr: {n_robots}, sn: {n_skills}, seed: {config['random_seed']}", rolled_out_schedule,problem_instance['T_t'], problem_instance['task_locations'],problem_instance['T_e'], problem_instance['R'], problem_instance['Q'], problem_instance['precedence_constraints'])
