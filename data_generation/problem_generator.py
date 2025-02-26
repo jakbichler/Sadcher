@@ -411,7 +411,6 @@ def generate_idle_data() -> ProblemData:
     task_locations_full = np.vstack([rotated_locations[0], task_locations_tasks_perm, rotated_locations[-1]])
     T_t = np.linalg.norm(task_locations_full[:, None] - task_locations_full[None, :], axis=2)
 
-    precedence_constraints = np.array([])
 
     return ProblemData(
         Q=Q,
@@ -419,5 +418,5 @@ def generate_idle_data() -> ProblemData:
         T_e=T_e_full,
         T_t=T_t,
         task_locations=task_locations_full,
-        precedence_constraints=precedence_constraints
+        precedence_constraints=None
     )

@@ -117,7 +117,7 @@ if __name__ == "__main__":
                     sim = Simulation(
                         problem_instance, 
                         scheduler, 
-                        checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/researching_waiting/RANDOM11/best_checkpoint.pt",
+                        checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/researching_precedence/NEW_GATN11_RANDOM_FINETUNE_PRECEDENCE/best_checkpoint.pt",
                         debug=False,
                         move_while_waiting=args.move_while_waiting
                     )
@@ -131,6 +131,7 @@ if __name__ == "__main__":
                     if sim.timestep > worst_case_makespan:
                         sim.makespan = worst_case_makespan  # No feasible solution found
                         infeasible_count[scheduler] += 1
+                        print(f"Scheduler {scheduler} did not find a feasible solution at {iteration}")
                         feasible = False
                         break
 

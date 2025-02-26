@@ -23,7 +23,6 @@ class GraphAttentionHead(nn.Module):
 
         # Add self-loops
         self_loops = torch.eye(N, device=device).expand(B, N, N)
-        
         adj = (adj + self_loops).clamp(max=1)
 
         # Linear transformation: W_e * h

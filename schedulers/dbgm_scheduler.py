@@ -15,6 +15,7 @@ class DBGMScheduler:
                                               embed_dim=128, ff_dim=256, n_transformer_heads=4, 
                                               n_transformer_layers= 4, n_gatn_heads=4, n_gatn_layers=2).to(self.device)
         self.trained_model.load_state_dict(torch.load(checkpoint_path, weights_only=True))
+        self.trained_model.eval()
         self.debug = debugging
         self.duration_normalization = duration_normalization
         self.location_normalization = location_normalization
@@ -39,15 +40,15 @@ class DBGMScheduler:
         robot_features = np.array([robot.feature_vector(self.location_normalization, self.duration_normalization) for robot in sim.robots])
         robot_features = torch.tensor(robot_features, dtype= torch.float32).unsqueeze(0).to(self.device)
         
-        predicted_reward_raw = self.trained_model(robot_features, task_features, sim.task_adjacency.to(self.device)).squeeze(0) # remove batch dim
+        with torch.no_grad():
+            predicted_reward_raw = self.trained_model(robot_features, task_features, sim.task_adjacency.to(self.device)).squeeze(0) # remove batch dim
 
-        # Clamp negative values, since BGM will not work with only negative values
         predicted_reward = torch.clamp(predicted_reward_raw, min=1e-6)
+        predicted_reward[:,-1] = torch.clamp(predicted_reward[:,-1], max=4.0)
 
         # Add  negative rewards for for the start and end task --> not to be selected, will be handled by the scheduler
         reward_start_end = torch.ones(n_robots, 1).to(self.device) * (-1000)
         predicted_reward = torch.cat((reward_start_end, predicted_reward, reward_start_end), dim=1)
-
 
         #Only for debugging
         predicted_reward_raw = torch.cat((reward_start_end, predicted_reward_raw, reward_start_end), dim=1)

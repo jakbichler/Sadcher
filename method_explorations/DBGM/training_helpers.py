@@ -160,7 +160,7 @@ def get_expert_reward(schedule, decision_time, travel_times, gamma = 0.99, immed
     travel_times = np.array(travel_times)
     
     TIME_EPSILON = 0.01
-    IMMEDIATE_IDLE_REWARD = 10
+    IMMEDIATE_IDLE_REWARD = 5
 
     def is_idle(robot_id, time):
         for t_id, task_start, task_end in schedule[robot_id]:
