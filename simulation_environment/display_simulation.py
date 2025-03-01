@@ -2,11 +2,13 @@ import os
 import shutil
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle  # add at the top with your other import
 import matplotlib.animation as animation
 from matplotlib.table import Table
 from matplotlib.patches import Wedge
 from matplotlib.widgets import Button
 import imageio
+
 
 
 def visualize(sim):
@@ -77,6 +79,29 @@ def draw_pie(ax, x, y, sizes, radius, colors):
         start_angle = end_angle
 
 
+def draw_robot_skills_squares(ax, robot, colors, square_size=2.5):
+    """
+    Draws a fixed number of vertically stacked squares for each robot.
+    Each square corresponds to a possible skill. If the skill is present (truthy),
+    the square is filled with the corresponding color; if not, it is transparent.
+    """
+
+    n_skills = len(robot.capabilities)
+    bottom = robot.location[1] + 2
+    left = robot.location[0] - square_size / 2
+    for skill_index, skill in enumerate(robot.capabilities):
+        facecolor = colors[int(skill_index)] if skill else "none"
+        rect = Rectangle(
+            (left, bottom + skill_index * (square_size)),
+            square_size, square_size,
+            facecolor=facecolor, edgecolor="black", lw=1.0
+        )
+        ax.add_patch(rect)
+    ax.scatter(robot.location[0], robot.location[1], color = 'black', s=50)
+    ax.text(robot.location[0] - 2.0, robot.location[1], f"{robot.robot_id}",
+            fontsize=10, color="black", ha='center', va='center')
+
+
 def update_plot(sim, ax, fig, colors, n_skills):
     ax.clear()
 
@@ -87,9 +112,8 @@ def update_plot(sim, ax, fig, colors, n_skills):
             draw_pie(ax, task.location[0], task.location[1], skill_sizes, task.remaining_duration / 50, colors)
             ax.text(task.location[0], task.location[1], f"Task {task.task_id}", fontsize=10, ha='center')
 
-    for robot_idx, robot in enumerate(sim.robots):
-        ax.scatter(robot.location[0], robot.location[1], marker='s', c='black', label='Robots' if robot_idx == 0 else None)
-        ax.text(robot.location[0] + 1, robot.location[1] + 1, f"{robot_idx}", fontsize=10, color="black", ha='center')
+    for robot in sim.robots:
+        draw_robot_skills_squares(ax, robot, colors)
 
     ax.scatter(sim.tasks[0].location[0], sim.tasks[0].location[1], color='green', s=150, marker='x', label="Start (Task 0)")
     ax.text(sim.tasks[0].location[0] + 6, sim.tasks[0].location[1] - 1, "Start", fontsize=15, ha='center')
