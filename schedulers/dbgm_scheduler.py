@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from schedulers.bigraph_matching import solve_bipartite_matching, filter_redundant_assignments, filter_overassignments
-from imitation_learning.transformer_models import SchedulerNetwork
+from imitation_learning.attention_models import SchedulerNetwork
 from helper_functions.schedules import Instantaneous_Schedule
 
 class DBGMScheduler:
@@ -17,7 +17,7 @@ class DBGMScheduler:
         self.location_normalization = location_normalization
 
 
-    def assign_tasks_to_robots(self, sim):
+    def calculate_robot_assignment(self, sim):
         n_robots = len(sim.robots)
         robot_assignments = {}
         # Special case for the last task

@@ -8,7 +8,7 @@ class GreedyInstantaneousScheduler:
     def __init__(self):
         pass
 
-    def assign_tasks_to_robots(self, sim):
+    def calculate_robot_assignment(self, sim):
         """
         Returns an Instantaneous_Schedule indicating which idle robots should go to which tasks next.
         The logic here is based on assigning robots to tasks, where they can reduce the numbe of 

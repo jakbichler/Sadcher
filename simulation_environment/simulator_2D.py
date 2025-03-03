@@ -1,43 +1,37 @@
 import argparse
-import json
 import numpy as np
 import sys
-import yaml
-sys.path.append('..')
-from icecream import ic
 import torch
+import yaml
 
+sys.path.append('..')
 from data_generation.problem_generator import ProblemData, generate_random_data, generate_static_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data, generate_idle_data, generate_random_data_with_precedence
 from helper_functions.schedules import Full_Horizon_Schedule
-from simulation_environment.task_robot_classes import Robot, Task
 from schedulers.greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
 from schedulers.random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
 from schedulers.dbgm_scheduler import DBGMScheduler
 from simulation_environment.display_simulation import visualize, run_video_mode
+from simulation_environment.task_robot_classes import Robot, Task
 from visualizations.solution_visualization import plot_gantt_chart, plot_robot_trajectories, plot_gantt_and_trajectories
 
 
 class Simulation:
     def __init__(self, problem_instance, scheduler_name=None, checkpoint_path = None, debug = False, move_while_waiting = False):
         self.timestep = 0
-        self.precedence_constraints = problem_instance['precedence_constraints']
+        self.sim_done = False
+        self.makespan = -1  # Will be set when simulation is done
+        self.debugging = debug
+        self.move_while_waiting = move_while_waiting
+        self.precedence_constraints: list = problem_instance['precedence_constraints']
         self.robots: list[Robot] = self.create_robots(problem_instance)
         self.tasks: list[Task] = self.create_tasks(problem_instance)
-        self.n_tasks = len(self.tasks)
-        self.last_task_id = self.n_tasks - 1
-        self.idle_task_id = self.n_tasks - 2
-        self.n_real_tasks = self.n_tasks - 3 # Excluding start, exit and idle task
-        self.update_task_status()
+        self.update_task_status() # Initialize task status
         self.task_adjacency = self.create_task_adjacency_matrix()
+        self.robot_schedules = {robot.robot_id: [] for robot in self.robots}
         self.duration_normalization = np.max(problem_instance['T_e'])
         self.location_normalization = np.max(problem_instance['task_locations'])
-        self.debugging = debug
-        self.sim_done = False
-        self.makespan = -1 
-        self.robot_schedules = {robot.robot_id: [] for robot in self.robots}
         self.scheduler_name = scheduler_name
         self.scheduler = self.create_scheduler(scheduler_name, checkpoint_path)
-        self.move_while_waiting = move_while_waiting
 
     
     def create_task_adjacency_matrix(self):
@@ -51,7 +45,6 @@ class Simulation:
         return task_adjacency
 
     def create_robots(self, problem_instance):
-        # For example, Q is a list of robot capabilities
         robot_capabilities = problem_instance['Q']
         start_location = problem_instance['task_locations'][0]
         return [Robot(robot_id = idx, location=start_location, capabilities=cap) 
@@ -62,14 +55,18 @@ class Simulation:
         durations = problem_instance['T_e']
         requirements = problem_instance['R']
         
-        
+        # Insert artificial IDLE task 
         locations = np.insert(locations, -1, np.zeros_like(locations[0]), axis=0)
         durations = np.insert(durations, -1, 0, axis=0)
         requirements = np.insert(requirements, -1, np.zeros_like(requirements[0]), axis=0)
         
         tasks = [Task(idx, loc, dur, req) for idx, (loc, dur, req) in enumerate(zip(locations, durations, requirements))]
-        
         tasks[-2].status = 'DONE' # Idle task
+
+        self.n_tasks = len(tasks)
+        self.last_task_id = self.n_tasks - 1
+        self.idle_task_id = self.n_tasks - 2
+        self.n_real_tasks = self.n_tasks - 3 # Excluding start, exit and idle task
 
         return tasks
 
@@ -85,7 +82,6 @@ class Simulation:
         
     def update_task_status(self):
         for task in self.tasks:
-            # Check if task is ready to start based on precedence constraints for this timestep
             if task.task_id in [0, self.idle_task_id] or task.predecessors_completed(self):
                 task.ready = True
             else:
@@ -114,7 +110,7 @@ class Simulation:
 
             elif task.status == 'IN_PROGRESS':
                     task.decrement_duration()
-                    # If decrementing just switched it to DONE, log the transition:
+                    # If decrementing just switched it to DONE, log the transition for final full horizon schedule:
                     if task.status == 'DONE':
                         self.log_into_full_horizon_schedule(task, 'IN_PROGRESS')
 
@@ -127,7 +123,6 @@ class Simulation:
         Returns True if:
         1) The logical OR of all assigned robots' capabilities covers all task requirements.
         2) Every assigned robot is within 1 unit of the task location.
-        Otherwise, returns False.
         """
         assigned_robots = [r for r in self.robots if r.current_task == task]
 
@@ -138,6 +133,7 @@ class Simulation:
             combined_capabilities = np.logical_or(combined_capabilities, robot_cap)
 
         required_skills = np.array(task.requirements, dtype=bool)
+        
         # Check if the combined team covers all required skills
         return np.all(combined_capabilities[required_skills])
 
@@ -161,12 +157,12 @@ class Simulation:
         return True    
 
     def log_into_full_horizon_schedule(self, task, previous_status):
-        # Check for transition from PENDING -> IN_PROGRESS: log start time
+        # Check for transition from PENDING -> IN_PROGRESS: log start time for all assigned robots
         if previous_status == 'PENDING' and task.status == 'IN_PROGRESS':
             for r in [rb for rb in self.robots if rb.current_task == task]:
                 self.robot_schedules[r.robot_id].append((task.task_id, self.timestep, None))
 
-        # Check for transition from IN_PROGRESS -> DONE: log end time
+        # Check for transition from IN_PROGRESS -> DONE: log end time for all assigned robots
         if previous_status == 'IN_PROGRESS' and task.status == 'DONE':
             for r in [rb for rb in self.robots if rb.current_task == task]:
                 tid, start, _ = self.robot_schedules[r.robot_id][-1]
@@ -175,13 +171,14 @@ class Simulation:
 
     def step(self):
         """Advance the simulation by one timestep, moving robots and updating tasks."""
-
         for robot in self.robots:   
             if robot.current_task:
                 if robot.current_task.task_id is not self.idle_task_id:
+                    # Move to assigned task location
                     robot.update_position_on_task()
                 
                 elif robot.current_task.task_id is self.idle_task_id and self.move_while_waiting and self.scheduler_name == "dbgm":
+                    # Premove robots towards second highest reward task (IDLE has no location -> second highest is most likely next task)
                     second_highest_reward_task_id = self.second_highest_rewards_idx[robot.robot_id]
                     robot.position_towards_task(self.tasks[second_highest_reward_task_id])
 
@@ -193,29 +190,22 @@ class Simulation:
         for robot in self.robots:
             robot.check_task_status()
 
-        idle_robots = [r for r in self.robots if not r.current_task or r.current_task.status == 'DONE']
+        available_robots = [robot for robot in self.robots if robot.available]
 
-        if idle_robots:
+        if available_robots:
             if self.scheduler_name == "dbgm":
-
-                predicted_reward, instantaneous_assignment = self.scheduler.assign_tasks_to_robots(self)
+                predicted_reward, instantaneous_assignment = self.scheduler.calculate_robot_assignment(self)
 
                 if self.move_while_waiting:
                     self.second_highest_rewards, self.second_highest_rewards_idx = self.extract_second_highest_rewards(predicted_reward)
             else:
-                instantaneous_assignment = self.scheduler.assign_tasks_to_robots(self)
+                instantaneous_assignment = self.scheduler.calculate_robot_assignment(self)
 
             self.assign_tasks_to_robots(instantaneous_assignment, self.robots)
 
         self.timestep += 1
 
     def assign_tasks_to_robots(self, instantaneous_schedule, robots):
-        """
-        Example scheduling logic:
-        - Check for any idle robots
-        - Assign them tasks if any are PENDING
-        This could be replaced by a call to your NN or heuristic.
-        """
         for robot in robots:
             task_id = instantaneous_schedule.robot_assignments.get(robot.robot_id)
             if task_id is not None:
@@ -229,7 +219,6 @@ class Simulation:
         second_highest_rewards = top2_rewards[:, 1].detach().cpu().numpy()
         second_highest_rewards_idx = top2_rewards_idx[:, 1].detach().cpu().numpy()
         return second_highest_rewards, second_highest_rewards_idx
-
 
 
 if __name__ == '__main__':
@@ -270,14 +259,13 @@ if __name__ == '__main__':
         # Step simulation, saving frames each time, then generate .mp4
         run_video_mode(sim)
     elif args.visualize:
-        # The normal interactive mode
+        # Interactive mode
         visualize(sim)
     else:
-        # Just run until done with no visualization
+        # Run simulation until completion
         while not sim.sim_done:
             sim.step()
 
-    print(sim.robot_schedules)
     rolled_out_schedule = Full_Horizon_Schedule(sim.makespan, sim.robot_schedules, n_tasks)
     print(rolled_out_schedule)
-    plot_gantt_and_trajectories(f"{sim.scheduler_name}: MS, {sim.makespan}, \n nt: {n_tasks}, nr: {n_robots}, sn: {n_skills}, seed: {config['random_seed']}", rolled_out_schedule,problem_instance['T_t'], problem_instance['task_locations'],problem_instance['T_e'], problem_instance['R'], problem_instance['Q'], problem_instance['precedence_constraints'])
+    plot_gantt_and_trajectories(f"{sim.scheduler_name}: MS, {sim.makespan}, \n nt: {n_tasks}, nr: {n_robots}, sn: {n_skills}, seed: {config['random_seed']}", rolled_out_schedule, problem_instance)

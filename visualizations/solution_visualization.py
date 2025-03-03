@@ -181,10 +181,15 @@ def add_precedence_constraints_text(fig, precedence_constraints):
     ax_text.text(0.5, 0.5, precedence_text, ha='center', va='center', fontsize=10, wrap=True)
 
 
-def plot_gantt_and_trajectories(title, schedule, travel_times, task_locations, T_execution, R, Q, precedence_constraints = None):
-    fig, axs = plt.subplots(2, 1, figsize=(12, 12), gridspec_kw={'height_ratios': [1, 5]})
+def plot_gantt_and_trajectories(title, schedule, problem_instance):
+    travel_times = problem_instance["T_t"]
+    task_locations = problem_instance["task_locations"]
+    T_execution = problem_instance["T_e"]
+    R = problem_instance["R"]
+    Q = problem_instance["Q"]
+    precedence_constraints = problem_instance["precedence_constraints"]
 
-    # Use the modified functions with specific axes
+    fig, axs = plt.subplots(2, 1, figsize=(12, 12), gridspec_kw={'height_ratios': [1, 5]})
     plot_gantt_chart(title, schedule, travel_times, ax=axs[0])
     plot_robot_trajectories(task_locations, schedule.robot_schedules, T_execution, R, ax=axs[1], Q=Q)
 

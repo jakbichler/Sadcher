@@ -9,7 +9,7 @@ from tqdm import tqdm
 from icecream import ic 
 from dataset import LazyLoadedSchedulingDataset
 from training_helpers import load_dataset, find_decision_points
-from transformer_models import SchedulerNetwork
+from attention_models import SchedulerNetwork
 
 class LVWS_Loss(nn.Module):
     def __init__(self, weight_factor):

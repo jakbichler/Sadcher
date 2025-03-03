@@ -117,7 +117,7 @@ if __name__ == "__main__":
                     sim = Simulation(
                         problem_instance, 
                         scheduler, 
-                        checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/researching_precedence/NEW_GATN11_RANDOM_FINETUNE_PRECEDENCE/best_checkpoint.pt",
+                        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/researching_precedence/NEW_GATN11_RANDOM_FINETUNE_PRECEDENCE/best_checkpoint.pt",
                         debug=False,
                         move_while_waiting=args.move_while_waiting
                     )

@@ -7,7 +7,7 @@ class RandomBipartiteMatchingScheduler:
     def __init__(self):
         pass
 
-    def assign_tasks_to_robots(self, sim):
+    def calculate_robot_assignment(self, sim):
         n_robots = len(sim.robots)
         n_tasks = len(sim.tasks)
         robot_assignments = {}
