@@ -253,16 +253,16 @@ if __name__ == '__main__':
 
 
     #problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
-    #problem_instance = generate_random_data_with_precedence(n_tasks, n_robots, n_skills, n_precedence)
+    problem_instance = generate_random_data_with_precedence(n_tasks, n_robots, n_skills, n_precedence)
     #problem_instance = generate_biased_homogeneous_data()
     #problem_instance = generate_static_data()
     #problem_instance = generate_heterogeneous_no_coalition_data(n_tasks=10)
     #problem_instance = generate_idle_data()
-    problem_instance = json.load(open("/home/jakob/thesis/benchmarking/precedence_6t2r2s2p/problem_instances/problem_instance_000044.json", "r"))
+    #problem_instance = json.load(open("/home/jakob/thesis/benchmarking/precedence_6t2r2s2p/problem_instances/problem_instance_000044.json", "r"))
 
     sim = Simulation(problem_instance, 
                     scheduler_name=args.scheduler, 
-                    checkpoint_path="/home/jakob/thesis/method_explorations/DBGM/checkpoints/researching_precedence/NEW_GATN11_RANDOM_FINETUNE_PRECEDENCE/best_checkpoint.pt",
+                    checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/researching_precedence/NEW_GATN11_RANDOM_FINETUNE_PRECEDENCE/best_checkpoint.pt",
                     debug=True,
                     move_while_waiting=args.move_while_waiting)
 

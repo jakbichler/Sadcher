@@ -1,12 +1,8 @@
-from collections import defaultdict
 import numpy as np
 import torch
-from tqdm import tqdm
 from schedulers.bigraph_matching import solve_bipartite_matching, filter_redundant_assignments, filter_overassignments
-from method_explorations.DBGM.transformer_models import SchedulerNetwork
+from imitation_learning.transformer_models import SchedulerNetwork
 from helper_functions.schedules import Instantaneous_Schedule
-
-
 
 class DBGMScheduler:
     def __init__(self, debugging, checkpoint_path, duration_normalization, location_normalization):
