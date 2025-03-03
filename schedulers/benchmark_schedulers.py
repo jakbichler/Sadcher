@@ -1,21 +1,14 @@
 import argparse
 import sys
-sys.path.append('..') 
 import time 
+import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-import numpy as np
 
+sys.path.append('..') 
 from baselines.aswale_23.MILP_solver import milp_scheduling
-from dbgm_scheduler import DBGMScheduler
-from greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
-from random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
 from simulation_environment.simulator_2D import Simulation
-from data_generation.problem_generator import (
-    ProblemData, generate_random_data, generate_simple_data,
-    generate_simple_homogeneous_data, generate_biased_homogeneous_data,
-    generate_heterogeneous_no_coalition_data, generate_idle_data, generate_random_data_with_precedence
-)
+from data_generation.problem_generator import generate_random_data, generate_idle_data, generate_random_data_with_precedence
 
 
 def plot_violin(ax, data, labels, ylabel, title):
@@ -62,7 +55,40 @@ def compare_makespans_1v1(ax, makespans1, makespans2, scheduler1, scheduler2):
     ax.set_ylabel(f"{scheduler2} Makespan")
 
 
+def print_final_results(feasible_makespans, infeasible_count, computation_times):
+    # Averages computed only over feasible samples
+    avg_makespans = {s: np.mean(feasible_makespans[s]) if feasible_makespans[s] else float('nan')
+                    for s in scheduler_names}
+    avg_computation_times = {s: np.mean(computation_times[s]) for s in scheduler_names}
+    print(f"\nSummary of Results after {args.n_iterations} runs:")
+    for scheduler in scheduler_names:
+        print(f"{scheduler.capitalize()}:")
+        print(f"  Average Makespan (feasible only): {avg_makespans[scheduler]:.2f}")
+        print(f"  Average Computation Time: {avg_computation_times[scheduler]:.4f} seconds")
+        print(f"  Infeasible Count: {infeasible_count[scheduler]}\n")
+
+
+def create_simulation(problem_instance, scheduler, checkpoint_path=None, move_while_waiting=False):
+    if scheduler == "dbgm":
+        return Simulation(
+            problem_instance, 
+            scheduler, 
+            checkpoint_path=checkpoint_path,
+            debug=False,
+            move_while_waiting=move_while_waiting
+        )
+    else:
+        return Simulation(problem_instance, scheduler, debug=False)
+
+
 if __name__ == "__main__":
+    n_tasks = 6
+    n_robots = 2 
+    n_skills = 2
+    n_precedence = 2
+    np.random.seed(1)
+    checkpoint_path = "/home/jakob/thesis/imitation_learning/checkpoints/researching_precedence/NEW_GATN11_RANDOM_FINETUNE_PRECEDENCE/best_checkpoint.pt"
+
     arg_parser = argparse.ArgumentParser()
     arg_parser.add_argument("--including_milp", default=False, action="store_true",
                             help="Include MILP in the comparison")
@@ -71,11 +97,6 @@ if __name__ == "__main__":
     arg_parser.add_argument("--move_while_waiting", default=False, action="store_true",
                             help="Allow robots to move while waiting for tasks")
     args = arg_parser.parse_args()
-    n_tasks = 6
-    n_robots = 2 
-    n_skills = 2
-    n_precedence = 2
-    np.random.seed(1)
 
     if args.including_milp:
         scheduler_names = ["milp", "greedy", "dbgm", "random_bipartite"]
@@ -83,7 +104,6 @@ if __name__ == "__main__":
         scheduler_names = ["greedy", "dbgm", "random_bipartite"]
 
     makespans = {scheduler: [] for scheduler in scheduler_names}
-    # Record only feasible makespans for averages/violin plots
     feasible_makespans = {scheduler: [] for scheduler in scheduler_names}
     computation_times = {scheduler: [] for scheduler in scheduler_names}
     infeasible_count = {scheduler: 0 for scheduler in scheduler_names}
@@ -92,11 +112,6 @@ if __name__ == "__main__":
         # Generate a problem instance
         #problem_instance = generate_random_data(n_tasks, n_robots, n_skills, [])
         problem_instance = generate_random_data_with_precedence(n_tasks, n_robots, n_skills, n_precedence)
-        #problem_instance = generate_idle_data()
-        #problem_instance = generate_simple_data()
-        #problem_instance = generate_simple_homogeneous_data(n_tasks=n_tasks, n_robots=n_robots)
-        #problem_instance = generate_biased_homogeneous_data()
-        #problem_instance = generate_heterogeneous_no_coalition_data(n_tasks)
 
         worst_case_makespan = np.sum(problem_instance['T_e']) + \
             np.sum([np.max(problem_instance['T_t'][task]) for task in range(n_tasks + 1)])
@@ -104,26 +119,14 @@ if __name__ == "__main__":
         for scheduler in scheduler_names:
             if scheduler == "milp":
                 start_time = time.time()
-                optimal_schedule = milp_scheduling(problem_instance, n_threads=8,
+                optimal_schedule = milp_scheduling(problem_instance, n_threads=6,
                                                    cutoff_time_seconds=10 * 60) 
-                comp_time = time.time() - start_time
-                computation_times[scheduler].append(comp_time)
-                ms = optimal_schedule.makespan
-                makespans[scheduler].append(ms)
-                # Assume MILP always returns a feasible solution
-                feasible_makespans[scheduler].append(ms)
+                computation_times[scheduler].append(time.time() - start_time)
+                makespans[scheduler].append(optimal_schedule.makespan)
+                feasible_makespans[scheduler].append(optimal_schedule.makespan)
             else:
-                if scheduler == "dbgm":
-                    sim = Simulation(
-                        problem_instance, 
-                        scheduler, 
-                        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/researching_precedence/NEW_GATN11_RANDOM_FINETUNE_PRECEDENCE/best_checkpoint.pt",
-                        debug=False,
-                        move_while_waiting=args.move_while_waiting
-                    )
-                else:
-                    sim = Simulation(problem_instance, scheduler, debug=False)
-
+                # Non-MILP olutins need simulation to roll out schedule
+                sim = create_simulation(problem_instance, scheduler, checkpoint_path, move_while_waiting=args.move_while_waiting)
                 start_time = time.time()
                 feasible = True
                 while not sim.sim_done:
@@ -135,26 +138,15 @@ if __name__ == "__main__":
                         feasible = False
                         break
 
-                comp_time = time.time() - start_time
-                computation_times[scheduler].append(comp_time)
-                ms = sim.makespan
-                makespans[scheduler].append(ms)
+                computation_times[scheduler].append(time.time() - start_time)
+                makespans[scheduler].append(sim.makespan)
                 if feasible:
-                    feasible_makespans[scheduler].append(ms)
+                    feasible_makespans[scheduler].append(sim.makespan)
         
-        results = sorted((makespans[scheduler][-1], scheduler) for scheduler in scheduler_names)
-        print(results)
+        iteration_results = sorted((makespans[scheduler][-1], scheduler) for scheduler in scheduler_names)
+        print(iteration_results)
 
-    # Averages computed only over feasible samples
-    avg_makespans = {s: np.mean(feasible_makespans[s]) if feasible_makespans[s] else float('nan')
-                     for s in scheduler_names}
-    avg_computation_times = {s: np.mean(computation_times[s]) for s in scheduler_names}
-    print(f"\nSummary of Results after {args.n_iterations} runs:")
-    for scheduler in scheduler_names:
-        print(f"{scheduler.capitalize()}:")
-        print(f"  Average Makespan (feasible only): {avg_makespans[scheduler]:.2f}")
-        print(f"  Average Computation Time: {avg_computation_times[scheduler]:.4f} seconds")
-        print(f"  Infeasible Count: {infeasible_count[scheduler]}\n")
+    print_final_results(feasible_makespans, infeasible_count, computation_times)
 
     fig, axs = plt.subplots(2, 2, figsize=(12, 10))  
 

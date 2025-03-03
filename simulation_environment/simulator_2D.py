@@ -5,14 +5,14 @@ import torch
 import yaml
 
 sys.path.append('..')
-from data_generation.problem_generator import ProblemData, generate_random_data, generate_static_data, generate_biased_homogeneous_data, generate_heterogeneous_no_coalition_data, generate_idle_data, generate_random_data_with_precedence
+from data_generation.problem_generator import generate_random_data, generate_random_data_with_precedence
 from helper_functions.schedules import Full_Horizon_Schedule
 from schedulers.greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
 from schedulers.random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
 from schedulers.dbgm_scheduler import DBGMScheduler
 from simulation_environment.display_simulation import visualize, run_video_mode
 from simulation_environment.task_robot_classes import Robot, Task
-from visualizations.solution_visualization import plot_gantt_chart, plot_robot_trajectories, plot_gantt_and_trajectories
+from visualizations.solution_visualization import plot_gantt_and_trajectories
 
 
 class Simulation:
@@ -243,10 +243,6 @@ if __name__ == '__main__':
 
     #problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
     problem_instance = generate_random_data_with_precedence(n_tasks, n_robots, n_skills, n_precedence)
-    #problem_instance = generate_biased_homogeneous_data()
-    #problem_instance = generate_static_data()
-    #problem_instance = generate_heterogeneous_no_coalition_data(n_tasks=10)
-    #problem_instance = generate_idle_data()
     #problem_instance = json.load(open("/home/jakob/thesis/benchmarking/precedence_6t2r2s2p/problem_instances/problem_instance_000044.json", "r"))
 
     sim = Simulation(problem_instance, 

@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-from schedulers.bigraph_matching import solve_bipartite_matching, filter_redundant_assignments, filter_overassignments
+from schedulers.bipartite_matching import solve_bipartite_matching, filter_redundant_assignments, filter_overassignments
 from imitation_learning.attention_models import SchedulerNetwork
 from helper_functions.schedules import Instantaneous_Schedule
 
@@ -21,13 +21,14 @@ class DBGMScheduler:
         n_robots = len(sim.robots)
         robot_assignments = {}
         # Special case for the last task
-        idle_robots = [r for r in sim.robots if r.current_task is None or r.current_task.status == 'DONE']
-        pending_tasks = [t for t in sim.tasks if t.status == 'PENDING']
-        # Check if all tasks are done -> send all robots to the exit task
-        if len(pending_tasks) == 1:
-            for robot in idle_robots:
-                robot_assignments[robot.robot_id] = pending_tasks[0].task_id
-                robot.current_task = pending_tasks[0]
+        available_robots = [robot for robot in sim.robots if robot.available]
+        incomplete_tasks = [task for task in sim.tasks if task.incomplete and task.status == 'PENDING']
+
+        # Check if all normal tasks are done -> send all robots to the exit task
+        if len(incomplete_tasks) == 1: # Only end task incomplete
+            for robot in available_robots:
+                robot_assignments[robot.robot_id] = incomplete_tasks[0].task_id
+                robot.current_task = incomplete_tasks[0]
             return torch.zeros((n_robots, len(sim.tasks))), Instantaneous_Schedule(robot_assignments)
 
         task_features = np.array([task.feature_vector(self.location_normalization, self.duration_normalization) for task in sim.tasks[1:-2]])
@@ -67,7 +68,6 @@ class DBGMScheduler:
             print("##############################################\n\n")
         
         robot_assignments = {robot: task for (robot, task), val in filtered_solution.items() if val == 1}
-        
 
         return predicted_reward, Instantaneous_Schedule(robot_assignments)
     

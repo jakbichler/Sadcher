@@ -1,5 +1,5 @@
 import torch
-from schedulers.bigraph_matching import solve_bipartite_matching, filter_overassignments, filter_redundant_assignments
+from schedulers.bipartite_matching import solve_bipartite_matching, filter_overassignments, filter_redundant_assignments
 from helper_functions.schedules import Instantaneous_Schedule
 
 
