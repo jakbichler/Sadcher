@@ -177,8 +177,7 @@ def run_video_mode(sim):
 
     fig, ax = plt.subplots(figsize=(8, 8))
     while not sim.sim_done:
-        for _ in range(5):
-            sim.step()
+        sim.step()
         update_plot(sim, ax, fig, colors, n_skills)
         plt.show(block=False)
         fig.canvas.draw()

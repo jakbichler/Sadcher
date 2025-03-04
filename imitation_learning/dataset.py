@@ -1,5 +1,7 @@
 import os
 import json
+import sys 
+sys.path.append('..')
 import numpy as np
 from tqdm import tqdm
 import torch
@@ -10,7 +12,7 @@ from training_helpers import (
     get_expert_reward, 
     find_decision_points
 )
-from helper_functions.schedules import Full_Horizon_Schedule  # Ensure this import is correct
+from helper_functions.schedules import Full_Horizon_Schedule
 
 class LazyLoadedSchedulingDataset(Dataset):
     def __init__(self, problem_dir, solution_dir, gamma=0.99, immediate_reward=10):
@@ -34,7 +36,6 @@ class LazyLoadedSchedulingDataset(Dataset):
         # Precompute decision points for each problem-solution pair
         self.data_indices = []  # (problem_idx, decision_time) pairs
         for i in tqdm(range(len(self.problem_files)), desc="Indexing Dataset"):
-            problem_path = os.path.join(problem_dir, self.problem_files[i])
             solution_path = os.path.join(solution_dir, self.solution_files[i])
 
             with open(solution_path, "r") as f:

@@ -26,33 +26,30 @@ def plot_violin(ax, data, labels, ylabel, title):
 
 def compare_makespans_1v1(ax, makespans1, makespans2, scheduler1, scheduler2):
     makespans1 = np.array(makespans1)
-    makespans2 = np.array(makespans2)    
+    makespans2 = np.array(makespans2)
+    
     min_value = min(min(makespans1), min(makespans2))
     max_value = max(max(makespans1), max(makespans2))
 
     # Compute deviations from parity line
-    delta = makespans2 - makespans1
-    scheduler_1_wins = delta[delta > 0]
-    scheduler_2_wins = delta[delta < 0]
+    delta = makespans2 - makespans1  
 
-    # Compute 90th percentiles separately
-    scheduler_1_wins_90p = np.percentile(scheduler_1_wins, 90) if len(scheduler_1_wins) > 0 else 0
-    scheduler_2_wins_90p = np.percentile(np.abs(scheduler_2_wins), 90) if len(scheduler_2_wins) > 0 else 0
+    # Fill regions
+    ax.fill_between([min_value, max_value], [min_value, max_value], max_value, color="red", alpha=0.15, label=f"{scheduler1} Wins")
+    ax.fill_between([min_value, max_value], min_value, [min_value, max_value], color="green", alpha=0.15
+                    , label=f"{scheduler2} Wins")
 
+    # Scatter plot
+    ax.scatter(makespans1, makespans2, color="black", alpha=0.7, edgecolor="k")
+
+    # Parity line
     x_vals = np.linspace(min_value, max_value, 100)
-    parity_line = x_vals
-    upper_bound = x_vals + scheduler_1_wins_90p
-    lower_bound = x_vals - scheduler_2_wins_90p
+    ax.plot(x_vals, x_vals, color="black", linestyle="--", label="Parity Line")
 
-    ax.scatter(makespans1, makespans2, alpha=0.7)
-    ax.plot(parity_line, parity_line, color="black", label="Parity", linestyle="--")
-    ax.fill_between(x_vals, parity_line, upper_bound, color="red", alpha=0.2,
-                    label=f"{scheduler1} wins, \u03B4_90p = {scheduler_1_wins_90p:.1f}")
-    ax.fill_between(x_vals, parity_line, lower_bound, color="green", alpha=0.2,
-                    label=f"{scheduler2} wins, \u03B4_90p = {scheduler_2_wins_90p:.1f}") 
-    ax.legend()
+    # Labels and legend
     ax.set_xlabel(f"{scheduler1} Makespan")
     ax.set_ylabel(f"{scheduler2} Makespan")
+    ax.legend()
 
 
 def print_final_results(feasible_makespans, infeasible_count, computation_times):
@@ -69,7 +66,7 @@ def print_final_results(feasible_makespans, infeasible_count, computation_times)
 
 
 def create_simulation(problem_instance, scheduler, checkpoint_path=None, move_while_waiting=False):
-    if scheduler == "dbgm":
+    if scheduler == "sadcher":
         return Simulation(
             problem_instance, 
             scheduler, 
@@ -99,9 +96,9 @@ if __name__ == "__main__":
     args = arg_parser.parse_args()
 
     if args.including_milp:
-        scheduler_names = ["milp", "greedy", "dbgm", "random_bipartite"]
+        scheduler_names = ["milp", "greedy", "sadcher", "random_bipartite"]
     else: 
-        scheduler_names = ["greedy", "dbgm", "random_bipartite"]
+        scheduler_names = ["greedy", "sadcher", "random_bipartite"]
 
     makespans = {scheduler: [] for scheduler in scheduler_names}
     feasible_makespans = {scheduler: [] for scheduler in scheduler_names}
@@ -158,14 +155,14 @@ if __name__ == "__main__":
     plot_violin(axs[1, 0], computation_times, scheduler_names, "Computation Time (s)",
                 "Computation Time Comparison")
 
-    # 1v1 comparison: Greedy vs DBGMScheduler (using all samples)
-    compare_makespans_1v1(axs[0, 1], makespans["greedy"], makespans["dbgm"],
-                          "Greedy", "DBGMScheduler")
+    # 1v1 comparison: Greedy vs Sadcher (using all samples)
+    compare_makespans_1v1(axs[0, 1], makespans["greedy"], makespans["sadcher"],
+                          "Greedy", "Sadcher-RT")
 
-    # MILP vs DBGM comparison (if included)
+    # MILP vs Sadcher comparison (if included)
     if args.including_milp:
-        compare_makespans_1v1(axs[1, 1], makespans["milp"], makespans["dbgm"],
-                              "MILP", "DBGMScheduler")
+        compare_makespans_1v1(axs[1, 1], makespans["milp"], makespans["sadcher"],
+                              "MILP", "Sadcher-RT")
     else:
         fig.delaxes(axs[1, 1])  
 

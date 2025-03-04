@@ -7,7 +7,7 @@ from helper_functions.schedules import Instantaneous_Schedule
 class DBGMScheduler:
     def __init__(self, debugging, checkpoint_path, duration_normalization, location_normalization):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.trained_model = SchedulerNetwork(robot_input_dimensions=6, task_input_dimension=8, 
+        self.trained_model = SchedulerNetwork(robot_input_dimensions=7, task_input_dimension=9, 
                                               embed_dim=128, ff_dim=256, n_transformer_heads=4, 
                                               n_transformer_layers= 4, n_gatn_heads=4, n_gatn_layers=2).to(self.device)
         self.trained_model.load_state_dict(torch.load(checkpoint_path, weights_only=True))

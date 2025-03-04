@@ -9,7 +9,7 @@ from data_generation.problem_generator import generate_random_data, generate_ran
 from helper_functions.schedules import Full_Horizon_Schedule
 from schedulers.greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
 from schedulers.random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
-from schedulers.dbgm_scheduler import DBGMScheduler
+from schedulers.sadcher import SadcherScheduler
 from simulation_environment.display_simulation import visualize, run_video_mode
 from simulation_environment.task_robot_classes import Robot, Task
 from visualizations.solution_visualization import plot_gantt_and_trajectories
@@ -75,8 +75,8 @@ class Simulation:
             return GreedyInstantaneousScheduler()
         elif name == "random_bipartite":
             return RandomBipartiteMatchingScheduler()
-        elif name == "dbgm":
-            return DBGMScheduler(debugging = self.debugging,  checkpoint_path = checkpoint_path, duration_normalization = self.duration_normalization, location_normalization = self.location_normalization)
+        elif name == "sadcher":
+            return SadcherScheduler(debugging = self.debugging,  checkpoint_path = checkpoint_path, duration_normalization = self.duration_normalization, location_normalization = self.location_normalization)
         else:
             raise ValueError(f"Unknown scheduler '{name}'")
         
@@ -177,7 +177,7 @@ class Simulation:
                     # Move to assigned task location
                     robot.update_position_on_task()
                 
-                elif robot.current_task.task_id is self.idle_task_id and self.move_while_waiting and self.scheduler_name == "dbgm":
+                elif robot.current_task.task_id is self.idle_task_id and self.move_while_waiting and self.scheduler_name == "sadcher":
                     # Premove robots towards second highest reward task (IDLE has no location -> second highest is most likely next task)
                     second_highest_reward_task_id = self.second_highest_rewards_idx[robot.robot_id]
                     robot.position_towards_task(self.tasks[second_highest_reward_task_id])
@@ -193,7 +193,7 @@ class Simulation:
         available_robots = [robot for robot in self.robots if robot.available]
 
         if available_robots:
-            if self.scheduler_name == "dbgm":
+            if self.scheduler_name == "sadcher":
                 predicted_reward, instantaneous_assignment = self.scheduler.calculate_robot_assignment(self)
 
                 if self.move_while_waiting:
@@ -247,7 +247,7 @@ if __name__ == '__main__':
 
     sim = Simulation(problem_instance, 
                     scheduler_name=args.scheduler, 
-                    checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/researching_precedence/NEW_GATN11_RANDOM_FINETUNE_PRECEDENCE/best_checkpoint.pt",
+                    checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/8t3r3s_models/model_0/best_checkpoint.pt",
                     debug=True,
                     move_while_waiting=args.move_while_waiting)
 
