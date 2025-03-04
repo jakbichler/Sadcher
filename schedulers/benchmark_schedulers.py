@@ -101,7 +101,8 @@ if __name__ == "__main__":
     n_robots = 3
     n_skills = 3
     n_precedence = 3
-    np.random.seed(42)
+    seed = 0
+    np.random.seed(seed)
     checkpoint_path = (
         "/home/jakob/thesis/imitation_learning/checkpoints/8t3r3s_models/model_0/best_checkpoint.pt"
     )
@@ -195,7 +196,7 @@ if __name__ == "__main__":
         feasible_makespans,
         scheduler_names,
         "Makespan",
-        "Makespan Comparison (Feasible Only)",
+        f"Makespan Comparison on {args.n_iterations} instances (seed {seed}) of {n_tasks}t{n_robots}r{n_skills}s{n_precedence}p",
     )
 
     # Violin plot for computation times (all samples)

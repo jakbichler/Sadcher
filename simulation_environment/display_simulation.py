@@ -38,33 +38,66 @@ def visualize(sim):
     plt.show()
 
 
-def add_robot_skills_table(fig, robots):
-    """Add a table below the plot displaying robots and their skills."""
-    table_data = [["Robot", "Skills", "Current Task"]]
+def add_robot_skills_table(fig, robots, colors, n_skills):
+    """Add a table below the plot displaying robots and their skills as colored squares."""
+    # Create header: one column for Robot, one for each skill, then one for Current Task.
+    header = ["Robot"] + [f"Skill {i}" for i in range(n_skills)] + ["Current Task"]
+    table_data = [header]
     for i, robot in enumerate(robots):
-        skills = ", ".join([str(skill) for skill in robot.capabilities])
+        row = [f"Robot {i}"]
+        for j in range(n_skills):
+            row.append(robot.capabilities[j])
         current_task = robot.current_task.task_id if robot.current_task else "None"
-        table_data.append([f"Robot {i}", skills, f"Task {current_task}"])
+        row.append(f"Task {current_task}")
+        table_data.append(row)
 
-    ax_table = plt.axes([0.1, 0.05, 0.8, 0.2])  # Position for the table
-    ax_table.axis("off")  # Hide the axes
+    ax_table = plt.axes([0.1, 0.05, 0.8, 0.2])
+    ax_table.axis("off")
     table = Table(ax_table, bbox=[0, 0, 1, 1])
-    cell_colors = [
-        ["#d4e6f1" if row % 2 == 0 else "#f2f3f4" for col in range(3)]
-        for row in range(len(table_data))
-    ]
 
-    for row, (robot, skills, task) in enumerate(table_data):
-        table.add_cell(
-            row, 0, width=0.4, height=0.15, text=robot, loc="center", facecolor=cell_colors[row][0]
-        )
-        table.add_cell(
-            row, 1, width=0.6, height=0.15, text=skills, loc="center", facecolor=cell_colors[row][1]
-        )
-        table.add_cell(
-            row, 2, width=0.6, height=0.15, text=task, loc="center", facecolor=cell_colors[row][1]
-        )
+    # Set column widths:
+    robot_col_width = 0.2
+    current_task_width = 0.2
+    skill_col_width = 0.15 / n_skills  # remaining width evenly divided
 
+    n_rows = len(table_data)
+    n_cols = n_skills + 2  # Robot and Current Task plus one per skill
+
+    for row in range(n_rows):
+        for col in range(n_cols):
+            # Header row uses a fixed color.
+            if row == 0:
+                facecolor = "#d4e6f1"
+            else:
+                # For the Robot and Current Task columns, use alternating row colors.
+                if col == 0 or col == n_cols - 1:
+                    facecolor = "white"
+                else:
+                    # For skill columns, if the robot has the skill, use the corresponding color.
+                    skill_index = col - 1
+                    facecolor = colors[skill_index] if table_data[row][col] else "white"
+
+            # Determine the cell width.
+            if col == 0:
+                cell_width = robot_col_width
+            elif col == n_cols - 1:
+                cell_width = current_task_width
+            else:
+                cell_width = skill_col_width
+
+            # For skill cells (non-header, non-robot/task), we leave text empty.
+            cell_text = (
+                str(table_data[row][col]) if (row == 0 or col == 0 or col == n_cols - 1) else ""
+            )
+            table.add_cell(
+                row,
+                col,
+                width=cell_width,
+                height=0.15,
+                text=cell_text,
+                loc="center",
+                facecolor=facecolor,
+            )
     ax_table.add_table(table)
 
 
@@ -97,7 +130,6 @@ def draw_robot_skills_squares(ax, robot, colors, square_size=2.5):
     the square is filled with the corresponding color; if not, it is transparent.
     """
 
-    n_skills = len(robot.capabilities)
     bottom = robot.location[1] + 2
     left = robot.location[0] - square_size / 2
     for skill_index, skill in enumerate(robot.capabilities):
@@ -180,7 +212,7 @@ def update_plot(sim, ax, fig, colors, n_skills):
         ha="center",
     )
 
-    add_robot_skills_table(fig, sim.robots)
+    add_robot_skills_table(fig, sim.robots, colors, n_skills)
     add_precedence_constraints_text(fig, sim.precedence_constraints)
 
     legend_patches = [
