@@ -1,18 +1,21 @@
-import os
 import json
-import sys 
-sys.path.append('..')
+import os
+import sys
+
+sys.path.append("..")
 import numpy as np
-from tqdm import tqdm
 import torch
 from torch.utils.data import Dataset
+from tqdm import tqdm
 from training_helpers import (
-    create_robot_features_from_optimal, 
-    create_task_features_from_optimal, 
-    get_expert_reward, 
-    find_decision_points
+    create_robot_features_from_optimal,
+    create_task_features_from_optimal,
+    find_decision_points,
+    get_expert_reward,
 )
+
 from helper_functions.schedules import Full_Horizon_Schedule
+
 
 class LazyLoadedSchedulingDataset(Dataset):
     def __init__(self, problem_dir, solution_dir, gamma=0.99, immediate_reward=10):
@@ -31,7 +34,9 @@ class LazyLoadedSchedulingDataset(Dataset):
         self.solution_files = sorted(os.listdir(solution_dir))
 
         # Ensure same number of problems and solutions
-        assert len(self.problem_files) == len(self.solution_files), "Mismatch in problem and solution count."
+        assert len(self.problem_files) == len(self.solution_files), (
+            "Mismatch in problem and solution count."
+        )
 
         # Precompute decision points for each problem-solution pair
         self.data_indices = []  # (problem_idx, decision_time) pairs
@@ -44,7 +49,6 @@ class LazyLoadedSchedulingDataset(Dataset):
             decision_points = find_decision_points(solution_obj)
             self.data_indices.extend([(i, dec_time) for dec_time in decision_points])
 
-        
         first_problem_path = os.path.join(problem_dir, self.problem_files[0])
         first_solution_path = os.path.join(solution_dir, self.solution_files[0])
         with open(first_problem_path, "r") as f:
@@ -52,16 +56,18 @@ class LazyLoadedSchedulingDataset(Dataset):
         with open(first_solution_path, "r") as f:
             first_solution = Full_Horizon_Schedule.from_dict(json.load(f))
 
-        first_robot_feats = create_robot_features_from_optimal(first_problem, first_solution.robot_schedules, 0, 100, 100)
-        first_task_feats = create_task_features_from_optimal(first_problem, first_solution.robot_schedules, 0, 100, 100)
+        first_robot_feats = create_robot_features_from_optimal(
+            first_problem, first_solution.robot_schedules, 0, 100, 100
+        )
+        first_task_feats = create_task_features_from_optimal(
+            first_problem, first_solution.robot_schedules, 0, 100, 100
+        )
 
         self.n_robots = first_robot_feats.shape[0]
         self.robot_dim = first_robot_feats.shape[1]
-        
+
         self.n_tasks = first_task_feats.shape[0]
         self.task_dim = first_task_feats.shape[1]
-
-
 
     def __len__(self):
         return len(self.data_indices)
@@ -87,41 +93,62 @@ class LazyLoadedSchedulingDataset(Dataset):
         duration_normalization = np.max(problem["T_e"])
 
         adjacency_matrix = torch.zeros((self.n_tasks, self.n_tasks))
-        precedence_constraints = problem['precedence_constraints']
+        precedence_constraints = problem["precedence_constraints"]
 
         if precedence_constraints:
             for precedence in precedence_constraints:
-                # Precedence is 1-indexed 
+                # Precedence is 1-indexed
                 adjacency_matrix[precedence[0] - 1, precedence[1] - 1] = 1
 
         # Generate features
-        robot_feats = create_robot_features_from_optimal(problem, solution_obj.robot_schedules, decision_time, location_normalization, duration_normalization)
-        task_feats = create_task_features_from_optimal(problem, solution_obj.robot_schedules, decision_time, location_normalization, duration_normalization)
+        robot_feats = create_robot_features_from_optimal(
+            problem,
+            solution_obj.robot_schedules,
+            decision_time,
+            location_normalization,
+            duration_normalization,
+        )
+        task_feats = create_task_features_from_optimal(
+            problem,
+            solution_obj.robot_schedules,
+            decision_time,
+            location_normalization,
+            duration_normalization,
+        )
 
         # Compute expert reward and feasibility mask
-        expert_reward, feasibility_mask = get_expert_reward(solution_obj.robot_schedules, decision_time, problem["T_t"], gamma=self.gamma, immediate_reward=self.immediate_reward)
+        expert_reward, feasibility_mask = get_expert_reward(
+            solution_obj.robot_schedules,
+            decision_time,
+            problem["T_t"],
+            gamma=self.gamma,
+            immediate_reward=self.immediate_reward,
+        )
 
         return robot_feats, task_feats, expert_reward, feasibility_mask, adjacency_matrix
-
-
 
 
 class PrecomputedDataset(Dataset):
     def __init__(self, precomputed_dir):
         self.precomputed_dir = precomputed_dir
         self.files = sorted(os.listdir(precomputed_dir))
-        
-        first_sample = torch.load(os.path.join(precomputed_dir, self.files[0]))
-        
-        self.n_robots = first_sample['robot_feats'].shape[0]
-        self.robot_dim = first_sample['robot_feats'].shape[1]
 
-        self.n_tasks = first_sample['task_feats'].shape[0]
-        self.task_dim = first_sample['task_feats'].shape[1]
-    
+        first_sample = torch.load(os.path.join(precomputed_dir, self.files[0]))
+
+        self.n_robots = first_sample["robot_feats"].shape[0]
+        self.robot_dim = first_sample["robot_feats"].shape[1]
+
+        self.n_tasks = first_sample["task_feats"].shape[0]
+        self.task_dim = first_sample["task_feats"].shape[1]
+
     def __len__(self):
         return len(self.files)
-    
+
     def __getitem__(self, idx):
         sample = torch.load(os.path.join(self.precomputed_dir, self.files[idx]))
-        return sample['robot_feats'], sample['task_feats'], sample['expert_reward'], sample['feasibility_mask']
+        return (
+            sample["robot_feats"],
+            sample["task_feats"],
+            sample["expert_reward"],
+            sample["feasibility_mask"],
+        )

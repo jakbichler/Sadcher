@@ -1,6 +1,11 @@
 import torch
-from schedulers.bipartite_matching import solve_bipartite_matching, filter_overassignments, filter_redundant_assignments
+
 from helper_functions.schedules import Instantaneous_Schedule
+from schedulers.bipartite_matching import (
+    filter_overassignments,
+    filter_redundant_assignments,
+    solve_bipartite_matching,
+)
 
 
 class RandomBipartiteMatchingScheduler:
@@ -12,8 +17,10 @@ class RandomBipartiteMatchingScheduler:
         n_tasks = len(sim.tasks)
         robot_assignments = {}
         # Special case for the last task
-        idle_robots = [r for r in sim.robots if r.current_task is None or r.current_task.status == 'DONE']
-        pending_tasks = [t for t in sim.tasks if t.status == 'PENDING']
+        idle_robots = [
+            r for r in sim.robots if r.current_task is None or r.current_task.status == "DONE"
+        ]
+        pending_tasks = [t for t in sim.tasks if t.status == "PENDING"]
         # Check if all tasks are done -> send all robots to the exit task
         if len(pending_tasks) == 1:
             for robot in idle_robots:
@@ -21,11 +28,13 @@ class RandomBipartiteMatchingScheduler:
                 robot.current_task = pending_tasks[0]
             return Instantaneous_Schedule(robot_assignments)
 
-        # Create random reward matrix 
-        R = torch.randint(0, 10, size=(n_robots, n_tasks-2))
+        # Create random reward matrix
+        R = torch.randint(0, 10, size=(n_robots, n_tasks - 2))
         R = torch.cat((torch.zeros(n_robots, 1), R, torch.zeros(n_robots, 1)), dim=1)
         bipartite_matching_solution = solve_bipartite_matching(R, sim)
         filtered_solution = filter_redundant_assignments(bipartite_matching_solution, sim)
         filtered_solution = filter_overassignments(filtered_solution, sim)
-        robot_assignments = {robot: task for (robot, task), val in filtered_solution.items() if val == 1}
+        robot_assignments = {
+            robot: task for (robot, task), val in filtered_solution.items() if val == 1
+        }
         return Instantaneous_Schedule(robot_assignments)

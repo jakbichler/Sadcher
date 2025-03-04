@@ -1,14 +1,15 @@
 import os
 import shutil
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle  # add at the top with your other import
-import matplotlib.animation as animation
-from matplotlib.table import Table
-from matplotlib.patches import Wedge
-from matplotlib.widgets import Button
-import imageio
 
+import imageio
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.patches import (
+    Rectangle,  # add at the top with your other import
+    Wedge,
+)
+from matplotlib.table import Table
+from matplotlib.widgets import Button
 
 
 def visualize(sim):
@@ -19,20 +20,19 @@ def visualize(sim):
     plt.subplots_adjust(bottom=0.3)  # Make space for buttons
 
     # Create buttons
-    ax_button_next = plt.axes([0.3, 0.92, 0.2, 0.07])   # 'Next Timestep' button
-    ax_button_10   = plt.axes([0.5, 0.92, 0.2, 0.07])   # 'Advance 10 Timesteps' button
+    ax_button_next = plt.axes([0.3, 0.92, 0.2, 0.07])  # 'Next Timestep' button
+    ax_button_10 = plt.axes([0.5, 0.92, 0.2, 0.07])  # 'Advance 10 Timesteps' button
 
-
-    btn_next = Button(ax_button_next, 'Next Timestep')
+    btn_next = Button(ax_button_next, "Next Timestep")
     btn_next.on_clicked(lambda event: next_step_callback(sim, ax, fig, colors, n_skills))
 
-    btn_advance_10 = Button(ax_button_10, '10 Timesteps')
-    btn_advance_10.on_clicked(lambda event: advance_10_steps_callback(sim, ax, fig, colors, n_skills))
-
+    btn_advance_10 = Button(ax_button_10, "10 Timesteps")
+    btn_advance_10.on_clicked(
+        lambda event: advance_10_steps_callback(sim, ax, fig, colors, n_skills)
+    )
 
     fig.canvas.mpl_connect(
-        'key_press_event',
-        lambda event: key_press(event, sim, ax, fig, colors, n_skills)
+        "key_press_event", lambda event: key_press(event, sim, ax, fig, colors, n_skills)
     )
     update_plot(sim, ax, fig, colors, n_skills)
     plt.show()
@@ -49,12 +49,21 @@ def add_robot_skills_table(fig, robots):
     ax_table = plt.axes([0.1, 0.05, 0.8, 0.2])  # Position for the table
     ax_table.axis("off")  # Hide the axes
     table = Table(ax_table, bbox=[0, 0, 1, 1])
-    cell_colors = [["#d4e6f1" if row % 2 == 0 else "#f2f3f4" for col in range(3)] for row in range(len(table_data))]
+    cell_colors = [
+        ["#d4e6f1" if row % 2 == 0 else "#f2f3f4" for col in range(3)]
+        for row in range(len(table_data))
+    ]
 
     for row, (robot, skills, task) in enumerate(table_data):
-        table.add_cell(row, 0, width=0.4, height=0.15, text=robot, loc="center", facecolor=cell_colors[row][0])
-        table.add_cell(row, 1, width=0.6, height=0.15, text=skills, loc="center", facecolor=cell_colors[row][1])
-        table.add_cell(row, 2, width=0.6, height=0.15, text=task, loc="center", facecolor=cell_colors[row][1])
+        table.add_cell(
+            row, 0, width=0.4, height=0.15, text=robot, loc="center", facecolor=cell_colors[row][0]
+        )
+        table.add_cell(
+            row, 1, width=0.6, height=0.15, text=skills, loc="center", facecolor=cell_colors[row][1]
+        )
+        table.add_cell(
+            row, 2, width=0.6, height=0.15, text=task, loc="center", facecolor=cell_colors[row][1]
+        )
 
     ax_table.add_table(table)
 
@@ -65,7 +74,7 @@ def add_precedence_constraints_text(fig, precedence_constraints):
     ax_text.axis("off")  # Hide the axes
 
     precedence_text = f"Precedence Constraints: {precedence_constraints}"
-    ax_text.text(0.5, 0.5, precedence_text, ha='center', va='center', fontsize=10, wrap=True)
+    ax_text.text(0.5, 0.5, precedence_text, ha="center", va="center", fontsize=10, wrap=True)
 
 
 def draw_pie(ax, x, y, sizes, radius, colors):
@@ -74,7 +83,9 @@ def draw_pie(ax, x, y, sizes, radius, colors):
     for size, color in zip(sizes, colors):
         end_angle = start_angle + size * 360
         if size > 0:
-            wedge = Wedge((x, y), radius, start_angle, end_angle, facecolor=color, edgecolor="black", lw=0.5)
+            wedge = Wedge(
+                (x, y), radius, start_angle, end_angle, facecolor=color, edgecolor="black", lw=0.5
+            )
             ax.add_patch(wedge)
         start_angle = end_angle
 
@@ -93,47 +104,109 @@ def draw_robot_skills_squares(ax, robot, colors, square_size=2.5):
         facecolor = colors[int(skill_index)] if skill else "none"
         rect = Rectangle(
             (left, bottom + skill_index * (square_size)),
-            square_size, square_size,
-            facecolor=facecolor, edgecolor="black", lw=1.0
+            square_size,
+            square_size,
+            facecolor=facecolor,
+            edgecolor="black",
+            lw=1.0,
         )
         ax.add_patch(rect)
-    ax.scatter(robot.location[0], robot.location[1], color = 'black', s=50)
-    ax.text(robot.location[0] - 2.0, robot.location[1], f"{robot.robot_id}",
-            fontsize=10, color="black", ha='center', va='center')
+    ax.scatter(robot.location[0], robot.location[1], color="black", s=50)
+    ax.text(
+        robot.location[0] - 2.0,
+        robot.location[1],
+        f"{robot.robot_id}",
+        fontsize=10,
+        color="black",
+        ha="center",
+        va="center",
+    )
 
 
 def update_plot(sim, ax, fig, colors, n_skills):
     ax.clear()
 
     for task in sim.tasks:
-        if task.status != 'DONE':
+        if task.status != "DONE":
             total_skills = np.sum(task.requirements)
-            skill_sizes = task.requirements / total_skills if total_skills > 0 else np.zeros_like(task.requirements)
-            draw_pie(ax, task.location[0], task.location[1], skill_sizes, task.remaining_duration / 50, colors)
-            ax.text(task.location[0], task.location[1], f"Task {task.task_id}", fontsize=10, ha='center')
+            skill_sizes = (
+                task.requirements / total_skills
+                if total_skills > 0
+                else np.zeros_like(task.requirements)
+            )
+            draw_pie(
+                ax,
+                task.location[0],
+                task.location[1],
+                skill_sizes,
+                task.remaining_duration / 50,
+                colors,
+            )
+            ax.text(
+                task.location[0], task.location[1], f"Task {task.task_id}", fontsize=10, ha="center"
+            )
 
     for robot in sim.robots:
         draw_robot_skills_squares(ax, robot, colors)
 
-    ax.scatter(sim.tasks[0].location[0], sim.tasks[0].location[1], color='green', s=150, marker='x', label="Start (Task 0)")
-    ax.text(sim.tasks[0].location[0] + 6, sim.tasks[0].location[1] - 1, "Start", fontsize=15, ha='center')
-    ax.scatter(sim.tasks[-1].location[0], sim.tasks[-1].location[1], color='red', s=150, marker='x', label="End (Task -1)")
-    ax.text(sim.tasks[-1].location[0] + 6, sim.tasks[-1].location[1] - 1, "End", fontsize=15, ha='center')
+    ax.scatter(
+        sim.tasks[0].location[0],
+        sim.tasks[0].location[1],
+        color="green",
+        s=150,
+        marker="x",
+        label="Start (Task 0)",
+    )
+    ax.text(
+        sim.tasks[0].location[0] + 6,
+        sim.tasks[0].location[1] - 1,
+        "Start",
+        fontsize=15,
+        ha="center",
+    )
+    ax.scatter(
+        sim.tasks[-1].location[0],
+        sim.tasks[-1].location[1],
+        color="red",
+        s=150,
+        marker="x",
+        label="End (Task -1)",
+    )
+    ax.text(
+        sim.tasks[-1].location[0] + 6,
+        sim.tasks[-1].location[1] - 1,
+        "End",
+        fontsize=15,
+        ha="center",
+    )
 
     add_robot_skills_table(fig, sim.robots)
     add_precedence_constraints_text(fig, sim.precedence_constraints)
 
     legend_patches = [
-        plt.Line2D([0], [0], marker='o', color='w', markerfacecolor=colors[i], markersize=10, label=f"Skill {i}")
+        plt.Line2D(
+            [0],
+            [0],
+            marker="o",
+            color="w",
+            markerfacecolor=colors[i],
+            markersize=10,
+            label=f"Skill {i}",
+        )
         for i in range(n_skills)
     ]
     ax.legend(handles=legend_patches, title="Task Skills", loc="upper right")
 
     if sim.sim_done:
         ax.text(
-            50, 50,
+            50,
+            50,
             f"Simulation Finished in {sim.makespan} timesteps!",
-            fontsize=15, color='blue', ha='center', va='center', bbox=dict(facecolor='white', alpha=0.8)
+            fontsize=15,
+            color="blue",
+            ha="center",
+            va="center",
+            bbox=dict(facecolor="white", alpha=0.8),
         )
     ax.set_title(f"Timestep: {sim.timestep}")
     ax.set_xlim(0, 100)
@@ -153,9 +226,9 @@ def advance_10_steps_callback(sim, ax, fig, colors, n_skills):
 
 
 def key_press(event, sim, ax, fig, colors, n_skills):
-    if event.key == 'n':  # Press 'n' for Next Timestep
+    if event.key == "n":  # Press 'n' for Next Timestep
         next_step_callback(sim, ax, fig, colors, n_skills)
-    elif event.key == 'm':  # Press 'm' for Advance 10 Timesteps
+    elif event.key == "m":  # Press 'm' for Advance 10 Timesteps
         advance_10_steps_callback(sim, ax, fig, colors, n_skills)
 
 

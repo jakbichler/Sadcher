@@ -1,4 +1,3 @@
-import json
 class Full_Horizon_Schedule:
     """
     Represents a solution to the scheduling problem.
@@ -6,30 +5,26 @@ class Full_Horizon_Schedule:
     The schedule does not include the start and end tasks, which are assumed to be present in the problem instance.
     These have execution time , but the travel time from start to task_1 and task_n to end are included.
 
-    The robot schedules are given as a dictionary, where the keys are robot indices and the values 
-    are lists of the format [(task, start_time, end_time), ...] for each task assigned to the robot.
+    The robot schedules are given as a dictionary, where the keys are robot indices and the values
+    are lists of the format [(task, start_time, end_time), u...] for each task assigned to the robot.
     """
+
     def __init__(self, makespan, robot_schedules, n_tasks):
         self.makespan: float = makespan
         self.robot_schedules: dict = self.remove_duplicates(robot_schedules)
         self.n_tasks: int = n_tasks
         self.n_robots: int = len(robot_schedules)
 
-        
-
         # Sort tasks for each robot by starting time
         self.robot_schedules = {
-            robot: sorted(tasks, key=lambda x: x[1])
-            for robot, tasks in robot_schedules.items()
+            robot: sorted(tasks, key=lambda x: x[1]) for robot, tasks in robot_schedules.items()
         }
-
-
 
     def __str__(self):
         """
         String representation for better readability.
         """
-        result = f"Schedule:\n"
+        result = "Schedule:\n"
         result += f"  Number of tasks: {self.n_tasks}\n"
         result += f"  Number of robots: {self.n_robots}\n"
         result += f"  Makespan/Arrival at end location: {self.makespan:.2f}\n"
@@ -39,7 +34,6 @@ class Full_Horizon_Schedule:
             for task, start, end in tasks:
                 result += f"      Task {task}: {start:.2f} -> {end:.2f}\n"
         return result
-    
 
     def to_dict(self):
         """
@@ -56,7 +50,6 @@ class Full_Horizon_Schedule:
                 ]
                 for robot, tasks in self.robot_schedules.items()
             },
-
         }
 
     @classmethod
@@ -73,7 +66,7 @@ class Full_Horizon_Schedule:
             robot_schedules=robot_schedules,
             n_tasks=data["n_tasks"],
         )
-    
+
     def remove_duplicates(self, robot_schedules):
         for robot_id, schedule in robot_schedules.items():
             task_dict = {}
@@ -85,7 +78,11 @@ class Full_Horizon_Schedule:
                     prev_start, prev_end = task_dict[task_id]
                     task_dict[task_id] = (
                         min(prev_start, start_time),
-                        prev_end if end_time is None else (end_time if prev_end is None else max(prev_end, end_time))  # Handle None
+                        prev_end
+                        if end_time is None
+                        else (
+                            end_time if prev_end is None else max(prev_end, end_time)
+                        ),  # Handle None
                     )
             # Replace the schedule with the merged entries
             robot_schedules[robot_id] = [
@@ -97,20 +94,20 @@ class Full_Horizon_Schedule:
 class Instantaneous_Schedule:
     """
     Represents an instantaneous schedule for robots of varying lengths.
-    
-    The schedule is a dict with robot indices as keys and next task indices as values. 
+
+    The schedule is a dict with robot indices as keys and next task indices as values.
     The main difference between this and Full_Horizon_Schedule is that this schedule
     only contains the next task for each robot and not the entire schedule.
     """
 
-    def __init__(self, robot_assignments:dict):
-        self.robot_assignments = robot_assignments # i.e. {robot_id: task_id}
+    def __init__(self, robot_assignments: dict):
+        self.robot_assignments = robot_assignments  # i.e. {robot_id: task_id}
 
     def __str__(self):
         """
         String representation for better readability.
         """
-        result = f"Instantaneous Schedule:\n"
+        result = "Instantaneous Schedule:\n"
         for robot, task in self.robot_assignments.items():
             result += f"  Robot {robot}: Task {task}\n"
         return result

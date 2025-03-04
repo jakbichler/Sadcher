@@ -1,44 +1,61 @@
 import argparse
-from datetime import datetime   
-import matplotlib.pyplot as plt
 import os
+from datetime import datetime
+
+import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
+from attention_models import SchedulerNetwork
+from dataset import LazyLoadedSchedulingDataset
+from icecream import ic
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
-from icecream import ic 
-from dataset import LazyLoadedSchedulingDataset
-from training_helpers import load_dataset, find_decision_points
-from attention_models import SchedulerNetwork
+
 
 class LVWS_Loss(nn.Module):
     def __init__(self, weight_factor):
         super(LVWS_Loss, self).__init__()
         self.l1_loss = nn.L1Loss()
         self.weight_factor = weight_factor
-        
-    def forward (self, expert_reward, predicted_reward, feasibility_mask):
-        loss_feasible = self.l1_loss(predicted_reward*feasibility_mask, expert_reward * feasibility_mask)
-        loss_not_in_expert = self.l1_loss(predicted_reward*(1-feasibility_mask), expert_reward*(1-feasibility_mask))
-        return loss_feasible + self.weight_factor * loss_not_in_expert 
+
+    def forward(self, expert_reward, predicted_reward, feasibility_mask):
+        loss_feasible = self.l1_loss(
+            predicted_reward * feasibility_mask, expert_reward * feasibility_mask
+        )
+        loss_not_in_expert = self.l1_loss(
+            predicted_reward * (1 - feasibility_mask), expert_reward * (1 - feasibility_mask)
+        )
+        return loss_feasible + self.weight_factor * loss_not_in_expert
 
 
 def initialize_weights(model):
     for name, param in model.named_parameters():
-        if 'weight' in name:
+        if "weight" in name:
             if len(param.shape) > 1:  # Ensure it's a linear layer
-                nn.init.kaiming_uniform_(param, nonlinearity='relu')
-        elif 'bias' in name:
+                nn.init.kaiming_uniform_(param, nonlinearity="relu")
+        elif "bias" in name:
             nn.init.constant_(param, 0.0)
 
 
 if __name__ == "__main__":
-    argument_parser = argparse.ArgumentParser(description="Train the LVWS model on a dataset of problem instances.")
-    argument_parser.add_argument("--dataset_dir", type=str, required=True, help="Directory containing problem instances.")
-    argument_parser.add_argument("--out_checkpoint_dir", type=str, required=True, help="Directory to save model checkpoints.")
-    argument_parser.add_argument("--continue_training", action="store_true", default= False, help="Continue training from a checkpoint.")
-    argument_parser.add_argument("--in_checkpoint_path", type=str, help="Path to a checkpoint to continue training from.")
-
+    argument_parser = argparse.ArgumentParser(
+        description="Train the LVWS model on a dataset of problem instances."
+    )
+    argument_parser.add_argument(
+        "--dataset_dir", type=str, required=True, help="Directory containing problem instances."
+    )
+    argument_parser.add_argument(
+        "--out_checkpoint_dir", type=str, required=True, help="Directory to save model checkpoints."
+    )
+    argument_parser.add_argument(
+        "--continue_training",
+        action="store_true",
+        default=False,
+        help="Continue training from a checkpoint.",
+    )
+    argument_parser.add_argument(
+        "--in_checkpoint_path", type=str, help="Path to a checkpoint to continue training from."
+    )
 
     args = argument_parser.parse_args()
     problem_dir = os.path.join(args.dataset_dir, "problem_instances/")
@@ -62,32 +79,32 @@ if __name__ == "__main__":
         "learning_rate": 1e-3,
         "reward_gamma": 0.99,
         "early_stopping_patience": 3,
-        }
-
-
+    }
 
     ic("loading dataset")
-    #problems, solutions = load_dataset(problem_dir, solution_dir)
-    dataset = LazyLoadedSchedulingDataset(problem_dir, solution_dir, gamma=config["reward_gamma"], immediate_reward=10)
+    # problems, solutions = load_dataset(problem_dir, solution_dir)
+    dataset = LazyLoadedSchedulingDataset(
+        problem_dir, solution_dir, gamma=config["reward_gamma"], immediate_reward=10
+    )
     # Train-validation split (80% train, 20% validation)
     dataset_size = len(dataset)
     train_size = int(0.8 * dataset_size)
     val_size = dataset_size - train_size
     train_dataset, val_dataset = random_split(dataset, [train_size, val_size])
 
-     # Log config
+    # Log config
     with open(os.path.join(out_checkpoint_dir, "run_description.txt"), "w") as f:
         f.write(f"Training Run - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
-        f.write(f"Config: {config}\n")   
+        f.write(f"Config: {config}\n")
         f.write(f"Dataset: {args.dataset_dir}\n")
-#        f.write(f"N_problems: {len(problems)}\n")
+        #        f.write(f"N_problems: {len(problems)}\n")
         f.write(f"N_samples: {dataset_size}\n")
 
-    #print(f"Loaded {len(problems)} problems and {len(solutions)} solutions...............")
+    # print(f"Loaded {len(problems)} problems and {len(solutions)} solutions...............")
     print(f"Dataset split into {train_size} training samples and {val_size} validation samples.")
 
     train_loader = DataLoader(train_dataset, batch_size=config["batch_size"], shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size= config["batch_size"], shuffle=False)
+    val_loader = DataLoader(val_dataset, batch_size=config["batch_size"], shuffle=False)
 
     model = SchedulerNetwork(
         robot_input_dimensions=dataset.robot_dim,
@@ -112,17 +129,23 @@ if __name__ == "__main__":
 
     train_losses, val_losses = [], []
     best_val_loss = float("inf")
-    epoch, epochs_without_improvement = 0, 0 
+    epoch, epochs_without_improvement = 0, 0
 
     while epochs_without_improvement < config["early_stopping_patience"]:
         epoch += 1
-        
+
         # Training loop
         model.train()
         total_train_loss = 0.0
-        for robot_features, task_features, expert_reward, feasibility_mask, task_adjacency in tqdm(train_loader, unit="Batch", desc=f"Epoch {epoch} - Training"):
-            predicted_reward_matrix = model(robot_features.to(device), task_features.to(device), task_adjacency.to(device))
-            loss = loss_fn(expert_reward.to(device), predicted_reward_matrix, feasibility_mask.to(device))
+        for robot_features, task_features, expert_reward, feasibility_mask, task_adjacency in tqdm(
+            train_loader, unit="Batch", desc=f"Epoch {epoch} - Training"
+        ):
+            predicted_reward_matrix = model(
+                robot_features.to(device), task_features.to(device), task_adjacency.to(device)
+            )
+            loss = loss_fn(
+                expert_reward.to(device), predicted_reward_matrix, feasibility_mask.to(device)
+            )
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -136,9 +159,19 @@ if __name__ == "__main__":
         model.eval()
         total_val_loss = 0.0
         with torch.no_grad():
-            for robot_features, task_features, expert_reward, feasibility_mask, task_adjacency in tqdm(val_loader, unit="Batch", desc=f"Epoch {epoch} - Validation"):
-                predicted_reward_matrix = model(robot_features.to(device), task_features.to(device), task_adjacency.to(device))
-                loss = loss_fn(expert_reward.to(device), predicted_reward_matrix, feasibility_mask.to(device))
+            for (
+                robot_features,
+                task_features,
+                expert_reward,
+                feasibility_mask,
+                task_adjacency,
+            ) in tqdm(val_loader, unit="Batch", desc=f"Epoch {epoch} - Validation"):
+                predicted_reward_matrix = model(
+                    robot_features.to(device), task_features.to(device), task_adjacency.to(device)
+                )
+                loss = loss_fn(
+                    expert_reward.to(device), predicted_reward_matrix, feasibility_mask.to(device)
+                )
                 total_val_loss += loss.item()
 
         avg_val_loss = total_val_loss / max(1, len(val_loader))
@@ -152,7 +185,7 @@ if __name__ == "__main__":
         # Check early stopping condition (has to be at least 0.0001 better)
         if avg_val_loss < (best_val_loss - 1e-4):
             best_val_loss = avg_val_loss
-            epochs_without_improvement = 0  
+            epochs_without_improvement = 0
             best_model_path = os.path.join(out_checkpoint_dir, "best_checkpoint.pt")
             torch.save(model.state_dict(), best_model_path)
             print(f"New best model saved at epoch {epoch}")
