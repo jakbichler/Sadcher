@@ -10,77 +10,11 @@ sys.path.append("..")
 from baselines.aswale_23.MILP_solver import milp_scheduling
 from data_generation.problem_generator import generate_random_data_with_precedence
 from simulation_environment.simulator_2D import Simulation
-
-
-def plot_violin(ax, data, labels, ylabel, title):
-    ax.violinplot(data.values(), showmeans=True)
-    ax.set_xticks(range(1, len(labels) + 1))
-    ax.set_xticklabels(labels)
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
-
-    for i, scheduler in enumerate(labels, start=1):
-        x_jitter = np.random.normal(0, 0.03, len(data[scheduler]))
-        ax.scatter(
-            np.full_like(data[scheduler], i) + x_jitter,
-            data[scheduler],
-            alpha=0.5,
-            s=10,
-            color="black",
-        )
-
-
-def compare_makespans_1v1(ax, makespans1, makespans2, scheduler1, scheduler2):
-    makespans1 = np.array(makespans1)
-    makespans2 = np.array(makespans2)
-
-    min_value = min(min(makespans1), min(makespans2))
-    max_value = max(max(makespans1), max(makespans2))
-
-    # Fill regions
-    ax.fill_between(
-        [min_value, max_value],
-        [min_value, max_value],
-        max_value,
-        color="red",
-        alpha=0.15,
-        label=f"{scheduler1} Wins",
-    )
-    ax.fill_between(
-        [min_value, max_value],
-        min_value,
-        [min_value, max_value],
-        color="green",
-        alpha=0.15,
-        label=f"{scheduler2} Wins",
-    )
-
-    # Scatter plot
-    ax.scatter(makespans1, makespans2, color="black", alpha=0.7, edgecolor="k")
-
-    # Parity line
-    x_vals = np.linspace(min_value, max_value, 100)
-    ax.plot(x_vals, x_vals, color="black", linestyle="--", label="Parity Line")
-
-    # Labels and legend
-    ax.set_xlabel(f"{scheduler1} Makespan")
-    ax.set_ylabel(f"{scheduler2} Makespan")
-    ax.legend()
-
-
-def print_final_results(feasible_makespans, infeasible_count, computation_times):
-    # Averages computed only over feasible samples
-    avg_makespans = {
-        s: np.mean(feasible_makespans[s]) if feasible_makespans[s] else float("nan")
-        for s in scheduler_names
-    }
-    avg_computation_times = {s: np.mean(computation_times[s]) for s in scheduler_names}
-    print(f"\nSummary of Results after {args.n_iterations} runs:")
-    for scheduler in scheduler_names:
-        print(f"{scheduler.capitalize()}:")
-        print(f"  Average Makespan (feasible only): {avg_makespans[scheduler]:.2f}")
-        print(f"  Average Computation Time: {avg_computation_times[scheduler]:.4f} seconds")
-        print(f"  Infeasible Count: {infeasible_count[scheduler]}\n")
+from visualizations.benchmark_visualizations import (
+    compare_makespans_1v1,
+    plot_violin,
+    print_final_results,
+)
 
 
 def create_simulation(problem_instance, scheduler, checkpoint_path=None, move_while_waiting=False):
@@ -100,8 +34,8 @@ if __name__ == "__main__":
     n_tasks = 8
     n_robots = 3
     n_skills = 3
-    n_precedence = 3
-    seed = 0
+    n_precedence = 6
+    seed = 123
     np.random.seed(seed)
     checkpoint_path = (
         "/home/jakob/thesis/imitation_learning/checkpoints/8t3r3s_models/model_0/best_checkpoint.pt"
@@ -186,7 +120,9 @@ if __name__ == "__main__":
         )
         print(iteration_results)
 
-    print_final_results(feasible_makespans, infeasible_count, computation_times)
+    print_final_results(
+        scheduler_names, args.n_iterations, feasible_makespans, infeasible_count, computation_times
+    )
 
     fig, axs = plt.subplots(2, 2, figsize=(12, 10))
 
