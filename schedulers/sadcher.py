@@ -53,6 +53,7 @@ class SadcherScheduler:
                 for task in sim.tasks[1:-2]
             ]
         )
+
         task_features = (
             torch.tensor(task_features, dtype=torch.float32).unsqueeze(0).to(self.device)
         )
@@ -63,6 +64,7 @@ class SadcherScheduler:
                 for robot in sim.robots
             ]
         )
+
         robot_features = (
             torch.tensor(robot_features, dtype=torch.float32).unsqueeze(0).to(self.device)
         )
@@ -94,13 +96,33 @@ class SadcherScheduler:
 
         bipartite_matching_solution = solve_bipartite_matching(predicted_reward, sim)
         if self.debug:
-            print(bipartite_matching_solution)
+            print(
+                *[
+                    task_robot_pair
+                    for task_robot_pair, assigned in bipartite_matching_solution.items()
+                    if assigned == 1
+                ]
+            )
         filtered_solution = filter_redundant_assignments(bipartite_matching_solution, sim)
         if self.debug:
-            print(filtered_solution)
+            print(
+                *[
+                    task_robot_pair
+                    for task_robot_pair, assigned in filtered_solution.items()
+                    if assigned == 1
+                ]
+            )
+
         filtered_solution = filter_overassignments(filtered_solution, sim)
+
         if self.debug:
-            print(filtered_solution)
+            print(
+                *[
+                    task_robot_pair
+                    for task_robot_pair, assigned in filtered_solution.items()
+                    if assigned == 1
+                ]
+            )
             print("##############################################\n\n")
 
         robot_assignments = {
