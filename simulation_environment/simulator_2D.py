@@ -6,7 +6,9 @@ import torch
 import yaml
 
 sys.path.append("..")
-from data_generation.problem_generator import generate_random_data_with_precedence
+from data_generation.problem_generator import (
+    generate_random_data_with_precedence,
+)
 from helper_functions.schedules import Full_Horizon_Schedule
 from schedulers.greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
 from schedulers.random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
@@ -111,7 +113,6 @@ class Simulation:
                     self.finish_simulation()
                 else:
                     task.status = "PENDING"
-                    task.ready = False
 
     def update_task_duration(self):
         for task in self.tasks:
@@ -203,9 +204,15 @@ class Simulation:
                     and self.move_while_waiting
                     and self.scheduler_name == "sadcher"
                 ):
-                    # Premove robots towards second highest reward task (IDLE has no location -> second highest is most likely next task)
-                    second_highest_reward_task_id = self.second_highest_rewards_idx[robot.robot_id]
-                    robot.position_towards_task(self.tasks[second_highest_reward_task_id])
+                    # Robot was assigned IDLE task
+                    if self.robot_can_still_contribute_to_other_tasks(robot):
+                        # Premove robots towards second highest reward task (IDLE has no location -> second highest is most likely next task)
+                        second_highest_reward_id = self.second_highest_rewards_ids[robot.robot_id]
+                        robot.position_towards_task(self.tasks[second_highest_reward_id])
+
+                    else:
+                        # Robot cannot contribute anymore ->  Premove towards exit location
+                        robot.position_towards_task(self.tasks[-1])
 
         self.update_task_status()
         self.update_task_duration()
@@ -224,7 +231,7 @@ class Simulation:
                 )
 
                 if self.move_while_waiting:
-                    self.second_highest_rewards, self.second_highest_rewards_idx = (
+                    self.second_highest_rewards, self.second_highest_rewards_ids = (
                         self.extract_second_highest_rewards(predicted_reward)
                     )
             else:
@@ -247,6 +254,22 @@ class Simulation:
         second_highest_rewards = top2_rewards[:, 1].detach().cpu().numpy()
         second_highest_rewards_idx = top2_rewards_idx[:, 1].detach().cpu().numpy()
         return second_highest_rewards, second_highest_rewards_idx
+
+    def robot_can_still_contribute_to_other_tasks(self, robot):
+        pending_tasks = [
+            task for task in self.tasks if (task.status == "PENDING" and not task.assigned)
+        ]
+        if not pending_tasks:
+            return False
+
+        pending_tasks_requirements = [task.requirements for task in pending_tasks]
+        robot_capabilities = np.array(robot.capabilities)
+
+        can_contribute = np.any(
+            np.logical_and(robot_capabilities, np.logical_or.reduce(pending_tasks_requirements))
+        )
+
+        return can_contribute
 
 
 if __name__ == "__main__":
