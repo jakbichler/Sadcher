@@ -142,12 +142,12 @@ def filter_overassignments(assignment_solution, sim):
     for task_id, new_robot_ids in task_to_new.items():
         task = sim.tasks[task_id]
 
-        # If this task is the Idle task, don't filter
-        if np.all(task.requirements == 0):
+        # If this task is the Idle task or it’s not ready or not incomplete, skip
+        if np.all(task.requirements == 0) or not (task.ready and task.incomplete):
             continue
 
-        if not (task.ready and task.incomplete):
-            continue
+        # Sort the new_robot_ids by distance to the task location -> assign the closest robots first
+        new_robot_ids.sort(key=lambda rid: distance(sim.robots[rid].location, task.location))
 
         # Coverage from existing robots
         combined_caps = np.zeros_like(task.requirements, dtype=bool)
@@ -198,3 +198,7 @@ def count_differences(pre_shield_solution, post_shield_solution):
     diff_count += abs(len(pre_shield_solution) - len(assigned_tasks))
 
     return diff_count
+
+
+def distance(loc1, loc2):
+    return np.linalg.norm(loc1 - loc2)
