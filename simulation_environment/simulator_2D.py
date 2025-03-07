@@ -208,7 +208,9 @@ class Simulation:
                     if self.robot_can_still_contribute_to_other_tasks(robot):
                         # Premove robots towards second highest reward task (IDLE has no location -> second highest is most likely next task)
                         second_highest_reward_id = self.second_highest_rewards_ids[robot.robot_id]
-                        robot.position_towards_task(self.tasks[second_highest_reward_id])
+                        second_highest_reward = self.second_highest_rewards[robot.robot_id]
+                        if second_highest_reward > 0.1:
+                            robot.position_towards_task(self.tasks[second_highest_reward_id])
 
                     else:
                         # Robot cannot contribute anymore ->  Premove towards exit location
