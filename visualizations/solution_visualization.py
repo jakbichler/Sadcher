@@ -3,7 +3,7 @@ import numpy as np
 from matplotlib.patches import Patch, Wedge
 
 
-def plot_gantt_chart(title, schedule, travel_times=None, ax=None):
+def plot_gantt_chart(title, schedule, travel_times=None, ax=None, fontsize=6):
     if ax is None:
         fig, ax = plt.subplots(figsize=(10, 6))
 
@@ -37,7 +37,7 @@ def plot_gantt_chart(title, schedule, travel_times=None, ax=None):
                 va="center",
                 ha="center",
                 color="black",
-                fontsize=6,
+                fontsize=fontsize,
             )
             if task_i not in [e.get_label() for e in legend_elements]:
                 legend_elements.append(
@@ -137,7 +137,7 @@ def plot_robot_trajectories(task_locations, robot_schedules, T_execution, R, ax=
                 ax.add_patch(wedge)
             start_angle = end_angle
 
-    marker_sizes = T_execution[1:-1] * 2
+    marker_sizes = T_execution[1:-1]
     n_skills = np.array(R).shape[1]
     colors = plt.cm.Set1(np.linspace(0, 1, n_skills))
 
@@ -147,7 +147,7 @@ def plot_robot_trajectories(task_locations, robot_schedules, T_execution, R, ax=
         skill_sizes = (
             skills_required / total_skills if total_skills > 0 else np.zeros_like(skills_required)
         )
-        draw_pie(ax, x, y, skill_sizes, marker_sizes[idx - 1] / 100)
+        draw_pie(ax, x, y, skill_sizes, marker_sizes[idx - 1] / 50)
         ax.text(x, y + 2, f"Task {idx}", fontsize=10, ha="right")
 
     ax.scatter(

@@ -6,9 +6,7 @@ import torch
 import yaml
 
 sys.path.append("..")
-from data_generation.problem_generator import (
-    generate_random_data_with_precedence,
-)
+from data_generation.problem_generator import generate_random_data
 from helper_functions.schedules import Full_Horizon_Schedule
 from schedulers.greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
 from schedulers.random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
@@ -26,6 +24,7 @@ class Simulation:
         checkpoint_path=None,
         debug=False,
         move_while_waiting=False,
+        model_name=None,
     ):
         self.timestep = 0
         self.sim_done = False
@@ -41,7 +40,7 @@ class Simulation:
         self.duration_normalization = np.max(problem_instance["T_e"])
         self.location_normalization = np.max(problem_instance["task_locations"])
         self.scheduler_name = scheduler_name
-        self.scheduler = self.create_scheduler(scheduler_name, checkpoint_path)
+        self.scheduler = self.create_scheduler(scheduler_name, checkpoint_path, model_name)
 
     def create_task_adjacency_matrix(self):
         task_adjacency = torch.zeros((self.n_real_tasks, self.n_real_tasks))
@@ -84,7 +83,7 @@ class Simulation:
 
         return tasks
 
-    def create_scheduler(self, name: str, checkpoint_path=None):
+    def create_scheduler(self, name: str, checkpoint_path=None, model_name=None):
         if name == "greedy":
             return GreedyInstantaneousScheduler()
         elif name == "random_bipartite":
@@ -95,6 +94,7 @@ class Simulation:
                 checkpoint_path=checkpoint_path,
                 duration_normalization=self.duration_normalization,
                 location_normalization=self.location_normalization,
+                model_name=model_name,
             )
         else:
             raise ValueError(f"Unknown scheduler '{name}'")
@@ -287,6 +287,7 @@ if __name__ == "__main__":
         action="store_true",
         help="Move robots towards second highest reward task while waiting",
     )
+    parser.add_argument("--sadcher_model_name", type=str, help="Name of the model to use")
     args = parser.parse_args()
 
     with open("simulation_config.yaml", "r") as file:
@@ -299,18 +300,19 @@ if __name__ == "__main__":
     np.random.seed(config["random_seed"])
     precedence_constraints = config["precedence_constraints"]
 
-    # problem_instance: ProblemData = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
-    problem_instance = generate_random_data_with_precedence(
-        n_tasks, n_robots, n_skills, n_precedence
-    )
+    problem_instance = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    # problem_instance = generate_random_data_with_precedence(
+    #    n_tasks, n_robots, n_skills, n_precedence
+    # )
     # problem_instance = json.load(open("/home/jakob/thesis/benchmarking/precedence_6t2r2s2p/problem_instances/problem_instance_000044.json", "r"))
 
     sim = Simulation(
         problem_instance,
         scheduler_name=args.scheduler,
-        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/8t3r3s_models/model_0/best_checkpoint.pt",
+        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_6t2r2s/best_checkpoint.pt",
         debug=True,
         move_while_waiting=args.move_while_waiting,
+        model_name=args.sadcher_model_name,
     )
 
     if args.video:
