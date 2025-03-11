@@ -66,19 +66,38 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
+    # Hyperparameters for 6t2r2s
+    # config = {
+    # "batch_size": 512,
+    # "embedding_dim": 256,
+    # "ff_dim": 512,
+    # "n_transformer_heads": 8,
+    # "n_transformer_layers": 1,
+    # "n_gatn_heads": 2,
+    # "n_gatn_layers": 1,
+    # "dropout": 0.0,
+    # "loss_weight_factor": 0.1,
+    # "learning_rate": 1e-3,
+    # "reward_gamma": 0.99,
+    # "early_stopping_patience": 5,
+    # "early_stopping_threshold": 1e-4,
+    # }
+
+    #  Hyperparameter for 8t3r3s
     config = {
         "batch_size": 512,
-        "embedding_dim": 128,
-        "ff_dim": 256,
+        "embedding_dim": 256,
+        "ff_dim": 512,
         "n_transformer_heads": 4,
-        "n_transformer_layers": 4,
-        "n_gatn_heads": 4,
+        "n_transformer_layers": 2,
+        "n_gatn_heads": 8,
         "n_gatn_layers": 2,
         "dropout": 0.0,
         "loss_weight_factor": 0.1,
         "learning_rate": 1e-3,
         "reward_gamma": 0.99,
-        "early_stopping_patience": 3,
+        "early_stopping_patience": 5,
+        "early_stopping_threshold": 1e-4,
     }
 
     ic("loading dataset")
@@ -183,7 +202,7 @@ if __name__ == "__main__":
             f.write(f"Epoch - {epoch}, Train loss {avg_train_loss}, Val loss - {avg_val_loss}\n")
 
         # Check early stopping condition (has to be at least 0.0001 better)
-        if avg_val_loss < (best_val_loss - 1e-4):
+        if avg_val_loss < (best_val_loss - config["early_stopping_threshold"]):
             best_val_loss = avg_val_loss
             epochs_without_improvement = 0
             best_model_path = os.path.join(out_checkpoint_dir, "best_checkpoint.pt")

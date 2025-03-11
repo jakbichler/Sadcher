@@ -17,7 +17,9 @@ from visualizations.benchmark_visualizations import (
 )
 
 
-def create_simulation(problem_instance, scheduler, checkpoint_path=None, move_while_waiting=False):
+def create_simulation(
+    problem_instance, scheduler, checkpoint_path=None, move_while_waiting=False, model_name=None
+):
     if scheduler == "sadcher":
         return Simulation(
             problem_instance,
@@ -25,20 +27,22 @@ def create_simulation(problem_instance, scheduler, checkpoint_path=None, move_wh
             checkpoint_path=checkpoint_path,
             debug=False,
             move_while_waiting=move_while_waiting,
+            model_name=model_name,
         )
     else:
         return Simulation(problem_instance, scheduler, debug=False)
 
 
 if __name__ == "__main__":
-    n_tasks = 8
-    n_robots = 3
-    n_skills = 3
-    n_precedence = 6
-    seed = 123
+    n_tasks = 6
+    n_robots = 2
+    n_skills = 2
+    n_precedence = 0
+    seed = 1
     np.random.seed(seed)
+    model_name = "6t2r2s"
     checkpoint_path = (
-        "/home/jakob/thesis/imitation_learning/checkpoints/8t3r3s_models/model_0/best_checkpoint.pt"
+        "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_6t2r2s/best_checkpoint.pt"
     )
 
     arg_parser = argparse.ArgumentParser()
@@ -96,6 +100,7 @@ if __name__ == "__main__":
                     scheduler,
                     checkpoint_path,
                     move_while_waiting=args.move_while_waiting,
+                    model_name=model_name,
                 )
                 start_time = time.time()
                 feasible = True
