@@ -6,7 +6,7 @@ import torch
 import yaml
 
 sys.path.append("..")
-from data_generation.problem_generator import generate_random_data
+from data_generation.problem_generator import generate_random_data_with_precedence
 from helper_functions.schedules import Full_Horizon_Schedule
 from schedulers.greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
 from schedulers.random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
@@ -32,13 +32,13 @@ class Simulation:
         self.debugging = debug
         self.move_while_waiting = move_while_waiting
         self.precedence_constraints: list = problem_instance["precedence_constraints"]
+        self.duration_normalization = np.max(problem_instance["T_e"])
+        self.location_normalization = np.max(problem_instance["task_locations"])
         self.robots: list[Robot] = self.create_robots(problem_instance)
         self.tasks: list[Task] = self.create_tasks(problem_instance)
         self.update_task_status()  # Initialize task status
         self.task_adjacency = self.create_task_adjacency_matrix()
         self.robot_schedules = {robot.robot_id: [] for robot in self.robots}
-        self.duration_normalization = np.max(problem_instance["T_e"])
-        self.location_normalization = np.max(problem_instance["task_locations"])
         self.scheduler_name = scheduler_name
         self.scheduler = self.create_scheduler(scheduler_name, checkpoint_path, model_name)
 
@@ -66,7 +66,8 @@ class Simulation:
         requirements = problem_instance["R"]
 
         # Insert artificial IDLE task
-        locations = np.insert(locations, -1, np.zeros_like(locations[0]), axis=0)
+        central_position = self.location_normalization / 2
+        locations = np.insert(locations, -1, np.array([central_position, central_position]), axis=0)
         durations = np.insert(durations, -1, 0, axis=0)
         requirements = np.insert(requirements, -1, np.zeros_like(requirements[0]), axis=0)
 
@@ -206,15 +207,18 @@ class Simulation:
                 ):
                     # Robot was assigned IDLE task
                     if self.robot_can_still_contribute_to_other_tasks(robot):
-                        # Premove robots towards second highest reward task (IDLE has no location -> second highest is most likely next task)
-                        second_highest_reward_id = self.second_highest_rewards_ids[robot.robot_id]
-                        second_highest_reward = self.second_highest_rewards[robot.robot_id]
-                        if second_highest_reward > 0.1:
-                            robot.position_towards_task(self.tasks[second_highest_reward_id])
+                        # Premove robots towards highest reward non-IDLE task
+                        highest_non_idle_reward = self.highest_non_idle_rewards[robot.robot_id]
+                        highest_non_idle_reward_id = self.highest_non_idle_reward_ids[
+                            robot.robot_id
+                        ]
+                        if highest_non_idle_reward > 0.1:
+                            robot.position_towards_task(self.tasks[highest_non_idle_reward_id])
 
                     else:
                         # Robot cannot contribute anymore ->  Premove towards exit location
                         robot.position_towards_task(self.tasks[-1])
+                        print(f"Robot {robot.robot_id} moving towards exit")
 
         self.update_task_status()
         self.update_task_duration()
@@ -233,8 +237,8 @@ class Simulation:
                 )
 
                 if self.move_while_waiting:
-                    self.second_highest_rewards, self.second_highest_rewards_ids = (
-                        self.extract_second_highest_rewards(predicted_reward)
+                    self.highest_non_idle_rewards, self.highest_non_idle_reward_ids = (
+                        self.find_highest_non_idle_reward(predicted_reward)
                     )
             else:
                 instantaneous_assignment = self.scheduler.calculate_robot_assignment(self)
@@ -251,11 +255,16 @@ class Simulation:
                 robot.current_task = task
                 task.assigned = True if task_id != self.idle_task_id else False
 
-    def extract_second_highest_rewards(self, predicted_rewards):
-        top2_rewards, top2_rewards_idx = torch.topk(predicted_rewards, 2, dim=1)
-        second_highest_rewards = top2_rewards[:, 1].detach().cpu().numpy()
-        second_highest_rewards_idx = top2_rewards_idx[:, 1].detach().cpu().numpy()
-        return second_highest_rewards, second_highest_rewards_idx
+    def find_highest_non_idle_reward(self, predicted_rewards):
+        predicted_rewards_non_idle = predicted_rewards[:, 1 : self.idle_task_id]
+        highest_non_idle_rewards, highest_non_idle_rewards_ids = torch.max(
+            predicted_rewards_non_idle, dim=1
+        )
+
+        return (
+            highest_non_idle_rewards,
+            highest_non_idle_rewards_ids + 1,
+        )  # +1 to account for cutting off the start task
 
     def robot_can_still_contribute_to_other_tasks(self, robot):
         pending_tasks = [
@@ -300,16 +309,16 @@ if __name__ == "__main__":
     np.random.seed(config["random_seed"])
     precedence_constraints = config["precedence_constraints"]
 
-    problem_instance = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
-    # problem_instance = generate_random_data_with_precedence(
-    #    n_tasks, n_robots, n_skills, n_precedence
-    # )
+    # problem_instance = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    problem_instance = generate_random_data_with_precedence(
+        n_tasks, n_robots, n_skills, n_precedence
+    )
     # problem_instance = json.load(open("/home/jakob/thesis/benchmarking/precedence_6t2r2s2p/problem_instances/problem_instance_000044.json", "r"))
 
     sim = Simulation(
         problem_instance,
         scheduler_name=args.scheduler,
-        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_6t2r2s/best_checkpoint.pt",
+        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_8t3r3s/best_checkpoint.pt",
         debug=True,
         move_while_waiting=args.move_while_waiting,
         model_name=args.sadcher_model_name,
