@@ -34,15 +34,15 @@ def create_simulation(
 
 
 if __name__ == "__main__":
-    n_tasks = 8
-    n_robots = 3
-    n_skills = 3
+    n_tasks = 6
+    n_robots = 2
+    n_skills = 2
     n_precedence = 0
     seed = 1
     np.random.seed(seed)
-    model_name = "8t3r3s"
+    model_name = "6t2r2s"
     checkpoint_path = (
-        "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_8t3r3s/best_checkpoint.pt"
+        "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_6t2r2s/best_checkpoint.pt"
     )
 
     arg_parser = argparse.ArgumentParser()
@@ -102,7 +102,6 @@ if __name__ == "__main__":
                     move_while_waiting=args.move_while_waiting,
                     model_name=model_name,
                 )
-                start_time = time.time()
                 feasible = True
                 while not sim.sim_done:
                     sim.step()
@@ -115,8 +114,11 @@ if __name__ == "__main__":
                         feasible = False
                         break
 
-                computation_times[scheduler].append(time.time() - start_time)
                 makespans[scheduler].append(sim.makespan)
+                average_computation_time_per_assignment = np.mean(sim.scheduler_computation_times)
+                full_computation_time = np.sum(sim.scheduler_computation_times)
+                computation_times[scheduler].append(average_computation_time_per_assignment)
+
                 if feasible:
                     feasible_makespans[scheduler].append(sim.makespan)
 
@@ -136,7 +138,7 @@ if __name__ == "__main__":
         axs[0, 0],
         feasible_makespans,
         scheduler_names,
-        "Makespan",
+        "makespan",
         f"Makespan Comparison on {args.n_iterations} instances (seed {seed}) of {n_tasks}t{n_robots}r{n_skills}s{n_precedence}p",
     )
 
@@ -145,7 +147,7 @@ if __name__ == "__main__":
         axs[1, 0],
         computation_times,
         scheduler_names,
-        "Computation Time (s)",
+        "computation_time",
         "Computation Time Comparison",
     )
 

@@ -1,17 +1,28 @@
 import numpy as np
 
 
-def plot_violin(ax, data, scheduler_names, ylabel, title):
+def plot_violin(ax, data, scheduler_names, comparison_type, title):
     ax.violinplot(data.values(), showmeans=True)
     ax.set_xticks(range(1, len(scheduler_names) + 1))
     ax.set_xticklabels(scheduler_names)
+
+    if comparison_type == "makespan":
+        ylabel = "Makespan"
+    elif comparison_type == "computation_time":
+        ylabel = "Computation Time (s)"
+    else:
+        raise ValueError(f"Unknown comparison type: {comparison_type}")
     ax.set_ylabel(ylabel)
     ax.set_title(title)
 
     text_offset_x = 0.25
     for i, s in enumerate(scheduler_names):
-        avg_makespan = np.mean(data[s])
-        ax.text(i + 1 + text_offset_x, avg_makespan, f"{avg_makespan:.1f}", ha="center")
+        avg_value = np.mean(data[s])
+
+        if comparison_type == "makespan":
+            ax.text(i + 1 + text_offset_x, avg_value, f"{avg_value:.1f}", ha="center")
+        elif comparison_type == "computation_time":
+            ax.text(i + 1 + text_offset_x, avg_value, f"{avg_value:.4f}", ha="center")
 
     for i, scheduler in enumerate(scheduler_names, start=1):
         x_jitter = np.random.normal(0, 0.03, len(data[scheduler]))

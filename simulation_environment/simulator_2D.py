@@ -1,5 +1,6 @@
 import argparse
 import sys
+import time
 
 import numpy as np
 import torch
@@ -30,6 +31,7 @@ class Simulation:
         self.sim_done = False
         self.makespan = -1  # Will be set when simulation is done
         self.debugging = debug
+        self.scheduler_computation_times = []
         self.move_while_waiting = move_while_waiting
         self.precedence_constraints: list = problem_instance["precedence_constraints"]
         self.duration_normalization = np.max(problem_instance["T_e"])
@@ -230,6 +232,7 @@ class Simulation:
         available_robots = [robot for robot in self.robots if robot.available]
 
         if available_robots:
+            scheduler_start_time = time.time()
             if self.scheduler_name == "sadcher":
                 predicted_reward, instantaneous_assignment = (
                     self.scheduler.calculate_robot_assignment(self)
@@ -241,6 +244,8 @@ class Simulation:
                     )
             else:
                 instantaneous_assignment = self.scheduler.calculate_robot_assignment(self)
+
+            self.scheduler_computation_times.append(time.time() - scheduler_start_time)
 
             self.assign_tasks_to_robots(instantaneous_assignment, self.robots)
 
