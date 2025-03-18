@@ -146,6 +146,7 @@ if __name__ == "__main__":
         default=0.1,
         help="Fraction of dataset to use for tuning (e.g., 0.1 for 10%)",
     )
+    parser.add_argument("--storage", type=str, default="optuna_study.db")
     args = parser.parse_args()
 
     # Load dataset (using a subset for faster runs if desired)
@@ -158,7 +159,7 @@ if __name__ == "__main__":
     study = optuna.create_study(
         direction="minimize",
         study_name="sadcher_hyperparam_tuning_schiermonnikoog",
-        storage="sqlite:///optuna_study_schiermonnikoog.db",
+        storage=f"sqlite:///{args.storage}",
         load_if_exists=True,
     )
     objective_func = partial(objective, args=args, dataset=dataset)

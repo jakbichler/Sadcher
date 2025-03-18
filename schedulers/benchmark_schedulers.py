@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 sys.path.append("..")
 from baselines.aswale_23.MILP_solver import milp_scheduling
-from data_generation.problem_generator import generate_random_data_with_precedence
+from data_generation.problem_generator import generate_random_data
 from simulation_environment.simulator_2D import Simulation
 from visualizations.benchmark_visualizations import (
     compare_makespans_1v1,
@@ -34,15 +34,15 @@ def create_simulation(
 
 
 if __name__ == "__main__":
-    n_tasks = 6
-    n_robots = 2
-    n_skills = 2
+    n_tasks = 8
+    n_robots = 3
+    n_skills = 3
     n_precedence = 0
     seed = 1
     np.random.seed(seed)
-    model_name = "6t2r2s"
+    model_name = "8t3r3s"
     checkpoint_path = (
-        "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_6t2r2s/best_checkpoint.pt"
+        "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_8t3r3s/best_checkpoint.pt"
     )
 
     arg_parser = argparse.ArgumentParser()
@@ -75,10 +75,10 @@ if __name__ == "__main__":
 
     for iteration in tqdm(range(args.n_iterations)):
         # Generate a problem instance
-        # problem_instance = generate_random_data(n_tasks, n_robots, n_skills, [])
-        problem_instance = generate_random_data_with_precedence(
-            n_tasks, n_robots, n_skills, n_precedence
-        )
+        problem_instance = generate_random_data(n_tasks, n_robots, n_skills, [])
+        # problem_instance = generate_random_data_with_precedence(
+        #    n_tasks, n_robots, n_skills, n_precedence
+        # )
 
         worst_case_makespan = np.sum(problem_instance["T_e"]) + np.sum(
             [np.max(problem_instance["T_t"][task]) for task in range(n_tasks + 1)]

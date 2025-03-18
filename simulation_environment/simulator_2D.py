@@ -218,7 +218,6 @@ class Simulation:
                     else:
                         # Robot cannot contribute anymore ->  Premove towards exit location
                         robot.position_towards_task(self.tasks[-1])
-                        print(f"Robot {robot.robot_id} moving towards exit")
 
         self.update_task_status()
         self.update_task_duration()

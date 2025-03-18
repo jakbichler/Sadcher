@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+import time
 
 import numpy as np
 
@@ -26,19 +27,14 @@ def generate_dataset(
     n_instances: int,
     output_dir: str,
     problem_instance_type: str,
-    n_robots=2,
-    n_tasks=6,
-    n_skills=1,
+    n_robots=3,
+    n_tasks=8,
+    n_skills=3,
     n_precedence=0,
 ) -> None:
-    if not os.path.exists(output_dir):
-        os.makedirs(os.path.join(output_dir, "problem_instances"))
-        os.makedirs(os.path.join(output_dir, "solutions"))
-    else:
-        if not os.path.exists(os.path.join(output_dir, "problem_instances")):
-            os.makedirs(os.path.join(output_dir, "problem_instances"))
-        if not os.path.exists(os.path.join(output_dir, "solutions")):
-            os.makedirs(os.path.join(output_dir, "solutions"))
+    os.makedirs(os.path.join(output_dir, "problem_instances"), exist_ok=True)
+    os.makedirs(os.path.join(output_dir, "solutions"), exist_ok=True)
+    os.makedirs(os.path.join(output_dir, "compute_time"), exist_ok=True)
 
     instance_index = get_next_available_index(output_dir)
     successful = 0
@@ -69,10 +65,13 @@ def generate_dataset(
                 problem_instance = generate_idle_data()
             else:
                 raise ValueError(f"Invalid problem instance type: {problem_instance_type}")
-
+            start_time = time.time()
+            print(f"Solving problem instance {instance_index}... at time {start_time}")
             optimal_schedule = milp_scheduling(
-                problem_instance, n_threads=6, cutoff_time_seconds=60 * 10
+                problem_instance, n_threads=6, cutoff_time_seconds=60 * 60 * 7
             )
+            solve_time = time.time() - start_time
+            print(f"Problem instance {instance_index} solved in {solve_time} seconds")
 
             if optimal_schedule is None:
                 print(
@@ -96,6 +95,12 @@ def generate_dataset(
             )
             with open(solution_path, "w") as f:
                 json.dump(optimal_schedule.to_dict(), f)
+
+            compute_time_path = os.path.join(
+                output_dir, "compute_time", f"compute_time_{instance_index:06d}.json"
+            )
+            with open(compute_time_path, "w") as f:
+                json.dump({"compute_time": solve_time}, f)
 
             instance_index += 1  # Increase index only when a valid solution is obtained
             successful += 1

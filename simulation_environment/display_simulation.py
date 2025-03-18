@@ -155,7 +155,7 @@ def draw_robot_skills_squares(ax, robot, colors, square_size=2.5):
     )
 
 
-def update_plot(sim, ax, fig, colors, n_skills):
+def update_plot(sim, ax, fig, colors, n_skills, video_mode=False):
     ax.clear()
 
     for task in sim.tasks:
@@ -171,7 +171,7 @@ def update_plot(sim, ax, fig, colors, n_skills):
                 task.location[0],
                 task.location[1],
                 skill_sizes,
-                task.remaining_duration / 50,
+                task.remaining_duration / 30,
                 colors,
             )
             ax.text(
@@ -212,7 +212,8 @@ def update_plot(sim, ax, fig, colors, n_skills):
         ha="center",
     )
 
-    add_robot_skills_table(fig, sim.robots, colors, n_skills)
+    if not video_mode:
+        add_robot_skills_table(fig, sim.robots, colors, n_skills)
     add_precedence_constraints_text(fig, sim.precedence_constraints)
 
     legend_patches = [
@@ -283,7 +284,7 @@ def run_video_mode(sim):
     fig, ax = plt.subplots(figsize=(8, 8))
     while not sim.sim_done:
         sim.step()
-        update_plot(sim, ax, fig, colors, n_skills)
+        update_plot(sim, ax, fig, colors, n_skills, video_mode=True)
         plt.show(block=False)
         fig.canvas.draw()
         fig.savefig(os.path.join(frame_dir, f"frame_{sim.timestep:04d}.png"))
