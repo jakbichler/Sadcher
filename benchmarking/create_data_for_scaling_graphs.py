@@ -6,7 +6,6 @@ import time
 import numpy as np
 from tqdm import tqdm
 
-# Ensure correct module paths
 sys.path.append("..")
 from benchmark_schedulers import create_simulation
 

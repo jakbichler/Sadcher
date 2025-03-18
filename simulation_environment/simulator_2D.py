@@ -7,13 +7,16 @@ import torch
 import yaml
 
 sys.path.append("..")
-from data_generation.problem_generator import generate_random_data_with_precedence
+from data_generation.problem_generator import (
+    generate_random_data,
+    generate_random_data_with_precedence,
+)
 from helper_functions.schedules import Full_Horizon_Schedule
+from helper_functions.task_robot_classes import Robot, Task
 from schedulers.greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
 from schedulers.random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
 from schedulers.sadcher import SadcherScheduler
 from simulation_environment.display_simulation import run_video_mode, visualize
-from simulation_environment.task_robot_classes import Robot, Task
 from visualizations.solution_visualization import plot_gantt_and_trajectories
 
 
@@ -313,16 +316,16 @@ if __name__ == "__main__":
     np.random.seed(config["random_seed"])
     precedence_constraints = config["precedence_constraints"]
 
-    # problem_instance = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
-    problem_instance = generate_random_data_with_precedence(
-        n_tasks, n_robots, n_skills, n_precedence
-    )
+    problem_instance = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    # problem_instance = generate_random_data_with_precedence(
+    # n_tasks, n_robots, n_skills, n_precedence
+    # )
     # problem_instance = json.load(open("/home/jakob/thesis/benchmarking/precedence_6t2r2s2p/problem_instances/problem_instance_000044.json", "r"))
 
     sim = Simulation(
         problem_instance,
         scheduler_name=args.scheduler,
-        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_8t3r3s/best_checkpoint.pt",
+        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_6t2r2s/best_checkpoint.pt",
         debug=True,
         move_while_waiting=args.move_while_waiting,
         model_name=args.sadcher_model_name,
