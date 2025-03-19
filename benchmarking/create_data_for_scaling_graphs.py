@@ -10,7 +10,10 @@ sys.path.append("..")
 from benchmark_schedulers import create_simulation
 
 from baselines.aswale_23.MILP_solver import milp_scheduling
-from data_generation.problem_generator import generate_random_data
+from data_generation.problem_generator import (
+    generate_random_data,
+    generate_random_data_with_precedence,
+)
 
 
 def main():
@@ -24,6 +27,15 @@ def main():
     parser.add_argument("--n_skills", type=int, default=2, help="Number of skills")
     parser.add_argument("--n_runs", type=int, default=10, help="Number of runs per configuration")
     parser.add_argument(
+        "--including_milp",
+        default=False,
+        action="store_true",
+        help="Include MILP in the comparison",
+    )
+    parser.add_argument(
+        "--milp_cutoff_time", type=int, default=10 * 60, help="Cutoff time for MILP"
+    )
+    parser.add_argument(
         "--move_while_waiting", action="store_true", help="Allow robots to move while waiting"
     )
     parser.add_argument(
@@ -35,9 +47,19 @@ def main():
     parser.add_argument(
         "--output_file", type=str, required=True, help="JSON Lines file to append results to"
     )
+    parser.add_argument(
+        "--problem_type", type=str, default="random", help="Type of problem to generate"
+    )
+    parser.add_argument(
+        "--n_precedence", type=int, default=0, help="Number of precedence constraints"
+    )
+
     args = parser.parse_args()
 
-    schedulers = ["milp", "greedy", "sadcher", "random_bipartite"]
+    if args.including_milp:
+        schedulers = ["milp", "greedy", "sadcher", "random_bipartite"]
+    else:
+        schedulers = ["greedy", "sadcher", "random_bipartite"]
 
     total_iterations = (
         ((args.max_tasks - args.min_tasks) // args.step_tasks + 1)
@@ -50,20 +72,29 @@ def main():
         for n_tasks in range(args.min_tasks, args.max_tasks + 1, args.step_tasks):
             for n_robots in range(args.min_robots, args.max_robots + 1, args.step_robots):
                 for run in range(args.n_runs):
+                    run_results = []
                     # Set seed for reproducibility
                     seed = np.random.randint(1, 1e6)
                     np.random.seed(seed)
 
                     # Generate a random problem instance
-                    problem_instance = generate_random_data(n_tasks, n_robots, args.n_skills, [])
+                    if args.problem_type == "random":
+                        problem_instance = generate_random_data(
+                            n_tasks, n_robots, args.n_skills, []
+                        )
+                    elif args.problem_type == "random_with_precedence":
+                        problem_instance = generate_random_data_with_precedence(
+                            n_tasks, n_robots, args.n_skills, args.n_precedence
+                        )
                     worst_case_makespan = np.sum(problem_instance["T_e"]) + np.sum(
                         [np.max(problem_instance["T_t"][task]) for task in range(n_tasks + 1)]
                     )
+
                     for scheduler in schedulers:
                         if scheduler == "milp":
                             start_time = time.time()
                             optimal_schedule = milp_scheduling(
-                                problem_instance, n_threads=6, cutoff_time_seconds=15 * 60
+                                problem_instance, n_threads=6, cutoff_time_seconds=10 * 60
                             )
                             elapsed_time = time.time() - start_time
                             if optimal_schedule is None:
@@ -110,9 +141,13 @@ def main():
                             "total_comp_time": total_comp_time,
                             "infeasible_count": infeasible,
                             "model_name": args.model_name,
+                            "n_precedence": args.n_precedence,
                         }
+
+                        run_results.append(result)
+                    for result in run_results:
                         outfile.write(json.dumps(result) + "\n")
-                        outfile.flush()  # Ensure immediate write to disk
+                    outfile.flush()  # Ensure immediate write to disk
                     pbar.update(1)
     pbar.close()
 
