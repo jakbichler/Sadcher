@@ -316,16 +316,16 @@ if __name__ == "__main__":
     np.random.seed(config["random_seed"])
     precedence_constraints = config["precedence_constraints"]
 
-    problem_instance = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
-    # problem_instance = generate_random_data_with_precedence(
-    # n_tasks, n_robots, n_skills, n_precedence
-    # )
+    # problem_instance = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+    problem_instance = generate_random_data_with_precedence(
+        n_tasks, n_robots, n_skills, n_precedence
+    )
     # problem_instance = json.load(open("/home/jakob/thesis/benchmarking/precedence_6t2r2s2p/problem_instances/problem_instance_000044.json", "r"))
 
     sim = Simulation(
         problem_instance,
         scheduler_name=args.scheduler,
-        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_6t2r2s/best_checkpoint.pt",
+        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_8t3r3s/best_checkpoint.pt",
         debug=True,
         move_while_waiting=args.move_while_waiting,
         model_name=args.sadcher_model_name,
@@ -344,6 +344,7 @@ if __name__ == "__main__":
 
     rolled_out_schedule = Full_Horizon_Schedule(sim.makespan, sim.robot_schedules, n_tasks)
     print(rolled_out_schedule)
+    print(f"Sum of computation times: {np.sum(sim.scheduler_computation_times)}")
     plot_gantt_and_trajectories(
         f"{sim.scheduler_name}: MS, {sim.makespan}, \n nt: {n_tasks}, nr: {n_robots}, sn: {n_skills}, seed: {config['random_seed']}",
         rolled_out_schedule,
