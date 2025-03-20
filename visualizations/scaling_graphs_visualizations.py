@@ -40,7 +40,7 @@ if __name__ == "__main__":
 
     # 1. Average Computation Time stats (grouped by scheduler and n_tasks)
     comp_stats = (
-        df_filtered[df_filtered["n_tasks"] > 4]
+        df_filtered[df_filtered["n_tasks"] > 2]
         .groupby(["scheduler", "n_tasks"])["avg_comp_time"]
         .agg(["mean", "std"])
         .reset_index()
@@ -166,7 +166,7 @@ if __name__ == "__main__":
         )
     ax[3].set_xlabel("Number of Tasks")
     ax[3].set_ylabel("Gap to Sadcher [%]")
-    ax[3].set_title(f"Gap vs. Sadcher Baseline (n_robots = {n_robots})")
+    ax[3].set_title(f"Gap vs. Sadcher Baseline (#Robots = {n_robots})")
     ax[3].legend()
     ax[3].grid(True)
     ax[3].set_xticks(range(0, 110, 10))

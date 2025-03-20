@@ -18,6 +18,8 @@ dependencies = [
     "icecream>=2.1.4",
     "optuna>=4.2.1",
     "optuna-dashboard>=0.17.0",
+    "moviepy>=2.1.2",
+    "opencv-python>=4.11.0.86",
 ]
 
 [dependency-groups]
