@@ -236,11 +236,10 @@ class Simulation:
 
         available_robots = [robot for robot in self.robots if robot.available]
         num_currently_available_robots = len(available_robots)
-        print(f"Currently Available robots: {num_currently_available_robots}")
 
         if (
             num_currently_available_robots != self.num_available_robots_in_previous_timestep
-            and num_currently_available_robots > 0
+            and num_currently_available_robots > 0  # Change of available robots -> assignment
         ):
             scheduler_start_time = time.time()
             if self.scheduler_name == "sadcher":
