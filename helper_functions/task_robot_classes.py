@@ -49,6 +49,22 @@ class Task:
             dtype=float,
         )
 
+    def print_status(self):
+        task_status = (
+            f"Task Overview:\n"
+            f"  ID: {self.task_id}\n"
+            f"  Location: {self.location}\n"
+            f"  Overall Duration: {self.overall_duration}\n"
+            f"  Remaining Duration: {self.remaining_duration}\n"
+            f"  Requirements: {self.requirements}\n"
+            f"  Status: {self.status}\n"
+            f"  Ready: {self.ready}\n"
+            f"  Assigned: {self.assigned}\n"
+            f"  Incomplete: {self.incomplete}\n"
+        )
+        print(f"Task status is :{task_status}")
+        print(f"Features are :{self.feature_vector()}")
+
 
 class Robot:
     def __init__(self, robot_id, location, speed=1.0, capabilities=None):
@@ -99,3 +115,17 @@ class Robot:
             ],
             dtype=float,
         )
+
+    def print_status(self):
+        robot_status = (
+            f"Robot Overview:\n"
+            f"  ID: {self.robot_id}\n"
+            f"  Location: {self.location}\n"
+            f"  Speed: {self.speed}\n"
+            f"  Capabilities: {self.capabilities}\n"
+            f"  Current Task: {self.current_task.task_id if self.current_task else None}\n"
+            f"  Available: {self.available}\n"
+            f"  Remaining Workload: {self.remaining_workload}\n"
+        )
+        print(f"Status is :{robot_status}")
+        print(f"Features are :{self.feature_vector()}")
