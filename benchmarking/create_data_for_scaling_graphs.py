@@ -57,9 +57,9 @@ def main():
     args = parser.parse_args()
 
     if args.including_milp:
-        schedulers = ["milp", "greedy", "sadcher", "random_bipartite"]
+        schedulers = ["milp", "greedy", "sadcher"]
     else:
-        schedulers = ["greedy", "sadcher", "random_bipartite"]
+        schedulers = ["greedy", "sadcher"]
 
     total_iterations = (
         ((args.max_tasks - args.min_tasks) // args.step_tasks + 1)

@@ -41,7 +41,7 @@ if __name__ == "__main__":
     n_robots = 3
     n_skills = 3
     n_precedence = 3
-    seed = 2
+    seed = 10
     np.random.seed(seed)
     model_name = "8t3r3s"
     checkpoint_path = (
@@ -79,6 +79,7 @@ if __name__ == "__main__":
     for iteration in tqdm(range(args.n_iterations)):
         # Generate a problem instance
         # problem_instance = generate_random_data(n_tasks, n_robots, n_skills, [])
+        print(iteration)
         problem_instance = generate_random_data_with_precedence(
             n_tasks, n_robots, n_skills, n_precedence
         )

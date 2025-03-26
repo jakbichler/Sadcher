@@ -128,6 +128,9 @@ class SadcherScheduler:
                     if assigned == 1
                 ]
             )
+            print(
+                f"with cum. reward {sum(predicted_reward[robot][task] for (robot, task), assigned in bipartite_matching_solution.items() if assigned == 1):.6f}"
+            )
         filtered_solution = filter_redundant_assignments(bipartite_matching_solution, sim)
         if self.debug:
             print(

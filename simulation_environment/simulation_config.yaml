@@ -2,7 +2,7 @@ n_tasks: 8
 n_robots: 3
 n_skills: 3  
 n_precedence: 3
-random_seed: 123 # 6, 10 
+random_seed: 0 # 6, 10 
 precedence_constraints:
   #- [1, 2]
   #- [2, 1
