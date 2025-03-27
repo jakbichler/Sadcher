@@ -1,0 +1,4 @@
+Training Run - 2025-03-11 12:07:32
+Config: {'batch_size': 512, 'embedding_dim': 256, 'ff_dim': 512, 'n_transformer_heads': 4, 'n_transformer_layers': 2, 'n_gatn_heads': 8, 'n_gatn_layers': 2, 'dropout': 0.0, 'loss_weight_factor': 0.1, 'learning_rate': 0.001, 'reward_gamma': 0.99, 'early_stopping_patience': 5, 'early_stopping_threshold': 0.0001}
+Dataset: ../datasets/delft_blue_8t3r3s/merged/
+N_samples: 2084545
