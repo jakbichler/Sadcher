@@ -46,6 +46,7 @@ class Simulation:
         self.robot_schedules = {robot.robot_id: [] for robot in self.robots}
         self.scheduler_name = scheduler_name
         self.scheduler = self.create_scheduler(scheduler_name, checkpoint_path, model_name)
+        self.num_available_robots_in_previous_timestep = -1
 
     def create_task_adjacency_matrix(self):
         task_adjacency = torch.zeros((self.n_real_tasks, self.n_real_tasks))
@@ -199,6 +200,7 @@ class Simulation:
 
     def step(self):
         """Advance the simulation by one timestep, moving robots and updating tasks."""
+
         for robot in self.robots:
             if robot.current_task:
                 if robot.current_task.task_id is not self.idle_task_id:
@@ -230,11 +232,15 @@ class Simulation:
         self.update_task_status()
 
         for robot in self.robots:
-            robot.check_task_status()
+            robot.check_task_status(self.idle_task_id)
 
         available_robots = [robot for robot in self.robots if robot.available]
+        num_currently_available_robots = len(available_robots)
 
-        if available_robots:
+        if (
+            num_currently_available_robots != self.num_available_robots_in_previous_timestep
+            and num_currently_available_robots > 0  # Change of available robots -> assignment
+        ):
             scheduler_start_time = time.time()
             if self.scheduler_name == "sadcher":
                 predicted_reward, instantaneous_assignment = (
@@ -252,6 +258,7 @@ class Simulation:
 
             self.assign_tasks_to_robots(instantaneous_assignment, self.robots)
 
+        self.num_available_robots_in_previous_timestep = num_currently_available_robots
         self.timestep += 1
 
     def assign_tasks_to_robots(self, instantaneous_schedule, robots):
@@ -320,12 +327,13 @@ if __name__ == "__main__":
     problem_instance = generate_random_data_with_precedence(
         n_tasks, n_robots, n_skills, n_precedence
     )
+
     # problem_instance = json.load(open("/home/jakob/thesis/benchmarking/precedence_6t2r2s2p/problem_instances/problem_instance_000044.json", "r"))
 
     sim = Simulation(
         problem_instance,
         scheduler_name=args.scheduler,
-        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_8t3r3s/best_checkpoint.pt",
+        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_2_8t3r3s/best_checkpoint.pt",
         debug=True,
         move_while_waiting=args.move_while_waiting,
         model_name=args.sadcher_model_name,
@@ -344,7 +352,7 @@ if __name__ == "__main__":
 
     rolled_out_schedule = Full_Horizon_Schedule(sim.makespan, sim.robot_schedules, n_tasks)
     print(rolled_out_schedule)
-    print(f"Sum of computation times: {np.sum(sim.scheduler_computation_times)}")
+    print(f"Sum of computation times: {sum(sim.scheduler_computation_times)}")
     plot_gantt_and_trajectories(
         f"{sim.scheduler_name}: MS, {sim.makespan}, \n nt: {n_tasks}, nr: {n_robots}, sn: {n_skills}, seed: {config['random_seed']}",
         rolled_out_schedule,

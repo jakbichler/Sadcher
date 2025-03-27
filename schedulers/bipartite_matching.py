@@ -77,7 +77,16 @@ def solve_bipartite_matching(R, sim):
             for robot_idx, robot in enumerate(sim.robots):
                 problem += A[robot_idx][task_idx] == 0
 
-    problem.solve(pulp.PULP_CBC_CMD(msg=0))
+    problem.solve(
+        pulp.PULP_CBC_CMD(
+            msg=False,
+            threads=6,
+            options=[
+                "ratioGap 0",
+                "allowableGap 0",
+            ],
+        )
+    )
     solution = {
         (robot_idx, task_idx): int(pulp.value(A[robot_idx][task_idx]))
         for robot_idx in range(n_robots)

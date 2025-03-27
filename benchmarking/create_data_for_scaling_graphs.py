@@ -7,6 +7,8 @@ import numpy as np
 from tqdm import tqdm
 
 sys.path.append("..")
+import os
+
 from benchmark_schedulers import create_simulation
 
 from baselines.aswale_23.MILP_solver import milp_scheduling
@@ -55,11 +57,12 @@ def main():
     )
 
     args = parser.parse_args()
+    os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
 
     if args.including_milp:
-        schedulers = ["milp", "greedy", "sadcher", "random_bipartite"]
+        schedulers = ["milp", "greedy", "sadcher"]
     else:
-        schedulers = ["greedy", "sadcher", "random_bipartite"]
+        schedulers = ["greedy", "sadcher"]
 
     total_iterations = (
         ((args.max_tasks - args.min_tasks) // args.step_tasks + 1)

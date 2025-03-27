@@ -7,7 +7,7 @@ import numpy as np
 import torch
 
 from helper_functions.schedules import Full_Horizon_Schedule
-from simulation_environment.task_robot_classes import Robot, Task
+from helper_functions.task_robot_classes import Robot, Task
 
 
 def predecessors_completed(problem, solution, task_id, timestep):
