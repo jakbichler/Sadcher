@@ -241,10 +241,6 @@ class Simulation:
             num_currently_available_robots != self.num_available_robots_in_previous_timestep
             and num_currently_available_robots > 0  # Change of available robots -> assignment
         ):
-            if self.debugging:
-                [robot.print_status() for robot in self.robots]
-                print("\n")
-                [task.print_status() for task in self.tasks]
             scheduler_start_time = time.time()
             if self.scheduler_name == "sadcher":
                 predicted_reward, instantaneous_assignment = (
@@ -328,17 +324,16 @@ if __name__ == "__main__":
     precedence_constraints = config["precedence_constraints"]
 
     # problem_instance = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
-    for _ in range(16):
-        problem_instance = generate_random_data_with_precedence(
-            n_tasks, n_robots, n_skills, n_precedence
-        )
+    problem_instance = generate_random_data_with_precedence(
+        n_tasks, n_robots, n_skills, n_precedence
+    )
 
     # problem_instance = json.load(open("/home/jakob/thesis/benchmarking/precedence_6t2r2s2p/problem_instances/problem_instance_000044.json", "r"))
 
     sim = Simulation(
         problem_instance,
         scheduler_name=args.scheduler,
-        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_8t3r3s/best_checkpoint.pt",
+        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_2_8t3r3s/best_checkpoint.pt",
         debug=True,
         move_while_waiting=args.move_while_waiting,
         model_name=args.sadcher_model_name,

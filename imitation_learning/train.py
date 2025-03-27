@@ -85,13 +85,13 @@ if __name__ == "__main__":
 
     #  Hyperparameter for 8t3r3s
     config = {
-        "batch_size": 512,
+        "batch_size": 256,
         "embedding_dim": 256,
         "ff_dim": 512,
         "n_transformer_heads": 4,
         "n_transformer_layers": 2,
         "n_gatn_heads": 8,
-        "n_gatn_layers": 2,
+        "n_gatn_layers": 1,
         "dropout": 0.0,
         "loss_weight_factor": 0.1,
         "learning_rate": 1e-3,
@@ -134,6 +134,7 @@ if __name__ == "__main__":
         n_transformer_layers=config["n_transformer_layers"],
         n_gatn_heads=config["n_gatn_heads"],
         n_gatn_layers=config["n_gatn_layers"],
+        dropout=config["dropout"],
     ).to(device)
 
     if args.continue_training:

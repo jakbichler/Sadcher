@@ -41,11 +41,11 @@ if __name__ == "__main__":
     n_robots = 3
     n_skills = 3
     n_precedence = 3
-    seed = 10
+    seed = 123
     np.random.seed(seed)
     model_name = "8t3r3s"
     checkpoint_path = (
-        "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_0_8t3r3s/best_checkpoint.pt"
+        "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_2_8t3r3s/best_checkpoint.pt"
     )
 
     arg_parser = argparse.ArgumentParser()

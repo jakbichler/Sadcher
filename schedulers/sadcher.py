@@ -42,7 +42,7 @@ class SadcherScheduler:
                 n_transformer_heads=4,
                 n_transformer_layers=2,
                 n_gatn_heads=8,
-                n_gatn_layers=2,
+                n_gatn_layers=1,
             ).to(self.device)
 
         else:
@@ -100,7 +100,6 @@ class SadcherScheduler:
             ).squeeze(0)  # remove batch dim
 
         predicted_reward = torch.clamp(predicted_reward_raw, min=1e-6)
-        predicted_reward[:, -1] = torch.clamp(predicted_reward[:, -1], max=4.0)
 
         # Add  negative rewards for for the start and end task --> not to be selected, will be handled by the scheduler
         reward_start_end = torch.ones(n_robots, 1).to(self.device) * (-1000)
@@ -118,6 +117,10 @@ class SadcherScheduler:
                         f"Robot {robot_idx} -> Task {task_idx}: {predicted_reward_raw[robot_idx][task_idx]:.6f} -> {predicted_reward[robot_idx][task_idx]:.6f}"
                     )
                 print("\n")
+                # print the feature vecotors with explanation what is what
+                print(
+                    f"Robot {robot_idx} feature vector: {robot_features[0][robot_idx].cpu().numpy()}"
+                )
 
         bipartite_matching_solution = solve_bipartite_matching(predicted_reward, sim)
         if self.debug:
@@ -127,9 +130,6 @@ class SadcherScheduler:
                     for task_robot_pair, assigned in bipartite_matching_solution.items()
                     if assigned == 1
                 ]
-            )
-            print(
-                f"with cum. reward {sum(predicted_reward[robot][task] for (robot, task), assigned in bipartite_matching_solution.items() if assigned == 1):.6f}"
             )
         filtered_solution = filter_redundant_assignments(bipartite_matching_solution, sim)
         if self.debug:

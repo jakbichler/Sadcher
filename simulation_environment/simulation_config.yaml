@@ -5,4 +5,4 @@ n_precedence: 3
 random_seed: 0 # 6, 10 
 precedence_constraints:
   #- [1, 2]
-  #- [2, 1
+  #- [2, 1  
