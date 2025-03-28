@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 from helper_functions.schedules import Instantaneous_Schedule
-from imitation_learning.attention_models import SchedulerNetwork
+from models.scheduler_network import SchedulerNetwork
 from schedulers.bipartite_matching import (
     filter_overassignments,
     filter_redundant_assignments,
