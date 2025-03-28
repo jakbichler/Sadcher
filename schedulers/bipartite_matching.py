@@ -5,7 +5,7 @@ import pulp
 import torch
 
 
-def solve_bipartite_matching(R, sim):
+def solve_bipartite_matching(R, sim, n_threads=6):
     """
     R    : torch.tensor [n_robots, n_tasks], reward matrix
     sim  : Simulation object
@@ -80,7 +80,7 @@ def solve_bipartite_matching(R, sim):
     problem.solve(
         pulp.PULP_CBC_CMD(
             msg=False,
-            threads=6,
+            threads=n_threads,
             options=[
                 "ratioGap 0",
                 "allowableGap 0",
