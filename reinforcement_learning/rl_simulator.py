@@ -206,6 +206,15 @@ class RL_Simulation:
                 robot.current_task = task
                 task.assigned = True if task_id != self.idle_task_id else False
 
+    def assign_tasks_to_robots_rl(self, action):
+        for robot_idx, assignment in enumerate(action):
+            robot = self.robots[robot_idx]
+            task_id = assignment.item()
+            if task_id is not None:
+                task = self.tasks[task_id]
+                robot.current_task = task
+                task.assigned = True if task_id != self.idle_task_id else False
+
     def find_highest_non_idle_reward(self, predicted_rewards):
         predicted_rewards_non_idle = predicted_rewards[:, 1 : self.idle_task_id]
         highest_non_idle_rewards, highest_non_idle_rewards_ids = torch.max(
@@ -250,4 +259,7 @@ class RL_Simulation:
             dtype=np.float32,
         )
 
-        return robot_features, task_features
+        task_features = torch.tensor(task_features, dtype=torch.float32)
+        robot_features = torch.tensor(robot_features, dtype=torch.float32)
+
+        return task_features, robot_features

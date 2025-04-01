@@ -32,8 +32,8 @@ class SchedulingRLEnvironment(gym.Env):
         dim_robots = 7  # (x,y,duration,[skill0, skill1, skill2], available)
         dim_tasks = 9  # (x,y,duration,[skill0, skill1, skill2],ready, assigned, incomplete)
 
-        self.action_space = gym.spaces.Discrete(
-            self.n_tasks + 1,
+        self.action_space = gym.spaces.MultiDiscrete(
+            [self.n_tasks + 1] * self.n_robots,
         )
 
         self.observation_space = gym.spaces.Dict(
@@ -75,7 +75,7 @@ class SchedulingRLEnvironment(gym.Env):
         return self._get_observation(), {}
 
     def _get_observation(self):
-        robot_features, task_features = self.sim.return_task_robot_states()
+        task_features, robot_features = self.sim.return_task_robot_states()
 
         return {
             "robot_features": robot_features,
@@ -96,8 +96,9 @@ class SchedulingRLEnvironment(gym.Env):
         else:
             return 0.0
 
-    def step(self, action: Instantaneous_Schedule):
-        self.sim.assign_tasks_to_robots(action, self.sim.robots)
+    def step(self, action):
+        print("Incoming actions are:", action)
+        self.sim.assign_tasks_to_robots_rl(action)
         truncated = False
 
         while not self.sim.sim_done:
