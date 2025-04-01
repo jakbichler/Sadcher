@@ -234,22 +234,20 @@ class RL_Simulation:
         return can_contribute
 
     def return_task_robot_states(self):
-        task_features = torch.tensor(
+        task_features = np.array(
             [
                 task.feature_vector(self.location_normalization, self.duration_normalization)
                 for task in self.tasks[1:-2]
             ],  # Exclude start, end, and IDLE task
-            dtype=torch.float32,
-            device=self.device,
-        ).unsqueeze(0)
+            dtype=np.float32,
+        )
 
-        robot_features = torch.tensor(
+        robot_features = np.array(
             [
                 robot.feature_vector(self.location_normalization, self.duration_normalization)
                 for robot in self.robots
             ],
-            dtype=torch.float32,
-            device=self.device,
-        ).unsqueeze(0)
+            dtype=np.float32,
+        )
 
         return robot_features, task_features
