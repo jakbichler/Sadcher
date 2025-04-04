@@ -5,34 +5,42 @@ extension of the greedy solver to include precedence constraints
 """
 
 import numpy as np
+
 from data_generation.problem_generator import ProblemData, read_problem_instance
 from helper_functions.schedules import Full_Horizon_Schedule
 
 
-def greedy_scheduling(problem_instance: ProblemData):
-
-    Q, R_original, T_execution, T_travel, task_locations, precedence_constraints = read_problem_instance(problem_instance)
-    R = R_original.copy() # R is modified during the scheduling process
+def greedy_scheduling(problem_instance: ProblemData, print_flag=True):
+    Q, R_original, T_execution, T_travel, task_locations, precedence_constraints = (
+        read_problem_instance(problem_instance)
+    )
+    R = R_original.copy()  # R is modified during the scheduling process
     n_robots = Q.shape[0]
     n_tasks = R.shape[0] - 2
-    X = np.zeros((n_robots, n_tasks + 2, n_tasks + 2)) # Robot-task assignment matrix
-    Y = np.zeros((n_robots, n_tasks + 2)) # Arrival time of robot i at task k
+    X = np.zeros((n_robots, n_tasks + 2, n_tasks + 2))  # Robot-task assignment matrix
+    Y = np.zeros((n_robots, n_tasks + 2))  # Arrival time of robot i at task k
     Y_max = np.zeros(n_tasks + 2)  # Latest arrival time at each task (= start of execution)
 
     while not all_tasks_satisfied(Q, X, R, n_tasks, n_robots):
         # Find robot-task pairs with max skills to contribute
-        max_contribution_pairs = find_max_contribution_pairs(Q, X, R, n_tasks, n_robots, precedence_constraints)
+        max_contribution_pairs = find_max_contribution_pairs(
+            Q, X, R, n_tasks, n_robots, precedence_constraints
+        )
 
         if not max_contribution_pairs:
             print("No feasible robot-task pairs found. Check for cycles in precedence constraints.")
             break
 
         # Select the earliest robot-task pair out of the ones with max contribution
-        earliest_robot, selected_task, arrival_time = select_earliest_pair(X, max_contribution_pairs, Y_max, T_execution, T_travel, precedence_constraints)
-        
+        earliest_robot, selected_task, arrival_time = select_earliest_pair(
+            X, max_contribution_pairs, Y_max, T_execution, T_travel, precedence_constraints
+        )
+
         # Assign task selected_task to robot earliest_robot
-        assign_task_to_robot(Q, R, X, Y, earliest_robot, selected_task, T_execution, T_travel, arrival_time)
-        
+        assign_task_to_robot(
+            Q, R, X, Y, earliest_robot, selected_task, T_execution, T_travel, arrival_time
+        )
+
         # While not all skills are covered, keep assigning robots to the task
         while np.any(R[selected_task] > 0):
             # Find robots with max contributions for remaining skills
@@ -43,14 +51,26 @@ def greedy_scheduling(problem_instance: ProblemData):
                 break
 
             # Select earliest robot with max remaining skills to contribute
-            earliest_robot, arrival_time = select_earliest_robot(X, Y_max, max_contribution_robots, selected_task, T_travel, T_execution, precedence_constraints)
-            
+            earliest_robot, arrival_time = select_earliest_robot(
+                X,
+                Y_max,
+                max_contribution_robots,
+                selected_task,
+                T_travel,
+                T_execution,
+                precedence_constraints,
+            )
+
             # Assign task selected_task to robot earliest_robot
-            assign_task_to_robot(Q, R, X, Y, earliest_robot, selected_task, T_execution, T_travel, arrival_time)
-        
+            assign_task_to_robot(
+                Q, R, X, Y, earliest_robot, selected_task, T_execution, T_travel, arrival_time
+            )
+
         Y_max[selected_task] = np.max(Y[:, selected_task])
 
-    makespan = calculate_task_end_times(Y_max, T_execution, T_travel, n_tasks)
+    makespan = calculate_task_end_times(
+        Y_max, T_execution, T_travel, n_tasks, print_flag=print_flag
+    )
 
     robots = range(n_robots)
     tasks = range(n_tasks + 2)
@@ -59,7 +79,11 @@ def greedy_scheduling(problem_instance: ProblemData):
     for robot in range(n_robots):
         for task in tasks[:-1]:
             # Check if robot visits task
-            if any(X[robot][previous_task][task] == 1 for previous_task in tasks if previous_task != task):
+            if any(
+                X[robot][previous_task][task] == 1
+                for previous_task in tasks
+                if previous_task != task
+            ):
                 start_time = Y_max[task]
                 end_time = start_time + T_execution[task]
                 if task != 0 and task != n_tasks + 1:
@@ -85,17 +109,17 @@ def all_tasks_satisfied(Q, X, R, n_tasks, n_robots):
     Checks if all tasks have been satisfied, i.e., all required skills for each task
     have been covered by the assigned robots.
     """
-    for task in range(1, n_tasks + 1):  
+    for task in range(1, n_tasks + 1):
         assigned_robots = [robot for robot in range(n_robots) if np.any(X[robot, :, task] == 1)]
-        
+
         if not assigned_robots:
             return False  # No robots assigned to this task
-        
+
         skills_provided = np.logical_or.reduce(Q[assigned_robots], axis=0)
-        
+
         # Check if all required skills are covered
         if not np.all(skills_provided >= R[task]):
-            return False  
+            return False
 
     return True
 
@@ -105,8 +129,8 @@ def find_max_contribution_pairs(Q, X, R, n_tasks, n_robots, precedence_constrain
     max_contribution_pairs = []
     for robot in range(n_robots):
         for task in range(n_tasks + 2):
-            if np.any(X[robot,:,task] == 1):
-                continue # Robot already assigned to task
+            if np.any(X[robot, :, task] == 1):
+                continue  # Robot already assigned to task
 
             # Skip tasks whose predecessors are not fully scheduled
             if not predecessors_completed(task, R, precedence_constraints):
@@ -139,8 +163,12 @@ def select_earliest_pair(X, pairs, Y_max, T_execution, T_travel, precedence_cons
     for pair in pairs:
         robot, task = pair
         current_task = get_current_task(robot, X)
-        arrival_time = Y_max[current_task] + T_execution[current_task] + T_travel[current_task][task]
-        earliest_possible_start_time_due_to_precedence =  finish_time_all_predecessors(task, T_travel, Y_max, T_execution, precedence_constraints)
+        arrival_time = (
+            Y_max[current_task] + T_execution[current_task] + T_travel[current_task][task]
+        )
+        earliest_possible_start_time_due_to_precedence = finish_time_all_predecessors(
+            task, T_travel, Y_max, T_execution, precedence_constraints
+        )
         arrival_time = max(arrival_time, earliest_possible_start_time_due_to_precedence)
 
         if arrival_time < earliest_time:
@@ -153,7 +181,7 @@ def select_earliest_pair(X, pairs, Y_max, T_execution, T_travel, precedence_cons
 def finish_time_all_predecessors(task, T_travel, Y_max, T_execution, precedence_constraints):
     if precedence_constraints is None:
         return 0
-    
+
     predecessors = [j for (j, k) in precedence_constraints if k == task]
     max_finish_time = 0
     for predecessor in predecessors:
@@ -165,7 +193,7 @@ def finish_time_all_predecessors(task, T_travel, Y_max, T_execution, precedence_
     return max_finish_time
 
 
-def assign_task_to_robot(Q, R, X, Y,robot_index, task_index, T_execution, T_travel, arrival_time):
+def assign_task_to_robot(Q, R, X, Y, robot_index, task_index, T_execution, T_travel, arrival_time):
     """
     Assigns the specified task to the specified robot and updates the relevant matrices.
     """
@@ -187,7 +215,7 @@ def find_max_contribution_robots_for_one_task(Q, task_requirements):
     """
     contributions = Q @ task_requirements  # Match skills with requirements
     max_contribution = np.max(contributions)
-    
+
     if max_contribution == 0:
         return []  # No robot can contribute to the remaining skills
 
@@ -195,7 +223,9 @@ def find_max_contribution_robots_for_one_task(Q, task_requirements):
     return max_contribution_robot
 
 
-def select_earliest_robot(X, Y_max, robots, task_index, T_travel, T_execution, precedence_constraints):
+def select_earliest_robot(
+    X, Y_max, robots, task_index, T_travel, T_execution, precedence_constraints
+):
     """
     Selects the robot that can reach the specified task the earliest.
     """
@@ -204,8 +234,12 @@ def select_earliest_robot(X, Y_max, robots, task_index, T_travel, T_execution, p
 
     for robot in robots:
         current_task = get_current_task(robot, X)
-        arrival_time = Y_max[current_task] + T_execution[current_task] + T_travel[current_task][task_index]
-        earliest_possible_start_time_due_to_precedence =  finish_time_all_predecessors(task_index, T_travel, Y_max, T_execution, precedence_constraints)
+        arrival_time = (
+            Y_max[current_task] + T_execution[current_task] + T_travel[current_task][task_index]
+        )
+        earliest_possible_start_time_due_to_precedence = finish_time_all_predecessors(
+            task_index, T_travel, Y_max, T_execution, precedence_constraints
+        )
         arrival_time = max(arrival_time, earliest_possible_start_time_due_to_precedence)
 
         if arrival_time < earliest_time:
@@ -215,11 +249,14 @@ def select_earliest_robot(X, Y_max, robots, task_index, T_travel, T_execution, p
     return earliest_robot, arrival_time
 
 
-def calculate_task_end_times(Y_max, T_execution, T_travel, n_tasks):
+def calculate_task_end_times(Y_max, T_execution, T_travel, n_tasks, print_flag=True):
     task_end_times = [Y_max[task] + T_execution[task] for task in range(1, n_tasks + 1)]
     last_task_finished = np.argmax(task_end_times)
     finish_task = n_tasks + 1
-    last_depot_arrival_time = task_end_times[last_task_finished] + T_travel[last_task_finished+1][finish_task]
-    print(f"Greedy time to completion: {last_depot_arrival_time}")
+    last_depot_arrival_time = (
+        task_end_times[last_task_finished] + T_travel[last_task_finished + 1][finish_task]
+    )
+    if print_flag:
+        print(f"Greedy time to completion: {last_depot_arrival_time}")
 
     return last_depot_arrival_time
