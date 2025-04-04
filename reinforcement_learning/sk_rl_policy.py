@@ -8,77 +8,16 @@ import torch
 import torch.nn as nn
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
 from skrl.envs.torch import wrap_env
+from skrl.envs.wrappers.torch.gymnasium_envs import unflatten_tensorized_space
 from skrl.memories.torch import RandomMemory
 from skrl.models.torch import DeterministicMixin, Model, MultiCategoricalMixin
 from skrl.trainers.torch import SequentialTrainer
 from skrl.trainers.torch.sequential import SEQUENTIAL_TRAINER_DEFAULT_CONFIG
-from skrl.utils.spaces.torch import (
-    flatten_tensorized_space,
-    tensorize_space,
-    unflatten_tensorized_space,
-    untensorize_space,
-)
 
-from helper_functions.schedules import Instantaneous_Schedule
 from models.scheduler_network import SchedulerNetwork
 
-# ================================
-# Custom PPO Policy with Hard Masking
-# ================================
 
-
-def unflatten_state(flat_state: torch.Tensor) -> dict:
-    """
-    Given a flattened state tensor, reconstruct the original dictionary.
-
-    Assumptions:
-      - There are 3 robots with 7 features each.
-      - There are 8 tasks with 9 features each.
-      - The task adjacency matrix is 8x8.
-      - The flattening order was:
-          [robot_features (3*7), task_features (8*9), task_adjacency (8*8)]
-
-    Args:
-        flat_state (torch.Tensor): A tensor of shape (157,) or (B, 157)
-
-    Returns:
-        dict: A dictionary with keys:
-            - "robot_features": shape (B, 3, 7)
-            - "task_features": shape (B, 8, 9)
-            - "task_adjacency": shape (B, 8, 8)
-    """
-    num_robots = 3
-    robot_feature_dim = 7
-    num_tasks = 8
-    task_feature_dim = 9
-    adj_rows, adj_cols = 8, 8  # task adjacency shape
-
-    total_robot = num_robots * robot_feature_dim  # 21
-    total_task = num_tasks * task_feature_dim  # 72
-    total_adj = adj_rows * adj_cols  # 64
-
-    # Ensure a batch dimension.
-    if flat_state.dim() == 1:
-        flat_state = flat_state.unsqueeze(0)
-
-    B = flat_state.shape[0]
-    # Slice and reshape.
-    robot_features = flat_state[:, :total_robot].view(B, num_robots, robot_feature_dim)
-    task_features = flat_state[:, total_robot : total_robot + total_task].view(
-        B, num_tasks, task_feature_dim
-    )
-    task_adjacency = flat_state[
-        :, total_robot + total_task : total_robot + total_task + total_adj
-    ].view(B, adj_rows, adj_cols)
-
-    return {
-        "robot_features": robot_features,
-        "task_features": task_features,
-        "task_adjacency": task_adjacency,
-    }
-
-
-class PPO_SchedulerPolicy(MultiCategoricalMixin, Model):
+class SchedulerPolicy(MultiCategoricalMixin, Model):
     def __init__(self, observation_space, action_space, device, **kwargs):
         MultiCategoricalMixin.__init__(self, unnormalized_log_prob=False, reduction="sum")  #
         Model.__init__(self, observation_space, action_space, device)
@@ -104,17 +43,21 @@ class PPO_SchedulerPolicy(MultiCategoricalMixin, Model):
           - task_features: [batch, n_tasks, 9] (index 6 is the ready flag)
 
         """
-        states = unflatten_state(states["states"])
+        states = unflatten_tensorized_space(self.observation_space, states["states"])
         robot_features = states["robot_features"].to(self.device)  # shape: (batch, n_robots, 7)
         task_features = states["task_features"].to(self.device)  # shape: (batch, n_tasks, 9)
         task_adjacency = states["task_adjacency"].to(
             self.device
         )  # shape: (batch, n_tasks, n_tasks)
 
+        # print(f"ROBOT FEATURES : {robot_features}")
+        # print(f"TASK FEATURES : {task_features}")
+        # print(f"TASK ADJACENCY : {task_adjacency}")
+
         # For robots: last element is availability (1: available, 0: not)
-        robot_availability = robot_features[..., -1]  # shape: (batch, n_robots)
+        robot_availability = robot_features[:, :, -1]  # shape: (batch, n_robots)
         # For tasks: assume index -3 is the ready flag last three are (ready, assigned, incomplete)
-        task_ready = task_features[..., -3]  # shape: (batch, n_tasks)
+        task_ready = task_features[:, :, -3]  # shape: (batch, n_tasks)
 
         batch_size = robot_features.shape[0]
         n_robots = robot_features.shape[1]
@@ -130,18 +73,18 @@ class PPO_SchedulerPolicy(MultiCategoricalMixin, Model):
         # Insert the task_mask into the valid action indices (until -1 for IDLE, always ready).
         mask[:, :, :-1] = task_mask
 
+        # print(f"MASK SHAPE: {mask}")
+
         reward_matrix = self.scheduler_net(
             robot_features, task_features, task_adjacency
         )  # shape: (batch, n_robots, n_tasks + 1)
+        # print(f"REWARD MATRIX SHAPE: {reward_matrix}")
         # Apply hard masking: set logits for invalid actions to a large negative value.
         logits = reward_matrix.masked_fill(mask == 0, -1e9)
-
-        logits = torch.softmax(reward_matrix, dim=-1)  # shape: (batch, n_robots, n_tasks + 1)
+        logits = torch.softmax(logits, dim=-1)  # shape: (batch, n_robots, n_tasks + 1)
         # Flatten the logits to shape (B, n_robots * n_actions) for the MultiCategoricalMixin.
+        print(f"LOGITS SHAPE: {logits}")
         net_output = logits.view(batch_size, n_robots * n_actions)
-
-        print(f"Network output shape: {net_output.shape}")
-        print(f"Output: {net_output}")
         return net_output, {}
 
     # ====================================
@@ -149,7 +92,7 @@ class PPO_SchedulerPolicy(MultiCategoricalMixin, Model):
     # ====================================
 
 
-class PPO_SchedulerValue(DeterministicMixin, Model):
+class SchedulerValue(DeterministicMixin, Model):
     def __init__(self, observation_space, action_space, device, clip_actions=False, **kwargs):
         Model.__init__(self, observation_space, action_space, device)
         DeterministicMixin.__init__(self, clip_actions=clip_actions)
@@ -164,7 +107,7 @@ class PPO_SchedulerValue(DeterministicMixin, Model):
         self.device = device
 
     def compute(self, states, role):
-        states = unflatten_state(states["states"])
+        states = unflatten_tensorized_space(self.observation_space, states["states"])
         # Flatten the observation.
         robot_features = states["robot_features"]
         task_features = states["task_features"]
@@ -193,11 +136,11 @@ env = wrap_env(env)  # SKRL wrapper to provide a PyTorch interface.
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Create a memory buffer.
-memory = RandomMemory(memory_size=1000, num_envs=1, device=device)
+memory = RandomMemory(memory_size=128, num_envs=1, device=device)
 
 # Instantiate the models.
-policy_model = PPO_SchedulerPolicy(env.observation_space, env.action_space, device)
-value_model = PPO_SchedulerValue(env.observation_space, env.action_space, device)
+policy_model = SchedulerPolicy(env.observation_space, env.action_space, device)
+value_model = SchedulerValue(env.observation_space, env.action_space, device)
 models = {"policy": policy_model, "value": value_model}
 
 # PPO configuration.
@@ -219,24 +162,32 @@ agent = PPO(
     cfg=ppo_config,
 )
 
-# cfg = SEQUENTIAL_TRAINER_DEFAULT_CONFIG.copy()
-# trainer = SequentialTrainer(cfg=cfg, env=env, agents=[agent])
+# Setup memory
+agent.init()
 
-# trainer.train()
-# ========================
-# Training Loop Example
-# ========================
+cfg = SEQUENTIAL_TRAINER_DEFAULT_CONFIG.copy()
+cfg["headless"] = True  # Disable rendering for training.
+trainer = SequentialTrainer(cfg=cfg, env=env, agents=[agent])
 
+trainer.train()
+
+"""
 num_episodes = 1000
 for episode in range(num_episodes):
     state, _ = env.reset()  # state is a dictionary.
     done = False
     episode_reward = 0.0
     sim = env.sim
-    while not done:
+    rl_loop_timetep = 0
+    done_cnt = 0
+    EXPECTED_TIMESTEPS = 10
+    DONE_MINIMUM = 300
+    while done_cnt < DONE_MINIMUM:
         # The agent.act() method will call our policy's compute() method,
         # which applies hard masking to ensure only valid actions are sampled.
-        actions, log_probs, outputs = agent.act(state, timestep=sim.timestep, timesteps=10)
+        actions, log_probs, outputs = agent.act(
+            state, timestep=rl_loop_timetep, timesteps=EXPECTED_TIMESTEPS
+        )
 
         print(f"Actions: {actions}")
 
@@ -267,22 +218,26 @@ for episode in range(num_episodes):
 
         # Record transition.
         agent.record_transition(
-            state,
-            actions,
-            reward,
-            next_state,
-            terminated,
-            truncated,
+            states=state,
+            actions=actions,
+            rewards=reward,
+            next_states=next_state,
+            terminated=terminated,
+            truncated=truncated,
             infos={},
-            timestep=0,
-            timesteps=10,
+            timestep=rl_loop_timetep,
+            timesteps=EXPECTED_TIMESTEPS,
         )
         state = next_state
         episode_reward += reward
+        rl_loop_timetep += 1
+        done_cnt += 1
 
+    print(f"Episode {episode}: Total reward: {episode_reward}, Stariting UPDATE")
     # After each episode, perform optimization.
-    agent._update(timestep=0, timesteps=10)
+    agent._update(timestep=0, timesteps=EXPECTED_TIMESTEPS)
     print(f"Episode {episode}: Reward {episode_reward}")
 
 # Optionally, save the agent checkpoint.
 agent.save("ppo_scheduler_agent.pt")
+"""
