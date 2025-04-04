@@ -25,7 +25,7 @@ class SchedulingRLEnvironment(gym.Env):
 
         self.N_THREADS = 4
         self.n_robots = 3
-        self.n_tasks = 8
+        self.n_tasks = 6
         self.n_skills = 3
         self.n_precedence = 3
         self.num_robots_available_in_previous_timestep = -1
@@ -70,7 +70,7 @@ class SchedulingRLEnvironment(gym.Env):
             move_while_waiting=True,
         )
 
-        self.greedy_makespan = greedy_scheduling(self.problem_instance).makespan
+        self.greedy_makespan = greedy_scheduling(self.problem_instance, print_flag=False).makespan
 
         return self._get_observation(), {}
 
@@ -97,10 +97,25 @@ class SchedulingRLEnvironment(gym.Env):
             return 0.0
 
     def step(self, action):
-        print("Incoming actions are:", action)
-        self.sim.assign_tasks_to_robots_rl(action)
-        truncated = False
+        print(f"Incoming action: {action}")
 
+        available_robots = [robot for robot in self.sim.robots if robot.available]
+        print(f"Available robots: {[r.robot_id for r in available_robots]}")
+
+        incomplete_tasks = [
+            task for task in self.sim.tasks if task.incomplete and task.status == "PENDING"
+        ]
+        print(f"Incomplete tasks: {len(incomplete_tasks)}")
+        # Check if all normal tasks are done -> send all robots to the exit task
+        if len(incomplete_tasks) == 1:  # Only end task incomplete
+            print("Only end task incomplete -> send all to exit")
+            for robot in available_robots:
+                robot.current_task = incomplete_tasks[0]
+
+        else:
+            self.sim.assign_tasks_to_robots_rl(action)
+
+        truncated = False
         while not self.sim.sim_done:
             available = [r for r in self.sim.robots if r.available]
             current_available = len(available)
