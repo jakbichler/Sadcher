@@ -1,4 +1,5 @@
 import sys
+import time
 
 import numpy as np
 import torch
@@ -24,9 +25,9 @@ class RL_Simulation:
         self.location_normalization = np.max(problem_instance["task_locations"])
         self.robots: list[Robot] = self.create_robots(problem_instance)
         self.tasks: list[Task] = self.create_tasks(problem_instance)
+        self.robot_schedules = {robot.robot_id: [] for robot in self.robots}
         self.update_task_status()  # Initialize task status
         self.task_adjacency = self.create_task_adjacency_matrix()
-        self.robot_schedules = {robot.robot_id: [] for robot in self.robots}
         self.num_available_robots_in_previous_timestep = -1
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -152,19 +153,20 @@ class RL_Simulation:
         return True
 
     def log_into_full_horizon_schedule(self, task, previous_status):
-        # Check for transition from PENDING -> IN_PROGRESS: log start time for all assigned robots
-        if previous_status == "PENDING" and task.status == "IN_PROGRESS":
-            for r in [rb for rb in self.robots if rb.current_task == task]:
-                self.robot_schedules[r.robot_id].append((task.task_id, self.timestep, None))
+        ## Check for transition from PENDING -> IN_PROGRESS: log start time for all assigned robots
+        # if previous_status == "PENDING" and task.status == "IN_PROGRESS":
+        # for r in [rb for rb in self.robots if rb.current_task == task]:
+        # self.robot_schedules[r.robot_id].append((task.task_id, self.timestep, None))
 
-        # Check for transition from IN_PROGRESS -> DONE: log end time for all assigned robots
-        if previous_status == "IN_PROGRESS" and task.status == "DONE":
-            for r in [rb for rb in self.robots if rb.current_task == task]:
-                tid, start, _ = self.robot_schedules[r.robot_id][-1]
-                if tid == task.task_id:
-                    self.robot_schedules[r.robot_id][-1] = (tid, start, self.timestep)
+        ## Check for transition from IN_PROGRESS -> DONE: log end time for all assigned robots
+        # if previous_status == "IN_PROGRESS" and task.status == "DONE":
+        # for r in [rb for rb in self.robots if rb.current_task == task]:
+        # tid, start, _ = self.robot_schedules[r.robot_id][-1]
+        # if tid == task.task_id:
+        # self.robot_schedules[r.robot_id][-1] = (tid, start, self.timestep)
+        pass
 
-    def step(self):
+    def step(self, render=False):
         """Advance the simulation by one timestep, moving robots and updating tasks."""
 
         for robot in self.robots:
@@ -176,14 +178,12 @@ class RL_Simulation:
                 elif robot.current_task.task_id is self.idle_task_id and self.move_while_waiting:
                     # Robot was assigned IDLE task
                     if self.robot_can_still_contribute_to_other_tasks(robot):
-                        # Premove robots towards highest reward non-IDLE task
-                        highest_non_idle_reward = self.highest_non_idle_rewards[robot.robot_id]
-                        highest_non_idle_reward_id = self.highest_non_idle_reward_ids[
-                            robot.robot_id
-                        ]
-                        if highest_non_idle_reward > 0.1:
-                            robot.position_towards_task(self.tasks[highest_non_idle_reward_id])
-
+                        ## Premove robots towards highest reward non-IDLE task
+                        # highest_non_idle_proba = self.highest_non_idle_probas[robot.robot_id]
+                        # highest_non_idle_proba_id = self.highest_non_idle_proba_ids[robot.robot_id]
+                        # if highest_non_idle_proba > 0.05:
+                        # robot.position_towards_task(self.tasks[highest_non_idle_proba_id])
+                        pass
                     else:
                         # Robot cannot contribute anymore ->  Premove towards exit location
                         robot.position_towards_task(self.tasks[-1])
@@ -206,24 +206,26 @@ class RL_Simulation:
                 robot.current_task = task
                 task.assigned = True if task_id != self.idle_task_id else False
 
-    def assign_tasks_to_robots_rl(self, action):
-        for robot_idx, assignment in enumerate(action):
-            robot = self.robots[robot_idx]
-            task_id = assignment.item()
-            if task_id is not None:
-                task = self.tasks[task_id]
-                robot.current_task = task
-                task.assigned = True if task_id != self.idle_task_id else False
-
     def find_highest_non_idle_reward(self, predicted_rewards):
         predicted_rewards_non_idle = predicted_rewards[:, 1 : self.idle_task_id]
         highest_non_idle_rewards, highest_non_idle_rewards_ids = torch.max(
             predicted_rewards_non_idle, dim=1
         )
 
-        self.highest_non_idle_rewards = highest_non_idle_rewards
-        self.highest_non_idle_reward_ids = (
+        self.highest_non_idle_probas = highest_non_idle_rewards
+        self.highest_non_idle_proba_ids = (
             highest_non_idle_rewards_ids + 1
+        )  # +1 to account for cutting off the start task
+
+    def find_highest_non_idle_probas(self, predicted_rewards):
+        predicted_probas_non_idle = predicted_rewards[:, :-1]
+        highest_non_idle_probas, highest_non_idle_proba_ids = torch.max(
+            predicted_probas_non_idle, dim=1
+        )
+
+        self.highest_non_idle_probas = highest_non_idle_probas
+        self.highest_non_idle_proba_ids = (
+            highest_non_idle_proba_ids + 1
         )  # +1 to account for cutting off the start task
 
     def robot_can_still_contribute_to_other_tasks(self, robot):
