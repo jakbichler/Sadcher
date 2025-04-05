@@ -51,7 +51,7 @@ def add_robot_skills_table(fig, robots, colors, n_skills):
         row.append(f"Task {current_task}")
         table_data.append(row)
 
-    ax_table = plt.axes([0.1, 0.05, 0.8, 0.2])
+    ax_table = plt.axes([0.1, -0.1, 0.8, 0.2])
     ax_table.axis("off")
     table = Table(ax_table, bbox=[0, 0, 1, 1])
 
@@ -108,6 +108,26 @@ def add_precedence_constraints_text(fig, precedence_constraints):
 
     precedence_text = f"Precedence Constraints: {precedence_constraints}"
     ax_text.text(0.5, 0.5, precedence_text, ha="center", va="center", fontsize=10, wrap=True)
+
+
+def add_current_task_text(fig, robots):
+    # Create or reuse a dedicated axes for current task text
+    if not hasattr(fig, "_current_task_ax"):
+        fig._current_task_ax = fig.add_axes([0.5, 0.0, 0.8, 0.05])
+        fig._current_task_ax.axis("off")
+    else:
+        fig._current_task_ax.cla()  # Clear previous text
+        fig._current_task_ax.axis("off")
+
+    current_tasks = [
+        f"Robot {robot.robot_id}: Task {robot.current_task.task_id}"
+        for robot in robots
+        if robot.current_task
+    ]
+    current_tasks_text = "\n".join(current_tasks)
+    fig._current_task_ax.text(
+        0.5, 0.5, current_tasks_text, ha="center", va="center", fontsize=10, wrap=True
+    )
 
 
 def draw_pie(ax, x, y, sizes, radius, colors):
@@ -212,7 +232,9 @@ def update_plot(sim, ax, fig, colors, n_skills, video_mode=False):
         ha="center",
     )
 
-    if not video_mode:
+    if video_mode:
+        add_current_task_text(fig, sim.robots)
+    else:
         add_robot_skills_table(fig, sim.robots, colors, n_skills)
     add_precedence_constraints_text(fig, sim.precedence_constraints)
 
