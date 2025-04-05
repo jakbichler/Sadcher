@@ -1,5 +1,7 @@
 import sys
 
+from icecream import ic
+
 sys.path.append("..")
 
 import gymnasium as gym
@@ -57,7 +59,9 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
         # For robots: last element is availability (1: available, 0: not)
         robot_availability = robot_features[:, :, -1]  # shape: (batch, n_robots)
         # For tasks: assume index -3 is the ready flag last three are (ready, assigned, incomplete)
+        task_incomplete = task_features[:, :, -1]  # shape: (batch, n_tasks)
         task_ready = task_features[:, :, -3]  # shape: (batch, n_tasks)
+        task_ready_incomplete = torch.logical_and(task_ready, task_incomplete)
 
         batch_size = robot_features.shape[0]
         n_robots = robot_features.shape[1]
@@ -68,23 +72,21 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
         # Build a mask of shape (batch, n_robots, n_actions) that indicates valid actions.
         mask = torch.ones((batch_size, n_robots, n_actions), device=self.device)
         availability_mask = robot_availability.unsqueeze(-1).to(self.device)  # (batch, n_robots, 1)
-        ready_mask = task_ready.unsqueeze(1).to(self.device)  # (batch, 1, n_tasks)
-        task_mask = availability_mask * ready_mask  # (batch, n_robots, n_tasks)
+        ready_incomplete_mask = task_ready_incomplete.unsqueeze(1).to(
+            self.device
+        )  # (batch, 1, n_tasks)
+        task_mask = availability_mask * ready_incomplete_mask  # (batch, n_robots, n_tasks)
         # Insert the task_mask into the valid action indices (until -1 for IDLE, always ready).
         mask[:, :, :-1] = task_mask
-
-        # print(f"MASK SHAPE: {mask}")
 
         reward_matrix = self.scheduler_net(
             robot_features, task_features, task_adjacency
         )  # shape: (batch, n_robots, n_tasks + 1)
-        # print(f"REWARD MATRIX SHAPE: {reward_matrix}")
         # Apply hard masking: set logits for invalid actions to a large negative value.
         logits = reward_matrix.masked_fill(mask == 0, -1e9)
-        logits = torch.softmax(logits, dim=-1)  # shape: (batch, n_robots, n_tasks + 1)
+        probas = torch.softmax(logits, dim=-1)  # shape: (batch, n_robots, n_tasks + 1)
         # Flatten the logits to shape (B, n_robots * n_actions) for the MultiCategoricalMixin.
-        print(f"LOGITS SHAPE: {logits}")
-        net_output = logits.view(batch_size, n_robots * n_actions)
+        net_output = probas.view(batch_size, n_robots * n_actions)
         return net_output, {}
 
     # ====================================
@@ -166,7 +168,7 @@ agent = PPO(
 agent.init()
 
 cfg = SEQUENTIAL_TRAINER_DEFAULT_CONFIG.copy()
-cfg["headless"] = True  # Disable rendering for training.
+cfg["headless"] = True
 trainer = SequentialTrainer(cfg=cfg, env=env, agents=[agent])
 
 trainer.train()
