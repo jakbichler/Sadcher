@@ -73,12 +73,12 @@ class SchedulingRLEnvironment(gym.Env):
         self.colors = plt.cm.Set1(np.linspace(0, 1, self.n_skills))
 
     def reset(self, seed=None, options=None):
-        self.problem_instance = generate_random_data_with_precedence(
-            self.n_tasks, self.n_robots, self.n_skills, self.n_precedence
-        )
-        # self.problem_instance = generate_random_data_all_robots_all_skills(
-        # self.n_tasks, self.n_robots, self.n_skills
+        # self.problem_instance = generate_random_data_with_precedence(
+        #    self.n_tasks, self.n_robots, self.n_skills, self.n_precedence
         # )
+        self.problem_instance = generate_random_data_all_robots_all_skills(
+            self.n_tasks, self.n_robots, self.n_skills
+        )
 
         self.worst_case_makespan = np.sum(self.problem_instance["T_e"]) + np.sum(
             [np.max(self.problem_instance["T_t"][task]) for task in range(self.n_tasks + 1)]
