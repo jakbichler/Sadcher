@@ -27,20 +27,20 @@ from simulation_environment.display_simulation import update_plot
 class SchedulingRLEnvironment(gym.Env):
     metadata = {
         "render_modes": ["human", "rgb_array", "none"],
-        "render_fps": 5,  # or whatever you prefer
+        "render_fps": 5,
     }
 
     def __init__(self, seed=None, render_mode="human"):
         super().__init__()
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-
-        self.N_THREADS = 4
         self.n_robots = 3
         self.n_tasks = 8
         self.n_skills = 3
         self.n_precedence = 3
         self.num_robots_available_in_previous_timestep = -1
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.RENDER_COUNTER_THRESHOLD = 20
+        self.MAX_NO_NEW_ASSIGNMENT_STEPS = 50
         dim_robots = 7  # (x,y,duration,[skill0, skill1, skill2], available)
         dim_tasks = 9  # (x,y,duration,[skill0, skill1, skill2],ready, assigned, incomplete)
 
@@ -69,17 +69,16 @@ class SchedulingRLEnvironment(gym.Env):
 
         self.render_mode = render_mode  # "human", "rgb_array", or "none"
         self.render_simulation = False
-
         self.fig, self.ax = None, None
         self.colors = plt.cm.Set1(np.linspace(0, 1, self.n_skills))
 
     def reset(self, seed=None, options=None):
-        # self.problem_instance = generate_random_data_with_precedence(
-        # self.n_tasks, self.n_robots, self.n_skills, self.n_precedence
-        # )
-        self.problem_instance = generate_random_data_all_robots_all_skills(
-            self.n_tasks, self.n_robots, self.n_skills
+        self.problem_instance = generate_random_data_with_precedence(
+            self.n_tasks, self.n_robots, self.n_skills, self.n_precedence
         )
+        # self.problem_instance = generate_random_data_all_robots_all_skills(
+        # self.n_tasks, self.n_robots, self.n_skills
+        # )
 
         self.worst_case_makespan = np.sum(self.problem_instance["T_e"]) + np.sum(
             [np.max(self.problem_instance["T_t"][task]) for task in range(self.n_tasks + 1)]
@@ -129,6 +128,7 @@ class SchedulingRLEnvironment(gym.Env):
                 robot.current_task = incomplete_tasks[0]
 
         else:
+            # Only assign available robots
             action_dict = {
                 (robot_id, task_id + 1): 1  # +1 since task 0 is start task (not predicted)
                 for (robot_id, task_id) in enumerate(action)
@@ -143,12 +143,8 @@ class SchedulingRLEnvironment(gym.Env):
             self.sim.assign_tasks_to_robots(
                 Instantaneous_Schedule(robot_assignments), self.sim.robots
             )
-            # self.sim.assign_tasks_to_robots_rl(action)
 
         truncated = False
-        RENDER_COUNTER_THRESHOLD = 10
-        render_counter = 0
-        MAX_NO_NEW_ASSIGNMENT_STEPS = 50
         no_new_assignment_steps = 0
         while not self.sim.sim_done:
             self.sim.step()
@@ -156,12 +152,9 @@ class SchedulingRLEnvironment(gym.Env):
             available = [r for r in self.sim.robots if r.available]
             current_available = len(available)
 
-            if self.render_simulation and render_counter % RENDER_COUNTER_THRESHOLD == 0:
-                render_counter = 0
+            if self.render_simulation and self.sim.timestep % self.RENDER_COUNTER_THRESHOLD == 0:
                 self._low_level_render()
-                time.sleep(0.1)  # Delay to see the simulation
 
-            render_counter += 1
             # Roll out the simulation until we reach the next decision step (new available robots)
             simulation_done = self.sim.sim_done
 
@@ -170,7 +163,7 @@ class SchedulingRLEnvironment(gym.Env):
             )
 
             maxed_out_time_without_assignments = (
-                no_new_assignment_steps >= MAX_NO_NEW_ASSIGNMENT_STEPS
+                no_new_assignment_steps >= self.MAX_NO_NEW_ASSIGNMENT_STEPS
             )
 
             if simulation_done or change_in_available_robots or maxed_out_time_without_assignments:
@@ -204,5 +197,3 @@ class SchedulingRLEnvironment(gym.Env):
         update_plot(self.sim, self.ax, self.fig, self.colors, self.n_skills, video_mode=True)
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
-        if self.render_mode == "human":
-            plt.pause(0.1)
