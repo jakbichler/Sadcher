@@ -16,7 +16,9 @@ from skrl.models.torch import DeterministicMixin, Model, MultiCategoricalMixin
 from skrl.trainers.torch import SequentialTrainer
 from skrl.trainers.torch.sequential import SEQUENTIAL_TRAINER_DEFAULT_CONFIG
 
+from models.graph_attention import GATEncoder
 from models.scheduler_network import SchedulerNetwork
+from models.transformers import TransformerEncoder
 
 
 class SchedulerPolicy(MultiCategoricalMixin, Model):
@@ -90,32 +92,113 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
 
 
 class SchedulerValue(DeterministicMixin, Model):
-    def __init__(self, observation_space, action_space, device, clip_actions=False, **kwargs):
-        Model.__init__(self, observation_space, action_space, device)
+    def __init__(
+        self,
+        observation_space,
+        action_space,
+        robot_input_dim=7,
+        task_input_dim=9,
+        embed_dim=128,
+        ff_dim=256,
+        n_transformer_heads=2,
+        n_transformer_layers=1,
+        n_gatn_heads=4,
+        n_gatn_layers=1,
+        clip_actions=False,
+        **kwargs,
+    ):
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        Model.__init__(self, observation_space, action_space, self.device)
         DeterministicMixin.__init__(self, clip_actions=clip_actions)
-        # For the value function, we simply flatten the observations.
-        # Assume the observation dictionary contains "robot_features" and "task_features".
-        input_dim = np.prod(observation_space["robot_features"].shape) + np.prod(
-            observation_space["task_features"].shape
+
+        self.robot_embedding = nn.Linear(robot_input_dim, embed_dim)
+        self.task_embedding = nn.Linear(task_input_dim, embed_dim)
+        self.robot_GATN = GATEncoder(embed_dim, n_gatn_heads, n_gatn_layers)
+        self.task_GATN = GATEncoder(embed_dim, n_gatn_heads, n_gatn_layers)
+
+        self.robot_transformer_encoder = TransformerEncoder(
+            embed_dim,
+            ff_dim,
+            n_transformer_heads,
+            n_transformer_layers,
         )
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, 256), nn.ReLU(), nn.Linear(256, 256), nn.ReLU(), nn.Linear(256, 1)
-        ).to(device)
-        self.device = device
+        self.task_transformer_encoder = TransformerEncoder(
+            embed_dim,
+            ff_dim,
+            n_transformer_heads,
+            n_transformer_layers,
+        )
+
+        self.distance_mlp = nn.Sequential(
+            nn.Linear(1, 16),
+            nn.ReLU(),
+            nn.Linear(16, 1),  # Outputs a single scalar per (robot, task) pair.
+        )
+
+        self.value_mlp = nn.Sequential(
+            nn.Linear(4 * embed_dim + 1, ff_dim),
+            nn.ReLU(),
+            nn.Linear(ff_dim, 1),  # outputs scalar per robot
+        )
 
     def compute(self, states, role):
         states = unflatten_tensorized_space(self.observation_space, states["states"])
         # Flatten the observation.
-        robot_features = states["robot_features"]
-        task_features = states["task_features"]
-        flat = torch.cat(
+        robot_features = states["robot_features"].to(self.device)
+        task_features = states["task_features"].to(self.device)
+        task_adjacency = states["task_adjacency"].to(self.device)
+
+        B, N, _ = robot_features.shape
+        _, M, _ = task_features.shape
+
+        robot_emb = self.robot_embedding(robot_features)  # (B, N, embed_dim)
+        task_emb = self.task_embedding(task_features)  # (B, M, embed_dim)
+
+        robot_gatn_output = self.robot_GATN(robot_emb, adj=None)  # (B, N, embed_dim)
+        task_gatn_output = self.task_GATN(task_emb, adj=task_adjacency)  # (B, M, embed_dim)
+
+        robot_out = self.robot_transformer_encoder(robot_gatn_output)  # (B, N, embed_dim)
+        task_out = self.task_transformer_encoder(task_gatn_output)  # (B, M, embed_dim)
+
+        # 3) Build pairwise feature tensor.
+        expanded_robot_gatn = robot_gatn_output.unsqueeze(2).expand(
+            B, N, M, robot_gatn_output.shape[-1]
+        )  # (B, N, M, embed_dim)
+        expanded_task_gatn = task_gatn_output.unsqueeze(1).expand(
+            B, N, M, task_gatn_output.shape[-1]
+        )  # (B, N, M, embed_dim)
+
+        expanded_robot_out = robot_out.unsqueeze(2).expand(
+            B, N, M, robot_out.shape[-1]
+        )  # (B, N, M, embed_dim)
+        expanded_task_out = task_out.unsqueeze(1).expand(
+            B, N, M, task_out.shape[-1]
+        )  # (B, N, M, embed_dim)
+
+        # 4) Compute pairwise relative distances from raw positions.
+        #  the first two dimensions of the raw features are (x,y).
+        robot_positions = robot_features[:, :, :2]  # (B, N, 2)
+        task_positions = task_features[:, :, :2]  # (B, M, 2)
+        robot_pos_exp = robot_positions.unsqueeze(2).expand(B, N, M, 2)
+        task_pos_exp = task_positions.unsqueeze(1).expand(B, N, M, 2)
+        rel_distance = torch.norm(robot_pos_exp - task_pos_exp, dim=-1, keepdim=True)
+        rel_distance = rel_distance / torch.max(rel_distance)  # (B, N, M, 1)
+        processed_distance = self.distance_mlp(rel_distance)  # (B, N, M, 1)
+
+        final_input = torch.cat(
             [
-                robot_features.view(robot_features.size(0), -1),
-                task_features.view(task_features.size(0), -1),
+                expanded_robot_gatn,
+                expanded_task_gatn,
+                expanded_robot_out,
+                expanded_task_out,
+                processed_distance,
             ],
-            dim=1,
-        ).to(self.device)
-        values = self.net(flat)
+            dim=-1,
+        )  # (B, N, M, 4*embed_dim + 1)
+
+        values = self.value_mlp(final_input).squeeze(-1)  # (B, N, M)
+        values = values.mean(dim=(-2, -1), keepdim=True).squeeze(-1)  # shape: (B,1)
+
         return values, {}
 
 
@@ -134,16 +217,16 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 memory = RandomMemory(memory_size=128, num_envs=1, device=device)
 
 policy_model = SchedulerPolicy(env.observation_space, env.action_space, device)
-value_model = SchedulerValue(env.observation_space, env.action_space, device)
+value_model = SchedulerValue(env.observation_space, env.action_space)
 models = {"policy": policy_model, "value": value_model}
 
 ppo_config = PPO_DEFAULT_CONFIG.copy()
-ppo_config["rollouts"] = 128
+ppo_config["rollouts"] = 1024
 ppo_config["learning_epochs"] = 4
 ppo_config["mini_batches"] = 4
 ppo_config["discount_factor"] = 0.99
-ppo_config["learning_rate"] = 1e-3
-ppo_config["experiment"]["write_interval"] = 100
+ppo_config["learning_rate"] = 3e-4
+ppo_config["experiment"]["write_interval"] = 1024
 
 agent = PPO(
     models=models,
@@ -156,6 +239,6 @@ agent = PPO(
 agent.init()
 
 cfg = SEQUENTIAL_TRAINER_DEFAULT_CONFIG.copy()
-cfg["headless"] = False
+cfg["headless"] = True
 trainer = SequentialTrainer(cfg=cfg, env=env, agents=[agent])
 trainer.train()
