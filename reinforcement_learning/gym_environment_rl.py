@@ -111,7 +111,7 @@ class SchedulingRLEnvironment(gym.Env):
                 "and greedy makespan:",
                 self.greedy_makespan,
             )
-            return -(self.sim.makespan - self.greedy_makespan)
+            return -(self.sim.makespan - self.greedy_makespan) / self.greedy_makespan
 
         else:
             return 0.0
