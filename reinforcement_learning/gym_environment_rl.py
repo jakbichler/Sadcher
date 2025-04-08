@@ -30,7 +30,7 @@ class SchedulingRLEnvironment(gym.Env):
         "render_fps": 5,
     }
 
-    def __init__(self, seed=None, render_mode="human"):
+    def __init__(self, seed=None, problem_type="random_with_precedence", render_mode="human"):
         super().__init__()
 
         self.n_robots = 3
@@ -71,14 +71,20 @@ class SchedulingRLEnvironment(gym.Env):
         self.render_simulation = False
         self.fig, self.ax = None, None
         self.colors = plt.cm.Set1(np.linspace(0, 1, self.n_skills))
+        self.problem_type = problem_type
 
     def reset(self, seed=None, options=None):
-        # self.problem_instance = generate_random_data_with_precedence(
-        #    self.n_tasks, self.n_robots, self.n_skills, self.n_precedence
-        # )
-        self.problem_instance = generate_random_data_all_robots_all_skills(
-            self.n_tasks, self.n_robots, self.n_skills
-        )
+        if self.problem_type == "random_with_precedence":
+            self.problem_instance = generate_random_data_with_precedence(
+                self.n_tasks, self.n_robots, self.n_skills, self.n_precedence
+            )
+        elif self.problem_type == "random_all_robots_all_skills":
+            self.problem_instance = generate_random_data_all_robots_all_skills(
+                self.n_tasks, self.n_robots, self.n_skills
+            )
+
+        else:
+            raise ValueError(f"Unknown problem type: {self.problem_type}")
 
         self.worst_case_makespan = np.sum(self.problem_instance["T_e"]) + np.sum(
             [np.max(self.problem_instance["T_t"][task]) for task in range(self.n_tasks + 1)]
@@ -200,3 +206,12 @@ class SchedulingRLEnvironment(gym.Env):
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
         time.sleep(1)
+
+    def get_config(self):
+        return {
+            "n_robots": self.n_robots,
+            "n_tasks": self.n_tasks,
+            "n_skills": self.n_skills,
+            "n_precedence": self.n_precedence,
+            "problem_type": self.problem_type,
+        }
