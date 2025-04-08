@@ -40,7 +40,7 @@ class SchedulingRLEnvironment(gym.Env):
         self.num_robots_available_in_previous_timestep = -1
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.RENDER_COUNTER_THRESHOLD = 20
-        self.MAX_NO_NEW_ASSIGNMENT_STEPS = 50
+        self.MAX_NO_NEW_ASSIGNMENT_STEPS = 100
         dim_robots = 7  # (x,y,duration,[skill0, skill1, skill2], available)
         dim_tasks = 9  # (x,y,duration,[skill0, skill1, skill2],ready, assigned, incomplete)
 
@@ -125,7 +125,7 @@ class SchedulingRLEnvironment(gym.Env):
         # Check if all normal tasks are done -> send all robots to the exit task
         if len(incomplete_tasks) == 1:  # Only end task incomplete
             for robot in available_robots:
-                robot.current_task = incomplete_tasks[0]
+                robot.current_task = self.sim.tasks[-1]
 
         else:
             # Only assign available robots
@@ -152,6 +152,9 @@ class SchedulingRLEnvironment(gym.Env):
             available = [r for r in self.sim.robots if r.available]
             current_available = len(available)
 
+            previous_available = self.num_robots_available_in_previous_timestep
+            self.num_robots_available_in_previous_timestep = current_available
+
             if self.render_simulation and self.sim.timestep % self.RENDER_COUNTER_THRESHOLD == 0:
                 self._low_level_render()
 
@@ -159,7 +162,7 @@ class SchedulingRLEnvironment(gym.Env):
             simulation_done = self.sim.sim_done
 
             change_in_available_robots = (current_available > 0) and (
-                current_available != self.num_robots_available_in_previous_timestep
+                current_available != previous_available
             )
 
             maxed_out_time_without_assignments = (
@@ -170,7 +173,6 @@ class SchedulingRLEnvironment(gym.Env):
                 no_new_assignment_steps = 0
                 break
 
-            self.num_robots_available_in_previous_timestep = current_available
             # Force termination if timestep exceeds worst-case threshold
             if self.sim.timestep >= self.worst_case_makespan:
                 self.sim.finish_simulation()
@@ -179,7 +181,7 @@ class SchedulingRLEnvironment(gym.Env):
                 truncated = True
                 break
 
-        no_new_assignment_steps += 1
+            no_new_assignment_steps += 1
         reward = self.calculate_reward()
         terminated = self.sim.sim_done
 
@@ -197,3 +199,4 @@ class SchedulingRLEnvironment(gym.Env):
         update_plot(self.sim, self.ax, self.fig, self.colors, self.n_skills, video_mode=True)
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
+        time.sleep(1)
