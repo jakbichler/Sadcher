@@ -49,12 +49,18 @@ if __name__ == "__main__":
     )
 
     argument_parser.add_argument(
-        "--pretrained",
+        "--IL_pretrained_policy",
         action="store_true",
         default=False,
         help="Use pretrained model",
     )
 
+    argument_parser.add_argument(
+        "--RL_pretrained",
+        action="store_true",
+        default=False,
+        help="Use pretrained model",
+    )
     args = argument_parser.parse_args()
     env_id = "SchedulingRLEnvironment-v0"
     gym.register(id=env_id, entry_point="gym_environment_rl:SchedulingRLEnvironment")
@@ -66,21 +72,23 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     memory = RandomMemory(memory_size=args.N_ROLLOUTS, num_envs=args.N_ENVS, device=device)
 
-    ppo_config = PPO_DEFAULT_CONFIG.copy()
-    ppo_config["rollouts"] = args.N_ROLLOUTS
-    ppo_config["learning_epochs"] = 4
-    ppo_config["mini_batches"] = 4
-    ppo_config["discount_factor"] = 0.99
-    ppo_config["learning_rate"] = 3e-4
-    ppo_config["experiment"]["write_interval"] = 100
-
     trainer_cfg = PARALLEL_TRAINER_DEFAULT_CONFIG.copy()
     trainer_cfg["timesteps"] = 100_000
     trainer_cfg["headless"] = True
     trainer_cfg["idle_task_id"] = 8
 
+    ppo_config = PPO_DEFAULT_CONFIG.copy()
+    ppo_config["rollouts"] = args.N_ROLLOUTS
+    ppo_config["learning_epochs"] = 10
+    ppo_config["mini_batches"] = 8
+    ppo_config["discount_factor"] = 0.99
+    ppo_config["learning_rate"] = 3e-4
+    ppo_config["experiment"]["write_interval"] = 500
+    ppo_config["experiment"]["checkpint_interval"] = trainer_cfg["timesteps"] // 4
+    ppo_config["kl_threshold"] = 0.02
+
     policy_model = SchedulerPolicy(
-        envs.observation_space, envs.action_space, device, pretrained=args.pretrained
+        envs.observation_space, envs.action_space, device, pretrained=args.IL_pretrained_policy
     )
     value_model = SchedulerValue(envs.observation_space, envs.action_space)
 
@@ -92,6 +100,11 @@ if __name__ == "__main__":
         device=device,
         cfg=ppo_config,
     )
+
+    if args.RL_pretrained:
+        agent.load(
+            path="/home/jakob/thesis/reinforcement_learning/runs/25-04-09_09-58-38-993947_PPO/checkpoints/best_agent.pt"
+        )
 
     write_config(ppo_config, trainer_cfg, vars(args), agent.experiment_dir, first_env_config)
 
