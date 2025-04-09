@@ -134,15 +134,26 @@ class RL_Simulation:
         return np.all(combined_capabilities[required_skills])
 
     def all_robots_at_task(self, task, threshold=0.01):
-        """True if all robots are within 'threshold' distance of 'task' location."""
         assigned_robots = [r for r in self.robots if r.current_task == task]
         if not assigned_robots:
             return False
 
-        for r in assigned_robots:
-            if np.linalg.norm(r.location - task.location) > threshold:
-                return False
-        return True
+        # Filter for robots that are within the distance threshold
+        nearby_robots = [
+            r for r in assigned_robots if np.linalg.norm(r.location - task.location) <= threshold
+        ]
+        if not nearby_robots:
+            return False
+
+        combined_capabilities = np.zeros_like(task.requirements, dtype=bool)
+        for r in nearby_robots:
+            combined_capabilities = np.logical_or(
+                combined_capabilities, np.array(r.capabilities, dtype=bool)
+            )
+
+        # Check if the combined capabilities cover all the task's required skills
+        required_skills = np.array(task.requirements, dtype=bool)
+        return np.all(combined_capabilities[required_skills])
 
     def all_robots_at_exit_location(self, threshold=0.01):
         """True if all robots are within 'threshold' distance of the exit location."""
