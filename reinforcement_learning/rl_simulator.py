@@ -164,17 +164,6 @@ class RL_Simulation:
         return True
 
     def log_into_full_horizon_schedule(self, task, previous_status):
-        ## Check for transition from PENDING -> IN_PROGRESS: log start time for all assigned robots
-        # if previous_status == "PENDING" and task.status == "IN_PROGRESS":
-        # for r in [rb for rb in self.robots if rb.current_task == task]:
-        # self.robot_schedules[r.robot_id].append((task.task_id, self.timestep, None))
-
-        ## Check for transition from IN_PROGRESS -> DONE: log end time for all assigned robots
-        # if previous_status == "IN_PROGRESS" and task.status == "DONE":
-        # for r in [rb for rb in self.robots if rb.current_task == task]:
-        # tid, start, _ = self.robot_schedules[r.robot_id][-1]
-        # if tid == task.task_id:
-        # self.robot_schedules[r.robot_id][-1] = (tid, start, self.timestep)
         pass
 
     def step(self, render=False):
@@ -189,12 +178,10 @@ class RL_Simulation:
                 elif robot.current_task.task_id is self.idle_task_id and self.move_while_waiting:
                     # Robot was assigned IDLE task
                     if self.robot_can_still_contribute_to_other_tasks(robot):
-                        ## Premove robots towards highest reward non-IDLE task
-                        # highest_non_idle_proba = self.highest_non_idle_probas[robot.robot_id]
-                        # highest_non_idle_proba_id = self.highest_non_idle_proba_ids[robot.robot_id]
-                        # if highest_non_idle_proba > 0.05:
-                        # robot.position_towards_task(self.tasks[highest_non_idle_proba_id])
-                        pass
+                        task_to_premove_to = self.find_task_to_premove_to(robot)
+                        if task_to_premove_to:
+                            # Move towards the task
+                            robot.position_towards_task(task_to_premove_to)
                     else:
                         # Robot cannot contribute anymore ->  Premove towards exit location
                         robot.position_towards_task(self.tasks[-1])
@@ -254,6 +241,28 @@ class RL_Simulation:
         )
 
         return can_contribute
+
+    def find_task_to_premove_to(self, robot):
+        """
+        Find the task that the robot can move to, which is closest to its current location.
+        """
+        # Get all tasks that are not assigned and not the IDLE task
+        unassigned_tasks = [
+            task for task in self.tasks[:-1] if task.incomplete and not task.assigned
+        ]
+        if not unassigned_tasks:
+            return None
+
+        tasks_robot_can_contribute_to = []
+        for task in unassigned_tasks:
+            if np.any(np.logical_and(robot.capabilities, task.requirements)):
+                tasks_robot_can_contribute_to.append(task)
+
+        distances = [
+            np.linalg.norm(robot.location - task.location) for task in tasks_robot_can_contribute_to
+        ]
+
+        return tasks_robot_can_contribute_to[np.argmin(distances)]
 
     def return_task_robot_states(self):
         task_features = np.array(
