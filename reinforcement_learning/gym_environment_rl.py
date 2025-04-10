@@ -33,8 +33,8 @@ class SchedulingRLEnvironment(gym.Env):
     def __init__(self, seed=None, problem_type="random_with_precedence", render_mode="human"):
         super().__init__()
 
-        self.n_robots = 3
-        self.n_tasks = 8
+        self.n_robots = 5
+        self.n_tasks = 20
         self.n_skills = 3
         self.n_precedence = 3
         self.num_robots_available_in_previous_timestep = -1
@@ -205,7 +205,7 @@ class SchedulingRLEnvironment(gym.Env):
         update_plot(self.sim, self.ax, self.fig, self.colors, self.n_skills, video_mode=True)
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
-        time.sleep(1)
+        time.sleep(0.1)
 
     def get_config(self):
         return {

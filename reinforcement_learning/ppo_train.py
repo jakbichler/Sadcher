@@ -61,6 +61,14 @@ if __name__ == "__main__":
         default=False,
         help="Use pretrained model",
     )
+
+    argument_parser.add_argument(
+        "--RL_pretrained_path",
+        type=str,
+        default=None,
+        help="Path to the pretrained model",
+    )
+
     args = argument_parser.parse_args()
     env_id = "SchedulingRLEnvironment-v0"
     gym.register(id=env_id, entry_point="gym_environment_rl:SchedulingRLEnvironment")
@@ -73,9 +81,9 @@ if __name__ == "__main__":
     memory = RandomMemory(memory_size=args.N_ROLLOUTS, num_envs=args.N_ENVS, device=device)
 
     trainer_cfg = PARALLEL_TRAINER_DEFAULT_CONFIG.copy()
-    trainer_cfg["timesteps"] = 100_000
+    trainer_cfg["timesteps"] = 500_000
     trainer_cfg["headless"] = True
-    trainer_cfg["idle_task_id"] = 8
+    trainer_cfg["idle_task_id"] = first_env_config["n_tasks"]
 
     ppo_config = PPO_DEFAULT_CONFIG.copy()
     ppo_config["rollouts"] = args.N_ROLLOUTS
@@ -83,8 +91,8 @@ if __name__ == "__main__":
     ppo_config["mini_batches"] = 8
     ppo_config["discount_factor"] = 0.99
     ppo_config["learning_rate"] = 3e-4
-    ppo_config["experiment"]["write_interval"] = 500
-    ppo_config["experiment"]["checkpint_interval"] = trainer_cfg["timesteps"] // 4
+    ppo_config["experiment"]["write_interval"] = 1000
+    ppo_config["experiment"]["checkpoint_interval"] = trainer_cfg["timesteps"] // 5
     ppo_config["kl_threshold"] = 0.02
 
     policy_model = SchedulerPolicy(
@@ -102,9 +110,7 @@ if __name__ == "__main__":
     )
 
     if args.RL_pretrained:
-        agent.load(
-            path="/home/jakob/thesis/reinforcement_learning/runs/25-04-09_09-58-38-993947_PPO/checkpoints/best_agent.pt"
-        )
+        agent.load(path=args.RL_pretrained_path)
 
     write_config(ppo_config, trainer_cfg, vars(args), agent.experiment_dir, first_env_config)
 
