@@ -78,7 +78,6 @@ if __name__ == "__main__":
 
     envs = wrap_env(envs)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    memory = RandomMemory(memory_size=args.N_ROLLOUTS, num_envs=args.N_ENVS, device=device)
 
     trainer_cfg = PARALLEL_TRAINER_DEFAULT_CONFIG.copy()
     trainer_cfg["timesteps"] = 500_000
@@ -91,9 +90,12 @@ if __name__ == "__main__":
     ppo_config["mini_batches"] = 8
     ppo_config["discount_factor"] = 0.99
     ppo_config["learning_rate"] = 3e-4
-    ppo_config["experiment"]["write_interval"] = 1000
+    ppo_config["mixed_precision"] = False
+    ppo_config["experiment"]["write_interval"] = args.N_ROLLOUTS
     ppo_config["experiment"]["checkpoint_interval"] = trainer_cfg["timesteps"] // 5
     ppo_config["kl_threshold"] = 0.02
+
+    memory = RandomMemory(memory_size=args.N_ROLLOUTS, num_envs=args.N_ENVS, device=device)
 
     policy_model = SchedulerPolicy(
         envs.observation_space, envs.action_space, device, pretrained=args.IL_pretrained_policy

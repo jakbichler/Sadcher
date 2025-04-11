@@ -1,5 +1,7 @@
 import sys
 
+import numpy as np
+
 sys.path.append("..")
 
 import torch
@@ -13,7 +15,7 @@ from models.transformers import TransformerEncoder
 
 
 class SchedulerPolicy(MultiCategoricalMixin, Model):
-    def __init__(self, observation_space, action_space, device, pretrained=True, **kwargs):
+    def __init__(self, observation_space, action_space, device, pretrained=False, **kwargs):
         MultiCategoricalMixin.__init__(self, unnormalized_log_prob=False, reduction="sum")  #
         Model.__init__(self, observation_space, action_space, device)
         self.device = device
@@ -32,14 +34,16 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
             checkpoint_path = "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_2_8t3r3s/best_checkpoint.pt"
             self.scheduler_net.load_state_dict(torch.load(checkpoint_path, weights_only=True))
 
-    def compute(self, states, taken_actions, timesteps=None, **kwargs):
+    def compute(self, states, taken_actions=None, timesteps=None, eval=False, **kwargs):
         """
         input: a dictionary with keys "robot_features" and "task_features"
           - robot_features: [batch, n_robots, 7] (last element is availability)
           - task_features: [batch, n_tasks, 9] (index 6 is the ready flag)
 
         """
-        states = unflatten_tensorized_space(self.observation_space, states["states"])
+        if not eval:
+            states = unflatten_tensorized_space(self.observation_space, states["states"])
+
         robot_features = states["robot_features"].to(self.device)  # shape: (batch, n_robots, 7)
         task_features = states["task_features"].to(self.device)  # shape: (batch, n_tasks, 9)
         task_adjacency = states["task_adjacency"].to(
@@ -72,8 +76,9 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
         reward_matrix = self.scheduler_net(
             robot_features, task_features, task_adjacency
         )  # shape: (batch, n_robots, n_tasks + 1)
-        logits = reward_matrix.masked_fill(mask == 0, -1e9)
+        logits = reward_matrix.masked_fill(mask == 0, -1e9).float()
         probas = torch.softmax(logits, dim=-1)  # shape: (batch, n_robots, n_tasks + 1)
+
         net_output = probas.view(batch_size, n_robots * n_actions)
 
         return net_output, {}
