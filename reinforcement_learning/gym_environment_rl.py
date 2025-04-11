@@ -33,14 +33,14 @@ class SchedulingRLEnvironment(gym.Env):
     def __init__(self, seed=None, problem_type="random_with_precedence", render_mode="human"):
         super().__init__()
 
-        self.n_robots = 5
-        self.n_tasks = 20
+        self.n_robots = 3
+        self.n_tasks = 10
         self.n_skills = 3
         self.n_precedence = 3
         self.num_robots_available_in_previous_timestep = -1
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.RENDER_COUNTER_THRESHOLD = 20
-        self.MAX_NO_NEW_ASSIGNMENT_STEPS = 100
+        self.MAX_NO_NEW_ASSIGNMENT_STEPS = 50
         dim_robots = 7  # (x,y,duration,[skill0, skill1, skill2], available)
         dim_tasks = 9  # (x,y,duration,[skill0, skill1, skill2],ready, assigned, incomplete)
 
@@ -215,3 +215,24 @@ class SchedulingRLEnvironment(gym.Env):
             "n_precedence": self.n_precedence,
             "problem_type": self.problem_type,
         }
+
+    def return_greedy_makespan(self):
+        return self.greedy_makespan
+
+    def return_final_makespan(self):
+        if self.sim.sim_done:
+            return self.sim.makespan
+        else:
+            raise ValueError("Simulation not done yet. Cannot return final makespan.")
+
+    def reset_same_problem_instance(self):
+        print("Resetting same problem instance")
+        self.sim = RL_Simulation(
+            problem_instance=self.problem_instance,
+            debug=False,
+            move_while_waiting=True,
+        )
+
+        self.greedy_makespan = greedy_scheduling(self.problem_instance, print_flag=False).makespan
+
+        return self._get_observation(), {}
