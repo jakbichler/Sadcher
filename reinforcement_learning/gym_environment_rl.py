@@ -30,7 +30,9 @@ class SchedulingRLEnvironment(gym.Env):
         "render_fps": 5,
     }
 
-    def __init__(self, seed=None, problem_type="random_with_precedence", render_mode="human"):
+    def __init__(
+        self, seed=None, problem_type="random_with_precedence", render_mode="human", **kwargs
+    ):
         super().__init__()
 
         self.n_robots = 3
