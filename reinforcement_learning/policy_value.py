@@ -15,19 +15,36 @@ from models.transformers import TransformerEncoder
 
 
 class SchedulerPolicy(MultiCategoricalMixin, Model):
-    def __init__(self, observation_space, action_space, device, pretrained=False, **kwargs):
+    def __init__(
+        self,
+        observation_space,
+        action_space,
+        device,
+        policy_config,
+        pretrained=False,
+    ):
         MultiCategoricalMixin.__init__(self, unnormalized_log_prob=False, reduction="sum")  #
         Model.__init__(self, observation_space, action_space, device)
         self.device = device
+
+        robot_input_dimensions = policy_config["robot_input_dimensions"]
+        task_input_dimension = policy_config["task_input_dimension"]
+        embed_dim = policy_config["embed_dim"]
+        ff_dim = policy_config["ff_dim"]
+        n_transformer_heads = policy_config["n_transformer_heads"]
+        n_transformer_layers = policy_config["n_transformer_layers"]
+        n_gatn_heads = policy_config["n_gatn_heads"]
+        n_gatn_layers = policy_config["n_gatn_layers"]
+
         self.scheduler_net = SchedulerNetwork(
-            robot_input_dimensions=7,
-            task_input_dimension=9,
-            embed_dim=256,
-            ff_dim=512,
-            n_transformer_heads=4,
-            n_transformer_layers=2,
-            n_gatn_heads=8,
-            n_gatn_layers=1,
+            robot_input_dimensions=robot_input_dimensions,
+            task_input_dimension=task_input_dimension,
+            embed_dim=embed_dim,
+            ff_dim=ff_dim,
+            n_transformer_heads=n_transformer_heads,
+            n_transformer_layers=n_transformer_layers,
+            n_gatn_heads=n_gatn_heads,
+            n_gatn_layers=n_gatn_layers,
         ).to(self.device)
 
         if pretrained:
@@ -93,21 +110,21 @@ class SchedulerValue(DeterministicMixin, Model):
         self,
         observation_space,
         action_space,
-        robot_input_dim=7,
-        task_input_dim=9,
-        embed_dim=128,
-        ff_dim=256,
-        n_transformer_heads=2,
-        n_transformer_layers=1,
-        n_gatn_heads=4,
-        n_gatn_layers=1,
+        value_config,
         clip_actions=False,
-        **kwargs,
     ):
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         Model.__init__(self, observation_space, action_space, self.device)
         DeterministicMixin.__init__(self, clip_actions=clip_actions)
 
+        robot_input_dim = value_config["robot_input_dim"]
+        task_input_dim = value_config["task_input_dim"]
+        embed_dim = value_config["embed_dim"]
+        ff_dim = value_config["ff_dim"]
+        n_transformer_heads = value_config["n_transformer_heads"]
+        n_transformer_layers = value_config["n_transformer_layers"]
+        n_gatn_heads = value_config["n_gatn_heads"]
+        n_gatn_layers = value_config["n_gatn_layers"]
         self.robot_embedding = nn.Linear(robot_input_dim, embed_dim)
         self.task_embedding = nn.Linear(task_input_dim, embed_dim)
         self.robot_GATN = GATEncoder(embed_dim, n_gatn_heads, n_gatn_layers)
