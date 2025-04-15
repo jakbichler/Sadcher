@@ -8,7 +8,6 @@ import torch
 from icecream import ic
 
 sys.path.append("..")
-from rl_simulator import RL_Simulation
 
 from baselines.aswale_23.greedy_solver import greedy_scheduling
 from data_generation.problem_generator import (
@@ -22,6 +21,7 @@ from schedulers.bipartite_matching import (
     solve_bipartite_matching,
 )
 from simulation_environment.display_simulation import update_plot
+from simulation_environment.simulator_2D import Simulation
 
 
 class SchedulingRLEnvironment(gym.Env):
@@ -35,8 +35,8 @@ class SchedulingRLEnvironment(gym.Env):
     ):
         super().__init__()
 
-        self.n_robots = 3
-        self.n_tasks = 10
+        self.n_robots = 4
+        self.n_tasks = 12
         self.n_skills = 3
         self.n_precedence = 3
         self.num_robots_available_in_previous_timestep = -1
@@ -88,17 +88,12 @@ class SchedulingRLEnvironment(gym.Env):
         else:
             raise ValueError(f"Unknown problem type: {self.problem_type}")
 
+        self.sim = Simulation(self.problem_instance, scheduler_name="sadcher_rl")
+
+        self.greedy_makespan = greedy_scheduling(self.problem_instance, print_flag=False).makespan
         self.worst_case_makespan = np.sum(self.problem_instance["T_e"]) + np.sum(
             [np.max(self.problem_instance["T_t"][task]) for task in range(self.n_tasks + 1)]
         )
-
-        self.sim = RL_Simulation(
-            problem_instance=self.problem_instance,
-            debug=False,
-            move_while_waiting=True,
-        )
-
-        self.greedy_makespan = greedy_scheduling(self.problem_instance, print_flag=False).makespan
 
         return self._get_observation(), {}
 
@@ -124,7 +119,7 @@ class SchedulingRLEnvironment(gym.Env):
         else:
             return 0.0
 
-    def step(self, action):
+    def calculate_robot_assignment(self, action):
         available_robots = [robot for robot in self.sim.robots if robot.available]
         available_robot_ids = [robot.robot_id for robot in available_robots]
         incomplete_tasks = [
@@ -132,8 +127,9 @@ class SchedulingRLEnvironment(gym.Env):
         ]
         # Check if all normal tasks are done -> send all robots to the exit task
         if len(incomplete_tasks) == 1:  # Only end task incomplete
-            for robot in available_robots:
-                robot.current_task = self.sim.tasks[-1]
+            # for robot in available_robots:
+            # robot.current_task = self.sim.tasks[-1]
+            robot_assignments = {robot: self.sim.tasks[-1].task_id for robot in available_robot_ids}
 
         else:
             # Only assign available robots
@@ -148,48 +144,29 @@ class SchedulingRLEnvironment(gym.Env):
             robot_assignments = {
                 robot: task for (robot, task), val in action_dict_filtered.items() if val == 1
             }
-            self.sim.assign_tasks_to_robots(
-                Instantaneous_Schedule(robot_assignments), self.sim.robots
-            )
 
+        return robot_assignments
+
+    def step(self, action):
         truncated = False
-        no_new_assignment_steps = 0
-        while not self.sim.sim_done:
-            self.sim.step()
 
-            available = [r for r in self.sim.robots if r.available]
-            current_available = len(available)
+        robot_assignments = self.calculate_robot_assignment(action)
 
-            previous_available = self.num_robots_available_in_previous_timestep
-            self.num_robots_available_in_previous_timestep = current_available
+        if self.render_simulation:
+            self._low_level_render()
 
-            if self.render_simulation and self.sim.timestep % self.RENDER_COUNTER_THRESHOLD == 0:
-                self._low_level_render()
+        self.sim.assign_tasks_to_robots(Instantaneous_Schedule(robot_assignments))
+        self.sim.step_until_next_decision_point(
+            max_no_new_assignment_steps=self.MAX_NO_NEW_ASSIGNMENT_STEPS
+        )
 
-            # Roll out the simulation until we reach the next decision step (new available robots)
-            simulation_done = self.sim.sim_done
+        # Force termination if timestep exceeds worst-case threshold
+        if self.sim.timestep >= self.worst_case_makespan:
+            self.sim.finish_simulation()
+            self.sim.makespan = self.worst_case_makespan
+            print(f"Scheduler did not find a feasible solution at timestep {self.sim.timestep}")
+            truncated = True
 
-            change_in_available_robots = (current_available > 0) and (
-                current_available != previous_available
-            )
-
-            maxed_out_time_without_assignments = (
-                no_new_assignment_steps >= self.MAX_NO_NEW_ASSIGNMENT_STEPS
-            )
-
-            if simulation_done or change_in_available_robots or maxed_out_time_without_assignments:
-                no_new_assignment_steps = 0
-                break
-
-            # Force termination if timestep exceeds worst-case threshold
-            if self.sim.timestep >= self.worst_case_makespan:
-                self.sim.finish_simulation()
-                self.sim.makespan = self.worst_case_makespan
-                print(f"Scheduler did not find a feasible solution at timestep {self.sim.timestep}")
-                truncated = True
-                break
-
-            no_new_assignment_steps += 1
         reward = self.calculate_reward()
         terminated = self.sim.sim_done
 
@@ -229,11 +206,7 @@ class SchedulingRLEnvironment(gym.Env):
 
     def reset_same_problem_instance(self):
         print("Resetting same problem instance")
-        self.sim = RL_Simulation(
-            problem_instance=self.problem_instance,
-            debug=False,
-            move_while_waiting=True,
-        )
+        self.sim = Simulation(self.problem_instance, scheduler_name="sadcher_rl")
 
         self.greedy_makespan = greedy_scheduling(self.problem_instance, print_flag=False).makespan
 
