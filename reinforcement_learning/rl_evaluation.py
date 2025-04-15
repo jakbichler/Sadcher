@@ -2,6 +2,7 @@ import argparse
 
 import gymnasium as gym
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from policy_value import SchedulerPolicy
 from tqdm import tqdm
@@ -35,13 +36,26 @@ def main():
     )
     args = parser.parse_args()
 
+    seed = 42
+    np.random.seed(seed)
     env_id = "SchedulingRLEnvironment-v0"
     gym.register(id=env_id, entry_point="gym_environment_rl:SchedulingRLEnvironment")
     env = gym.make(env_id)
     env_config = env.unwrapped.get_config()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    policy_model = SchedulerPolicy(env.observation_space, env.action_space, device)
+    policy_config = {
+        "robot_input_dimensions": 7,
+        "task_input_dimension": 9,
+        "embed_dim": 32,
+        "ff_dim": 64,
+        "n_transformer_heads": 1,
+        "n_transformer_layers": 1,
+        "n_gatn_heads": 1,
+        "n_gatn_layers": 1,
+    }
+
+    policy_model = SchedulerPolicy(env.observation_space, env.action_space, device, policy_config)
     checkpoint = torch.load(args.RL_agent_path, map_location=device, weights_only=True)
     policy_model.load_state_dict(checkpoint["policy"])
     policy_model.eval().to(device)

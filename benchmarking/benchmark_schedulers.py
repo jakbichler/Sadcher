@@ -12,36 +12,20 @@ from data_generation.problem_generator import (
     generate_random_data,
     generate_random_data_with_precedence,
 )
-from simulation_environment.simulator_2D import Simulation
+from schedulers.sadcher import SadcherScheduler
+from simulation_environment.simulator_2D import Simulation, create_scheduler
 from visualizations.benchmark_visualizations import (
     compare_makespans_1v1,
     plot_violin,
     print_final_results,
 )
 
-
-def create_simulation(
-    problem_instance, scheduler, checkpoint_path=None, move_while_waiting=False, model_name=None
-):
-    if scheduler == "sadcher":
-        return Simulation(
-            problem_instance,
-            scheduler,
-            checkpoint_path=checkpoint_path,
-            debug=False,
-            move_while_waiting=move_while_waiting,
-            model_name=model_name,
-        )
-    else:
-        return Simulation(problem_instance, scheduler, debug=False)
-
-
 if __name__ == "__main__":
     n_tasks = 8
     n_robots = 3
     n_skills = 3
     n_precedence = 3
-    seed = 123
+    seed = 5367
     np.random.seed(seed)
     model_name = "8t3r3s"
     checkpoint_path = (
@@ -88,46 +72,60 @@ if __name__ == "__main__":
             [np.max(problem_instance["T_t"][task]) for task in range(n_tasks + 1)]
         )
 
-        for scheduler in scheduler_names:
-            if scheduler == "milp":
+        for scheduler_name in scheduler_names:
+            if scheduler_name == "milp":
                 start_time = time.time()
                 optimal_schedule = milp_scheduling(
                     problem_instance, n_threads=6, cutoff_time_seconds=10 * 60
                 )
-                computation_times[scheduler].append(time.time() - start_time)
-                makespans[scheduler].append(optimal_schedule.makespan)
-                feasible_makespans[scheduler].append(optimal_schedule.makespan)
+                computation_times[scheduler_name].append(time.time() - start_time)
+                makespans[scheduler_name].append(optimal_schedule.makespan)
+                feasible_makespans[scheduler_name].append(optimal_schedule.makespan)
             else:
                 # Non-MILP olutins need simulation to roll out schedule
-                sim = create_simulation(
-                    problem_instance,
-                    scheduler,
+                sim = Simulation(problem_instance, scheduler_name)
+                scheduler = create_scheduler(
+                    scheduler_name,
                     checkpoint_path,
-                    move_while_waiting=args.move_while_waiting,
-                    model_name=model_name,
+                    model_name="8t3r3s",
+                    duration_normalization=sim.duration_normalization,
+                    location_normalization=sim.location_normalization,
                 )
                 feasible = True
+                current_run_computation_times = []
                 while not sim.sim_done:
-                    sim.step()
+                    start_time = time.time()
+                    if isinstance(scheduler, SadcherScheduler):
+                        predicted_reward, instantaneous_schedule = (
+                            scheduler.calculate_robot_assignment(sim)
+                        )
+                        sim.find_highest_non_idle_reward(predicted_reward)
+                    else:
+                        instantaneous_schedule = scheduler.calculate_robot_assignment(sim)
+                    current_run_computation_times.append(time.time() - start_time)
+
+                    sim.assign_tasks_to_robots(instantaneous_schedule)
+                    sim.step_until_next_decision_point()
+
                     if sim.timestep > worst_case_makespan:
                         sim.makespan = worst_case_makespan  # No feasible solution found
-                        infeasible_count[scheduler] += 1
+                        infeasible_count[scheduler_name] += 1
                         print(
-                            f"Scheduler {scheduler} did not find a feasible solution at {iteration}"
+                            f"Scheduler {scheduler_name} did not find a feasible solution at {iteration}"
                         )
                         feasible = False
                         break
 
-                makespans[scheduler].append(sim.makespan)
-                average_computation_time_per_assignment = np.mean(sim.scheduler_computation_times)
-                full_computation_time = np.sum(sim.scheduler_computation_times)
-                computation_times[scheduler].append(average_computation_time_per_assignment)
+                makespans[scheduler_name].append(sim.makespan)
+                average_computation_time_per_assignment = np.mean(current_run_computation_times)
+                full_computation_time = np.sum(current_run_computation_times)
+                computation_times[scheduler_name].append(average_computation_time_per_assignment)
 
                 if feasible:
-                    feasible_makespans[scheduler].append(sim.makespan)
+                    feasible_makespans[scheduler_name].append(sim.makespan)
 
         iteration_results = sorted(
-            (makespans[scheduler][-1], scheduler) for scheduler in scheduler_names
+            (makespans[scheduler_name][-1], scheduler_name) for scheduler_name in scheduler_names
         )
         print(iteration_results)
 
