@@ -1,4 +1,5 @@
 import argparse
+import json
 import sys
 import time
 
@@ -20,15 +21,36 @@ from simulation_environment.display_simulation import run_video_mode, visualize
 from visualizations.solution_visualization import plot_gantt_and_trajectories
 
 
+def create_scheduler(
+    name: str,
+    checkpoint_path=None,
+    model_name=None,
+    duration_normalization=100,
+    location_normalization=100,
+):
+    if name == "greedy":
+        return GreedyInstantaneousScheduler()
+    elif name == "random_bipartite":
+        return RandomBipartiteMatchingScheduler()
+    elif name == "sadcher":
+        return SadcherScheduler(
+            debugging=False,
+            checkpoint_path=checkpoint_path,
+            duration_normalization=duration_normalization,
+            location_normalization=location_normalization,
+            model_name=model_name,
+        )
+    else:
+        raise ValueError(f"Unknown scheduler '{name}'")
+
+
 class Simulation:
     def __init__(
         self,
         problem_instance,
         scheduler_name=None,
-        checkpoint_path=None,
         debug=False,
-        move_while_waiting=False,
-        model_name=None,
+        move_while_waiting=True,
     ):
         self.timestep = 0
         self.sim_done = False
@@ -45,8 +67,11 @@ class Simulation:
         self.task_adjacency = self.create_task_adjacency_matrix()
         self.robot_schedules = {robot.robot_id: [] for robot in self.robots}
         self.scheduler_name = scheduler_name
-        self.scheduler = self.create_scheduler(scheduler_name, checkpoint_path, model_name)
         self.num_available_robots_in_previous_timestep = -1
+        self.worst_case_makespan = np.sum(problem_instance["T_e"]) + np.sum(
+            [np.max(problem_instance["T_t"][task]) for task in range(len(problem_instance["T_e"]))]
+        )
+        self.no_new_assignment_steps = 0
 
     def create_task_adjacency_matrix(self):
         task_adjacency = torch.zeros((self.n_real_tasks, self.n_real_tasks))
@@ -89,22 +114,6 @@ class Simulation:
         self.n_real_tasks = self.n_tasks - 3  # Excluding start, exit and idle task
 
         return tasks
-
-    def create_scheduler(self, name: str, checkpoint_path=None, model_name=None):
-        if name == "greedy":
-            return GreedyInstantaneousScheduler()
-        elif name == "random_bipartite":
-            return RandomBipartiteMatchingScheduler()
-        elif name == "sadcher":
-            return SadcherScheduler(
-                debugging=self.debugging,
-                checkpoint_path=checkpoint_path,
-                duration_normalization=self.duration_normalization,
-                location_normalization=self.location_normalization,
-                model_name=model_name,
-            )
-        else:
-            raise ValueError(f"Unknown scheduler '{name}'")
 
     def update_task_status(self):
         for task in self.tasks:
@@ -167,15 +176,26 @@ class Simulation:
         return np.all(combined_capabilities[required_skills])
 
     def all_robots_at_task(self, task, threshold=0.01):
-        """True if all robots are within 'threshold' distance of 'task' location."""
         assigned_robots = [r for r in self.robots if r.current_task == task]
         if not assigned_robots:
             return False
 
-        for r in assigned_robots:
-            if np.linalg.norm(r.location - task.location) > threshold:
-                return False
-        return True
+        # Filter for robots that are within the distance threshold
+        nearby_robots = [
+            r for r in assigned_robots if np.linalg.norm(r.location - task.location) <= threshold
+        ]
+        if not nearby_robots:
+            return False
+
+        combined_capabilities = np.zeros_like(task.requirements, dtype=bool)
+        for r in nearby_robots:
+            combined_capabilities = np.logical_or(
+                combined_capabilities, np.array(r.capabilities, dtype=bool)
+            )
+
+        # Check if the combined capabilities cover all the task's required skills
+        required_skills = np.array(task.requirements, dtype=bool)
+        return np.all(combined_capabilities[required_skills])
 
     def all_robots_at_exit_location(self, threshold=0.01):
         """True if all robots are within 'threshold' distance of the exit location."""
@@ -198,71 +218,95 @@ class Simulation:
                 if tid == task.task_id:
                     self.robot_schedules[r.robot_id][-1] = (tid, start, self.timestep)
 
+    def find_task_to_premove_to(self, robot):
+        task_to_premove_to = None
+
+        if self.scheduler_name == "sadcher":
+            highest_non_idle_reward = self.highest_non_idle_rewards[robot.robot_id]
+            highest_non_idle_reward_id = self.highest_non_idle_reward_ids[robot.robot_id]
+            if highest_non_idle_reward > 0.1:
+                task_to_premove_to = self.tasks[highest_non_idle_reward_id]
+
+        elif self.scheduler_name == "sadcher_rl":
+            unassigned_tasks = [
+                task for task in self.tasks[:-1] if task.incomplete and not task.assigned
+            ]
+            if not unassigned_tasks:
+                return None
+            tasks_robot_can_contribute_to = []
+            for task in unassigned_tasks:
+                if np.any(np.logical_and(robot.capabilities, task.requirements)):
+                    tasks_robot_can_contribute_to.append(task)
+
+            distances = [
+                np.linalg.norm(robot.location - task.location)
+                for task in tasks_robot_can_contribute_to
+            ]
+            task_to_premove_to = tasks_robot_can_contribute_to[np.argmin(distances)]
+
+        return task_to_premove_to
+
     def step(self):
         """Advance the simulation by one timestep, moving robots and updating tasks."""
 
         for robot in self.robots:
             if robot.current_task:
                 if robot.current_task.task_id is not self.idle_task_id:
-                    # Move to assigned task location
+                    # Move to assigned task location (Normal task)
                     robot.update_position_on_task()
 
-                elif (
-                    robot.current_task.task_id is self.idle_task_id
-                    and self.move_while_waiting
-                    and self.scheduler_name == "sadcher"
-                ):
+                elif robot.current_task.task_id is self.idle_task_id and self.move_while_waiting:
                     # Robot was assigned IDLE task
                     if self.robot_can_still_contribute_to_other_tasks(robot):
-                        # Premove robots towards highest reward non-IDLE task
-                        highest_non_idle_reward = self.highest_non_idle_rewards[robot.robot_id]
-                        highest_non_idle_reward_id = self.highest_non_idle_reward_ids[
-                            robot.robot_id
-                        ]
-                        if highest_non_idle_reward > 0.1:
-                            robot.position_towards_task(self.tasks[highest_non_idle_reward_id])
-
+                        task_to_premove_to = self.find_task_to_premove_to(robot)
+                        if task_to_premove_to:
+                            robot.position_towards_task(task_to_premove_to)
                     else:
                         # Robot cannot contribute anymore ->  Premove towards exit location
                         robot.position_towards_task(self.tasks[-1])
 
         self.update_task_status()
         self.update_task_duration()
-        # Task durations hvae been updated, checking task_status again
+        # Task durations have been updated, checking task_status again
         self.update_task_status()
 
         for robot in self.robots:
             robot.check_task_status(self.idle_task_id)
 
-        available_robots = [robot for robot in self.robots if robot.available]
-        num_currently_available_robots = len(available_robots)
-
-        if (
-            num_currently_available_robots != self.num_available_robots_in_previous_timestep
-            and num_currently_available_robots > 0  # Change of available robots -> assignment
-        ):
-            scheduler_start_time = time.time()
-            if self.scheduler_name == "sadcher":
-                predicted_reward, instantaneous_assignment = (
-                    self.scheduler.calculate_robot_assignment(self)
-                )
-
-                if self.move_while_waiting:
-                    self.highest_non_idle_rewards, self.highest_non_idle_reward_ids = (
-                        self.find_highest_non_idle_reward(predicted_reward)
-                    )
-            else:
-                instantaneous_assignment = self.scheduler.calculate_robot_assignment(self)
-
-            self.scheduler_computation_times.append(time.time() - scheduler_start_time)
-
-            self.assign_tasks_to_robots(instantaneous_assignment, self.robots)
-
-        self.num_available_robots_in_previous_timestep = num_currently_available_robots
         self.timestep += 1
 
-    def assign_tasks_to_robots(self, instantaneous_schedule, robots):
-        for robot in robots:
+    def step_until_next_decision_point(self, max_no_new_assignment_steps=10_000):
+        no_new_assignment_steps = 0
+        while not self.sim_done:
+            self.step()
+
+            current_available = len([r for r in self.robots if r.available])
+            previous_available = self.num_available_robots_in_previous_timestep
+            self.num_available_robots_in_previous_timestep = current_available
+
+            change_in_available_robots = (current_available > 0) and (
+                current_available != previous_available
+            )
+
+            maxed_out_time_without_assignments = (
+                no_new_assignment_steps >= max_no_new_assignment_steps
+            )
+
+            if (self.sim_done or change_in_available_robots) or maxed_out_time_without_assignments:
+                no_new_assignment_steps = 0
+                break
+
+            # Force termination if timestep exceeds worst-case threshold
+            if self.timestep >= self.worst_case_makespan:
+                self.finish_simulation()
+                self.makespan = self.worst_case_makespan
+                print(f"Scheduler did not find a feasible solution at timestep {self.timestep}")
+                break
+
+            no_new_assignment_steps += 1
+
+    def assign_tasks_to_robots(self, instantaneous_schedule):
+        for robot in self.robots:
             task_id = instantaneous_schedule.robot_assignments.get(robot.robot_id)
             if task_id is not None:
                 task = self.tasks[task_id]
@@ -275,10 +319,10 @@ class Simulation:
             predicted_rewards_non_idle, dim=1
         )
 
-        return (
-            highest_non_idle_rewards,
-            highest_non_idle_rewards_ids + 1,
-        )  # +1 to account for cutting off the start task
+        self.highest_non_idle_rewards = highest_non_idle_rewards
+        self.highest_non_idle_reward_ids = (
+            highest_non_idle_rewards_ids + 1
+        )  # + 1 to accoutn for cutting off start task
 
     def robot_can_still_contribute_to_other_tasks(self, robot):
         pending_tasks = [
@@ -295,6 +339,28 @@ class Simulation:
         )
 
         return can_contribute
+
+    def return_task_robot_states(self):
+        task_features = np.array(
+            [
+                task.feature_vector(self.location_normalization, self.duration_normalization)
+                for task in self.tasks[1:-2]
+            ],  # Exclude start, end, and IDLE task
+            dtype=np.float32,
+        )
+
+        robot_features = np.array(
+            [
+                robot.feature_vector(self.location_normalization, self.duration_normalization)
+                for robot in self.robots
+            ],
+            dtype=np.float32,
+        )
+
+        task_features = torch.tensor(task_features, dtype=torch.float32)
+        robot_features = torch.tensor(robot_features, dtype=torch.float32)
+
+        return task_features, robot_features
 
 
 if __name__ == "__main__":
@@ -328,15 +394,22 @@ if __name__ == "__main__":
         n_tasks, n_robots, n_skills, n_precedence
     )
 
-    # problem_instance = json.load(open("/home/jakob/thesis/benchmarking/precedence_6t2r2s2p/problem_instances/problem_instance_000044.json", "r"))
-
     sim = Simulation(
         problem_instance,
         scheduler_name=args.scheduler,
-        checkpoint_path="/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_2_8t3r3s/best_checkpoint.pt",
         debug=True,
-        move_while_waiting=args.move_while_waiting,
-        model_name=args.sadcher_model_name,
+    )
+
+    checkpoint_path = (
+        "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_2_8t3r3s/best_checkpoint.pt"
+    )
+
+    scheduler = create_scheduler(
+        args.scheduler,
+        checkpoint_path,
+        args.sadcher_model_name,
+        duration_normalization=sim.duration_normalization,
+        location_normalization=sim.location_normalization,
     )
 
     if args.video:
@@ -344,11 +417,17 @@ if __name__ == "__main__":
         run_video_mode(sim)
     elif args.visualize:
         # Interactive mode
-        visualize(sim)
+        visualize(sim, scheduler)
     else:
         # Run simulation until completion
         while not sim.sim_done:
-            sim.step()
+            if isinstance(scheduler, SadcherScheduler):
+                predicted_reward, instantaneous_schedule = scheduler.calculate_robot_assignment(sim)
+                sim.find_highest_non_idle_reward(predicted_reward)
+            else:
+                instantaneous_schedule = scheduler.calculate_robot_assignment(sim)
+            sim.assign_tasks_to_robots(instantaneous_schedule)
+            sim.step_until_next_decision_point()
 
     rolled_out_schedule = Full_Horizon_Schedule(sim.makespan, sim.robot_schedules, n_tasks)
     print(rolled_out_schedule)
