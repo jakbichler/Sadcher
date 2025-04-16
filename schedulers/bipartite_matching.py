@@ -111,7 +111,6 @@ def filter_redundant_assignments(assignment_solution, sim):
     provided by the *existing set* of assigned robots, remove it.
     """
     filtered_solution = dict(assignment_solution)  # copy so we can modify
-
     for (robot_id, task_id), val in assignment_solution.items():
         if val == 1:
             # Find any robots currently assigned to this task

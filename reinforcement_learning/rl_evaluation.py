@@ -1,12 +1,15 @@
 import argparse
+import sys
+
+sys.path.append("..")
 
 import gymnasium as gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from policy_value import SchedulerPolicy
 from tqdm import tqdm
 
+from models.policy_value import SchedulerPolicy
 from visualizations.benchmark_visualizations import (
     compare_makespans_1v1,
     plot_violin,

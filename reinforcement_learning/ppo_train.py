@@ -1,13 +1,17 @@
 import argparse
 import os
+import sys
+
+sys.path.append("..")
 
 import gymnasium as gym
 import torch
-from policy_value import SchedulerPolicy, SchedulerValue
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
 from skrl.envs.torch import wrap_env
 from skrl.memories.torch import RandomMemory
 from skrl.trainers.torch.parallel import PARALLEL_TRAINER_DEFAULT_CONFIG, ParallelTrainer
+
+from models.policy_value import SchedulerPolicy, SchedulerValue
 
 
 def write_config(
@@ -119,8 +123,8 @@ if __name__ == "__main__":
     }
 
     trainer_cfg = PARALLEL_TRAINER_DEFAULT_CONFIG.copy()
-    trainer_cfg["timesteps"] = 500_000
-    trainer_cfg["headless"] = True
+    trainer_cfg["timesteps"] = 1_000_000
+    trainer_cfg["headless"] = False
     trainer_cfg["idle_task_id"] = first_env_config["n_tasks"]
 
     ppo_config = PPO_DEFAULT_CONFIG.copy()
@@ -131,7 +135,7 @@ if __name__ == "__main__":
     ppo_config["learning_rate"] = 3e-4
     ppo_config["mixed_precision"] = False
     ppo_config["experiment"]["write_interval"] = args.N_ROLLOUTS
-    ppo_config["experiment"]["checkpoint_interval"] = trainer_cfg["timesteps"] // 10
+    ppo_config["experiment"]["checkpoint_interval"] = trainer_cfg["timesteps"] // 20
     ppo_config["kl_threshold"] = 0.02
 
     memory = RandomMemory(memory_size=args.N_ROLLOUTS, num_envs=args.N_ENVS, device=device)

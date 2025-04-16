@@ -59,6 +59,7 @@ class SadcherScheduler:
         robot_assignments = {}
         # Special case for the last task
         available_robots = [robot for robot in sim.robots if robot.available]
+        available_robot_ids = [robot.robot_id for robot in sim.robots if robot.available]
         incomplete_tasks = [
             task for task in sim.tasks if task.incomplete and task.status == "PENDING"
         ]
@@ -100,6 +101,7 @@ class SadcherScheduler:
             ).squeeze(0)  # remove batch dim
 
         predicted_reward = torch.clamp(predicted_reward_raw, min=1e-6)
+        # predicted_reward = torch.softmax(predicted_reward_raw, dim=1)
 
         # Add  negative rewards for for the start and end task --> not to be selected, will be handled by the scheduler
         reward_start_end = torch.ones(n_robots, 1).to(self.device) * (-1000)

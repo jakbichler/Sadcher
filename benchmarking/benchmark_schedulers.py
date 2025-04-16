@@ -12,8 +12,9 @@ from data_generation.problem_generator import (
     generate_random_data,
     generate_random_data_with_precedence,
 )
+from schedulers.initialize_schedulers import create_scheduler
 from schedulers.sadcher import SadcherScheduler
-from simulation_environment.simulator_2D import Simulation, create_scheduler
+from simulation_environment.simulator_2D import Simulation
 from visualizations.benchmark_visualizations import (
     compare_makespans_1v1,
     plot_violin,

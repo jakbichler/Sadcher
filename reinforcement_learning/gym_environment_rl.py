@@ -41,8 +41,8 @@ class SchedulingRLEnvironment(gym.Env):
         self.n_precedence = 3
         self.num_robots_available_in_previous_timestep = -1
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.RENDER_COUNTER_THRESHOLD = 20
-        self.MAX_NO_NEW_ASSIGNMENT_STEPS = 50
+        self.render_counter_threshold = 20
+        self.max_no_new_assignment_steps = 50
         dim_robots = 7  # (x,y,duration,[skill0, skill1, skill2], available)
         dim_tasks = 9  # (x,y,duration,[skill0, skill1, skill2],ready, assigned, incomplete)
 
@@ -69,7 +69,7 @@ class SchedulingRLEnvironment(gym.Env):
             torch.manual_seed(seed)
             print(f"Seed: {seed}")
 
-        self.render_mode = render_mode  # "human", "rgb_array", or "none"
+        self.render_mode = render_mode
         self.render_simulation = False
         self.fig, self.ax = None, None
         self.colors = plt.cm.Set1(np.linspace(0, 1, self.n_skills))
@@ -97,6 +97,14 @@ class SchedulingRLEnvironment(gym.Env):
 
         return self._get_observation(), {}
 
+    def reset_same_problem_instance(self):
+        print("Resetting same problem instance")
+        self.sim = Simulation(self.problem_instance, scheduler_name="sadcher_rl")
+
+        self.greedy_makespan = greedy_scheduling(self.problem_instance, print_flag=False).makespan
+
+        return self._get_observation(), {}
+
     def _get_observation(self):
         task_features, robot_features = self.sim.return_task_robot_states()
 
@@ -119,6 +127,31 @@ class SchedulingRLEnvironment(gym.Env):
         else:
             return 0.0
 
+    def step(self, action):
+        truncated = False
+
+        robot_assignments = self.calculate_robot_assignment(action)
+
+        if self.render_simulation:
+            self._low_level_render()
+
+        self.sim.assign_tasks_to_robots(Instantaneous_Schedule(robot_assignments))
+        self.sim.step_until_next_decision_point(
+            max_no_new_assignment_steps=self.max_no_new_assignment_steps
+        )
+
+        # Force termination if timestep exceeds worst-case threshold
+        if self.sim.timestep >= self.worst_case_makespan:
+            self.sim.finish_simulation()
+            self.sim.makespan = self.worst_case_makespan
+            print(f"Scheduler did not find a feasible solution at timestep {self.sim.timestep}")
+            truncated = True
+
+        reward = self.calculate_reward()
+        terminated = self.sim.sim_done
+
+        return self._get_observation(), reward, terminated, truncated, {}
+
     def calculate_robot_assignment(self, action):
         available_robots = [robot for robot in self.sim.robots if robot.available]
         available_robot_ids = [robot.robot_id for robot in available_robots]
@@ -127,8 +160,6 @@ class SchedulingRLEnvironment(gym.Env):
         ]
         # Check if all normal tasks are done -> send all robots to the exit task
         if len(incomplete_tasks) == 1:  # Only end task incomplete
-            # for robot in available_robots:
-            # robot.current_task = self.sim.tasks[-1]
             robot_assignments = {robot: self.sim.tasks[-1].task_id for robot in available_robot_ids}
 
         else:
@@ -147,31 +178,6 @@ class SchedulingRLEnvironment(gym.Env):
 
         return robot_assignments
 
-    def step(self, action):
-        truncated = False
-
-        robot_assignments = self.calculate_robot_assignment(action)
-
-        if self.render_simulation:
-            self._low_level_render()
-
-        self.sim.assign_tasks_to_robots(Instantaneous_Schedule(robot_assignments))
-        self.sim.step_until_next_decision_point(
-            max_no_new_assignment_steps=self.MAX_NO_NEW_ASSIGNMENT_STEPS
-        )
-
-        # Force termination if timestep exceeds worst-case threshold
-        if self.sim.timestep >= self.worst_case_makespan:
-            self.sim.finish_simulation()
-            self.sim.makespan = self.worst_case_makespan
-            print(f"Scheduler did not find a feasible solution at timestep {self.sim.timestep}")
-            truncated = True
-
-        reward = self.calculate_reward()
-        terminated = self.sim.sim_done
-
-        return self._get_observation(), reward, terminated, truncated, {}
-
     def render(self, mode=None):
         self.render_mode = mode
         self.render_simulation = True
@@ -184,7 +190,7 @@ class SchedulingRLEnvironment(gym.Env):
         update_plot(self.sim, self.ax, self.fig, self.colors, self.n_skills, video_mode=True)
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
-        time.sleep(0.1)
+        time.sleep(5.0)
 
     def get_config(self):
         return {
@@ -203,11 +209,3 @@ class SchedulingRLEnvironment(gym.Env):
             return self.sim.makespan
         else:
             raise ValueError("Simulation not done yet. Cannot return final makespan.")
-
-    def reset_same_problem_instance(self):
-        print("Resetting same problem instance")
-        self.sim = Simulation(self.problem_instance, scheduler_name="sadcher_rl")
-
-        self.greedy_makespan = greedy_scheduling(self.problem_instance, print_flag=False).makespan
-
-        return self._get_observation(), {}
