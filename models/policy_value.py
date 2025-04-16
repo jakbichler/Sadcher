@@ -95,7 +95,6 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
         )  # shape: (batch, n_robots, n_tasks + 1)
         logits = reward_matrix.masked_fill(mask == 0, -1e9).float()
         probas = torch.softmax(logits, dim=-1)  # shape: (batch, n_robots, n_tasks + 1)
-
         net_output = probas.view(batch_size, n_robots * n_actions)
 
         return net_output, {}

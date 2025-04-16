@@ -6,3 +6,6 @@ results/
 checkpoints/
 *.ipynb
 *.json
+archived_runs/
+runs/
+*.mp4
