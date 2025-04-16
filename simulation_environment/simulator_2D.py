@@ -14,7 +14,9 @@ class Simulation:
         scheduler_name=None,
         debug=False,
         move_while_waiting=True,
+        use_idle=True,
     ):
+        self.use_idle = use_idle
         self.timestep = 0
         self.sim_done = False
         self.makespan = -1  # Will be set when simulation is done
@@ -49,22 +51,32 @@ class Simulation:
         durations = problem_instance["T_e"]
         requirements = problem_instance["R"]
 
-        # Insert artificial IDLE task
-        central_position = self.location_normalization / 2
-        locations = np.insert(locations, -1, np.array([central_position, central_position]), axis=0)
-        durations = np.insert(durations, -1, 0, axis=0)
-        requirements = np.insert(requirements, -1, np.zeros_like(requirements[0]), axis=0)
+        if self.use_idle:
+            # Insert artificial IDLE task
+            central_position = self.location_normalization / 2
+            locations = np.insert(
+                locations, -1, np.array([central_position, central_position]), axis=0
+            )
+            durations = np.insert(durations, -1, 0, axis=0)
+            requirements = np.insert(requirements, -1, np.zeros_like(requirements[0]), axis=0)
 
         tasks = [
             Task(idx, loc, dur, req)
             for idx, (loc, dur, req) in enumerate(zip(locations, durations, requirements))
         ]
-        tasks[-2].status = "DONE"  # Idle task
 
-        self.n_tasks = len(tasks)
-        self.last_task_id = self.n_tasks - 1
-        self.idle_task_id = self.n_tasks - 2
-        self.n_real_tasks = self.n_tasks - 3  # Excluding start, exit and idle task
+        if self.use_idle:
+            # The newly inserted IDLE task is `tasks[-2]`, mark it as “DONE”
+            tasks[-2].status = "DONE"
+            self.n_tasks = len(tasks)
+            self.last_task_id = self.n_tasks - 1
+            self.idle_task_id = self.n_tasks - 2
+            self.n_real_tasks = self.n_tasks - 3  # skipping start, exit, idle
+        else:
+            self.n_tasks = len(tasks)
+            self.last_task_id = self.n_tasks - 1
+            self.idle_task_id = None
+            self.n_real_tasks = self.n_tasks - 2  # skipping start, exit only
 
         return tasks
 
@@ -87,7 +99,11 @@ class Simulation:
                     # Move to assigned task location (Normal task)
                     robot.update_position_on_task()
 
-                elif robot.current_task.task_id is self.idle_task_id and self.move_while_waiting:
+                elif (
+                    self.use_idle
+                    and robot.current_task.task_id is self.idle_task_id
+                    and self.move_while_waiting
+                ):
                     # Robot was assigned IDLE task
                     if self.robot_can_still_contribute_to_other_tasks(robot):
                         task_to_premove_to = self.find_task_to_premove_to(robot)
@@ -96,6 +112,14 @@ class Simulation:
                     else:
                         # Robot cannot contribute anymore ->  Premove towards exit location
                         robot.position_towards_task(self.tasks[-1])
+
+            elif (
+                not robot.current_task
+                and not self.use_idle
+                and not self.robot_can_still_contribute_to_other_tasks(robot)
+            ):
+                # Robot does not have a task and cannot contribute anymore
+                robot.position_towards_task(self.tasks[-1])
 
         self.update_task_status()
         self.update_task_duration()
@@ -232,22 +256,22 @@ class Simulation:
             if highest_non_idle_reward > 0.1:
                 task_to_premove_to = self.tasks[highest_non_idle_reward_id]
 
-        elif self.scheduler_name == "sadcher_rl":
-            unassigned_tasks = [
-                task for task in self.tasks[:-1] if task.incomplete and not task.assigned
-            ]
-            if not unassigned_tasks:
-                return None
-            tasks_robot_can_contribute_to = []
-            for task in unassigned_tasks:
-                if np.any(np.logical_and(robot.capabilities, task.requirements)):
-                    tasks_robot_can_contribute_to.append(task)
+        # elif self.scheduler_name == "sadcher_rl":
+        # unassigned_tasks = [
+        # task for task in self.tasks[:-1] if task.incomplete and not task.assigned
+        # ]
+        # if not unassigned_tasks:
+        # return None
+        # tasks_robot_can_contribute_to = []
+        # for task in unassigned_tasks:
+        # if np.any(np.logical_and(robot.capabilities, task.requirements)):
+        # tasks_robot_can_contribute_to.append(task)
 
-            distances = [
-                np.linalg.norm(robot.location - task.location)
-                for task in tasks_robot_can_contribute_to
-            ]
-            task_to_premove_to = tasks_robot_can_contribute_to[np.argmin(distances)]
+        # distances = [
+        # np.linalg.norm(robot.location - task.location)
+        # for task in tasks_robot_can_contribute_to
+        # ]
+        # task_to_premove_to = tasks_robot_can_contribute_to[np.argmin(distances)]
 
         return task_to_premove_to
 
@@ -291,13 +315,22 @@ class Simulation:
         self.makespan = self.timestep
 
     def return_task_robot_states(self):
-        task_features = np.array(
-            [
-                task.feature_vector(self.location_normalization, self.duration_normalization)
-                for task in self.tasks[1:-2]
-            ],  # Exclude start, end, and IDLE task
-            dtype=np.float32,
-        )
+        if self.use_idle:
+            task_features = np.array(
+                [
+                    task.feature_vector(self.location_normalization, self.duration_normalization)
+                    for task in self.tasks[1:-2]
+                ],  # Exclude start, end, and IDLE task
+                dtype=np.float32,
+            )
+        else:
+            task_features = np.array(
+                [
+                    task.feature_vector(self.location_normalization, self.duration_normalization)
+                    for task in self.tasks[1:-1]
+                ],  # Exclude start, end
+                dtype=np.float32,
+            )
 
         robot_features = np.array(
             [
