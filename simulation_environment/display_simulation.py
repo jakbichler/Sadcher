@@ -106,17 +106,24 @@ def add_robot_skills_table(fig, robots, colors, n_skills):
 
 def add_precedence_constraints_text(fig, precedence_constraints):
     """Display precedence constraints as a single line of text below the robot table."""
-    ax_text = plt.axes([0.1, 0.0, 0.8, 0.05])  # Position below the robot table
-    ax_text.axis("off")  # Hide the axes
 
+    # Create or reuse a dedicated axes for precedence text
+    if not hasattr(fig, "_precedence_ax"):
+        fig._precedence_ax = fig.add_axes([0.1, 0.0, 0.8, 0.05])  # Position below the robot table
+    else:
+        fig._precedence_ax.cla()  # Clear previous text
+
+    fig._precedence_ax.axis("off")
     precedence_text = f"Precedence Constraints: {precedence_constraints}"
-    ax_text.text(0.5, 0.5, precedence_text, ha="center", va="center", fontsize=10, wrap=True)
+    fig._precedence_ax.text(
+        0.5, 0.5, precedence_text, ha="center", va="center", fontsize=10, wrap=True
+    )
 
 
 def add_current_task_text(fig, robots):
     # Create or reuse a dedicated axes for current task text
     if not hasattr(fig, "_current_task_ax"):
-        fig._current_task_ax = fig.add_axes([0.5, 0.0, 0.8, 0.05])
+        fig._current_task_ax = fig.add_axes([0.5, 0.0, 0.7, 0.1])
         fig._current_task_ax.axis("off")
     else:
         fig._current_task_ax.cla()  # Clear previous text
