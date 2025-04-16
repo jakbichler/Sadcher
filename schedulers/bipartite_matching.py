@@ -5,7 +5,7 @@ import pulp
 import torch
 
 
-def solve_bipartite_matching(R, sim):
+def solve_bipartite_matching(R, sim, n_threads=6):
     """
     R    : torch.tensor [n_robots, n_tasks], reward matrix
     sim  : Simulation object
@@ -80,7 +80,7 @@ def solve_bipartite_matching(R, sim):
     problem.solve(
         pulp.PULP_CBC_CMD(
             msg=False,
-            threads=6,
+            threads=n_threads,
             options=[
                 "ratioGap 0",
                 "allowableGap 0",
@@ -111,7 +111,6 @@ def filter_redundant_assignments(assignment_solution, sim):
     provided by the *existing set* of assigned robots, remove it.
     """
     filtered_solution = dict(assignment_solution)  # copy so we can modify
-
     for (robot_id, task_id), val in assignment_solution.items():
         if val == 1:
             # Find any robots currently assigned to this task

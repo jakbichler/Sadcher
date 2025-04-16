@@ -11,9 +11,12 @@ from matplotlib.patches import (
 from matplotlib.table import Table
 from matplotlib.widgets import Button
 
+from schedulers.sadcher import SadcherScheduler
 
-def visualize(sim):
+
+def visualize(sim, scheduler):
     """Interactive Matplotlib figure with tasks as pie charts and step buttons."""
+
     n_skills = len(sim.tasks[0].requirements)  # Assume all tasks have the same number of skills
     colors = plt.cm.Set1(np.linspace(0, 1, n_skills))  # Generate a color palette
     fig, ax = plt.subplots(figsize=(8, 8))
@@ -24,15 +27,15 @@ def visualize(sim):
     ax_button_10 = plt.axes([0.5, 0.92, 0.2, 0.07])  # 'Advance 10 Timesteps' button
 
     btn_next = Button(ax_button_next, "Next Timestep")
-    btn_next.on_clicked(lambda event: next_step_callback(sim, ax, fig, colors, n_skills))
+    btn_next.on_clicked(lambda event: next_step_callback(sim, ax, fig, colors, n_skills, scheduler))
 
     btn_advance_10 = Button(ax_button_10, "10 Timesteps")
     btn_advance_10.on_clicked(
-        lambda event: advance_10_steps_callback(sim, ax, fig, colors, n_skills)
+        lambda event: advance_10_steps_callback(sim, ax, fig, colors, n_skills, scheduler)
     )
 
     fig.canvas.mpl_connect(
-        "key_press_event", lambda event: key_press(event, sim, ax, fig, colors, n_skills)
+        "key_press_event", lambda event: key_press(event, sim, ax, fig, colors, n_skills, scheduler)
     )
     update_plot(sim, ax, fig, colors, n_skills)
     plt.show()
@@ -51,7 +54,7 @@ def add_robot_skills_table(fig, robots, colors, n_skills):
         row.append(f"Task {current_task}")
         table_data.append(row)
 
-    ax_table = plt.axes([0.1, 0.05, 0.8, 0.2])
+    ax_table = plt.axes([0.1, -0.1, 0.8, 0.2])
     ax_table.axis("off")
     table = Table(ax_table, bbox=[0, 0, 1, 1])
 
@@ -103,11 +106,38 @@ def add_robot_skills_table(fig, robots, colors, n_skills):
 
 def add_precedence_constraints_text(fig, precedence_constraints):
     """Display precedence constraints as a single line of text below the robot table."""
-    ax_text = plt.axes([0.1, 0.0, 0.8, 0.05])  # Position below the robot table
-    ax_text.axis("off")  # Hide the axes
 
+    # Create or reuse a dedicated axes for precedence text
+    if not hasattr(fig, "_precedence_ax"):
+        fig._precedence_ax = fig.add_axes([0.1, 0.0, 0.8, 0.05])  # Position below the robot table
+    else:
+        fig._precedence_ax.cla()  # Clear previous text
+
+    fig._precedence_ax.axis("off")
     precedence_text = f"Precedence Constraints: {precedence_constraints}"
-    ax_text.text(0.5, 0.5, precedence_text, ha="center", va="center", fontsize=10, wrap=True)
+    fig._precedence_ax.text(
+        0.5, 0.5, precedence_text, ha="center", va="center", fontsize=10, wrap=True
+    )
+
+
+def add_current_task_text(fig, robots):
+    # Create or reuse a dedicated axes for current task text
+    if not hasattr(fig, "_current_task_ax"):
+        fig._current_task_ax = fig.add_axes([0.5, 0.0, 0.7, 0.1])
+        fig._current_task_ax.axis("off")
+    else:
+        fig._current_task_ax.cla()  # Clear previous text
+        fig._current_task_ax.axis("off")
+
+    current_tasks = [
+        f"Robot {robot.robot_id}: Task {robot.current_task.task_id}"
+        for robot in robots
+        if robot.current_task
+    ]
+    current_tasks_text = "\n".join(current_tasks)
+    fig._current_task_ax.text(
+        0.5, 0.5, current_tasks_text, ha="center", va="center", fontsize=10, wrap=True
+    )
 
 
 def draw_pie(ax, x, y, sizes, radius, colors):
@@ -212,7 +242,9 @@ def update_plot(sim, ax, fig, colors, n_skills, video_mode=False):
         ha="center",
     )
 
-    if not video_mode:
+    if video_mode:
+        add_current_task_text(fig, sim.robots)
+    else:
         add_robot_skills_table(fig, sim.robots, colors, n_skills)
     add_precedence_constraints_text(fig, sim.precedence_constraints)
 
@@ -247,22 +279,34 @@ def update_plot(sim, ax, fig, colors, n_skills, video_mode=False):
     plt.draw()
 
 
-def next_step_callback(sim, ax, fig, colors, n_skills):
+def next_step_callback(sim, ax, fig, colors, n_skills, scheduler):
     sim.step()
+    if isinstance(scheduler, SadcherScheduler):
+        predicted_reward, instantaneous_schedule = scheduler.calculate_robot_assignment(sim)
+        sim.find_highest_non_idle_reward(predicted_reward)
+    else:
+        instantaneous_schedule = scheduler.calculate_robot_assignment(sim)
+    sim.assign_tasks_to_robots(instantaneous_schedule)
     update_plot(sim, ax, fig, colors, n_skills)
 
 
-def advance_10_steps_callback(sim, ax, fig, colors, n_skills):
+def advance_10_steps_callback(sim, ax, fig, colors, n_skills, scheduler):
     for _ in range(10):
         sim.step()
+    if isinstance(scheduler, SadcherScheduler):
+        predicted_reward, instantaneous_schedule = scheduler.calculate_robot_assignment(sim)
+        sim.find_highest_non_idle_reward(predicted_reward)
+    else:
+        instantaneous_schedule = scheduler.calculate_robot_assignment(sim)
+    sim.assign_tasks_to_robots(instantaneous_schedule)
     update_plot(sim, ax, fig, colors, n_skills)
 
 
-def key_press(event, sim, ax, fig, colors, n_skills):
+def key_press(event, sim, ax, fig, colors, n_skills, scheduler):
     if event.key == "n":  # Press 'n' for Next Timestep
-        next_step_callback(sim, ax, fig, colors, n_skills)
+        next_step_callback(sim, ax, fig, colors, n_skills, scheduler)
     elif event.key == "m":  # Press 'm' for Advance 10 Timesteps
-        advance_10_steps_callback(sim, ax, fig, colors, n_skills)
+        advance_10_steps_callback(sim, ax, fig, colors, n_skills, scheduler)
 
 
 def make_video_from_frames(frame_dir, output="simulation.mp4", fps=5):
