@@ -17,12 +17,14 @@ class SchedulerNetwork(nn.Module):
         n_gatn_heads,
         n_gatn_layers,
         dropout=0.0,
+        use_idle=True,
     ):
         """
         robot_input_dimensions: Expected dimensions for robot features (first two must be (x,y))
         task_input_dimension: Expected dimensions for task features (first two must be (x,y))
         """
         super().__init__()
+        self.use_idle = use_idle
 
         self.robot_embedding = nn.Linear(robot_input_dimensions, embed_dim)
         self.task_embedding = nn.Linear(task_input_dimension, embed_dim)
@@ -49,12 +51,13 @@ class SchedulerNetwork(nn.Module):
             nn.Linear(ff_dim, 1),  # outputs scalar per (robot, task) pair
         )
 
-        # Rewards MLP for idle tasks
-        self.idle_mlp = nn.Sequential(
-            nn.Linear(4 * embed_dim + 1, ff_dim),
-            nn.ReLU(),
-            nn.Linear(ff_dim, 1),  # outputs scalar per robot
-        )
+        if self.use_idle:
+            # Rewards MLP for idle tasks
+            self.idle_mlp = nn.Sequential(
+                nn.Linear(4 * embed_dim + 1, ff_dim),
+                nn.ReLU(),
+                nn.Linear(ff_dim, 1),  # outputs scalar per robot
+            )
 
     def forward(self, robot_features, task_features, task_adjacencies=None):
         """
@@ -110,9 +113,13 @@ class SchedulerNetwork(nn.Module):
         )  # (B, N, M, 4*embed_dim + 1)
 
         task_rewards = self.reward_mlp(final_input).squeeze(-1)  # (B, N, M)
-        idle_rewards_per_task = self.idle_mlp(final_input).squeeze(-1)  # (B, N, M)
-        idle_rewards = idle_rewards_per_task.sum(dim=-1, keepdim=True)  # (B, N, 1)
 
-        # Concatenate the idle reward with task rewards, so final shape is (B, N, M+1)
-        final_reward = torch.cat([task_rewards, idle_rewards], dim=-1)
-        return final_reward
+        if self.use_idle:
+            idle_rewards_per_task = self.idle_mlp(final_input).squeeze(-1)  # (B, N, M)
+            idle_rewards = idle_rewards_per_task.sum(dim=-1, keepdim=True)  # (B, N, 1)
+
+            # Concatenate the idle reward with task rewards, so final shape is (B, N, M+1)
+            return torch.cat([task_rewards, idle_rewards], dim=-1)
+
+        else:
+            return task_rewards

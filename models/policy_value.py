@@ -22,11 +22,12 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
         device,
         policy_config,
         pretrained=False,
+        use_idle=True,
     ):
         MultiCategoricalMixin.__init__(self, unnormalized_log_prob=False, reduction="sum")  #
         Model.__init__(self, observation_space, action_space, device)
         self.device = device
-
+        self.use_idle = use_idle
         robot_input_dimensions = policy_config["robot_input_dimensions"]
         task_input_dimension = policy_config["task_input_dimension"]
         embed_dim = policy_config["embed_dim"]
@@ -45,6 +46,7 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
             n_transformer_layers=n_transformer_layers,
             n_gatn_heads=n_gatn_heads,
             n_gatn_layers=n_gatn_layers,
+            use_idle=use_idle,
         ).to(self.device)
 
         if pretrained:
@@ -77,8 +79,12 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
         batch_size = robot_features.shape[0]
         n_robots = robot_features.shape[1]
         n_tasks = task_features.shape[1]
-        # Our action space is defined as n_tasks + 1 (normal + IDLE)
-        n_actions = n_tasks + 1
+
+        if self.use_idle:
+            # Our action space is defined as n_tasks + 1 (normal + IDLE)
+            n_actions = n_tasks + 1
+        else:
+            n_actions = n_tasks
 
         # Build a mask of shape (batch, n_robots, n_actions) that indicates valid actions.
         mask = torch.ones((batch_size, n_robots, n_actions), device=self.device)
@@ -87,8 +93,12 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
             self.device
         )  # (batch, 1, n_tasks)
         task_mask = availability_mask * ready_incomplete_mask  # (batch, n_robots, n_tasks)
-        # Insert the task_mask into the valid action indices (until -1 for IDLE, always ready).
-        mask[:, :, :-1] = task_mask
+
+        if self.use_idle:
+            # Insert the task_mask into the valid action indices (until -1 for IDLE, always ready).
+            mask[:, :, :-1] = task_mask
+        else:
+            mask = task_mask
 
         reward_matrix = self.scheduler_net(
             robot_features, task_features, task_adjacency

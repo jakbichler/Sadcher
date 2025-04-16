@@ -18,7 +18,6 @@ from helper_functions.schedules import Instantaneous_Schedule
 from schedulers.bipartite_matching import (
     filter_overassignments,
     filter_redundant_assignments,
-    solve_bipartite_matching,
 )
 from simulation_environment.display_simulation import update_plot
 from simulation_environment.simulator_2D import Simulation
@@ -31,24 +30,35 @@ class SchedulingRLEnvironment(gym.Env):
     }
 
     def __init__(
-        self, seed=None, problem_type="random_with_precedence", render_mode="human", **kwargs
+        self,
+        seed=None,
+        problem_type="random_with_precedence",
+        render_mode="human",
+        use_idle=True,
+        **kwargs,
     ):
         super().__init__()
 
-        self.n_robots = 4
-        self.n_tasks = 12
+        self.n_robots = 5
+        self.n_tasks = 15
         self.n_skills = 3
         self.n_precedence = 3
         self.num_robots_available_in_previous_timestep = -1
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.render_counter_threshold = 20
         self.max_no_new_assignment_steps = 50
+        self.use_idle = use_idle
         dim_robots = 7  # (x,y,duration,[skill0, skill1, skill2], available)
         dim_tasks = 9  # (x,y,duration,[skill0, skill1, skill2],ready, assigned, incomplete)
 
-        self.action_space = gym.spaces.MultiDiscrete(
-            [self.n_tasks + 1] * self.n_robots,
-        )
+        if self.use_idle:
+            self.action_space = gym.spaces.MultiDiscrete(
+                [self.n_tasks + 1] * self.n_robots,
+            )
+        else:
+            self.action_space = gym.spaces.MultiDiscrete(
+                [self.n_tasks] * self.n_robots,
+            )
 
         self.observation_space = gym.spaces.Dict(
             {
@@ -88,7 +98,9 @@ class SchedulingRLEnvironment(gym.Env):
         else:
             raise ValueError(f"Unknown problem type: {self.problem_type}")
 
-        self.sim = Simulation(self.problem_instance, scheduler_name="sadcher_rl")
+        self.sim = Simulation(
+            self.problem_instance, scheduler_name="sadcher_rl", use_idle=self.use_idle
+        )
 
         self.greedy_makespan = greedy_scheduling(self.problem_instance, print_flag=False).makespan
         self.worst_case_makespan = np.sum(self.problem_instance["T_e"]) + np.sum(
@@ -190,7 +202,7 @@ class SchedulingRLEnvironment(gym.Env):
         update_plot(self.sim, self.ax, self.fig, self.colors, self.n_skills, video_mode=True)
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
-        time.sleep(5.0)
+        time.sleep(1.0)
 
     def get_config(self):
         return {

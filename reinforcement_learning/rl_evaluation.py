@@ -37,13 +37,25 @@ def main():
         default="sampling",
         help="Policy mode: sampling (multiple trials) or argmax (1 trial)",
     )
+    parser.add_argument(
+        "--not_use_idle",
+        action="store_true",
+        default=False,
+        help="Use pretrained model",
+    )
+
     args = parser.parse_args()
+    use_idle = not args.not_use_idle
 
     seed = 42
     np.random.seed(seed)
     env_id = "SchedulingRLEnvironment-v0"
-    gym.register(id=env_id, entry_point="gym_environment_rl:SchedulingRLEnvironment")
-    env = gym.make(env_id)
+    gym.register(
+        id=env_id,
+        entry_point="gym_environment_rl:SchedulingRLEnvironment",
+        kwargs={"use_idle": use_idle},
+    )
+    env = gym.make(env_id, kwargs={"use_idle": use_idle})
     env_config = env.unwrapped.get_config()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -58,7 +70,9 @@ def main():
         "n_gatn_layers": 1,
     }
 
-    policy_model = SchedulerPolicy(env.observation_space, env.action_space, device, policy_config)
+    policy_model = SchedulerPolicy(
+        env.observation_space, env.action_space, device, policy_config, use_idle=use_idle
+    )
     checkpoint = torch.load(args.RL_agent_path, map_location=device, weights_only=True)
     policy_model.load_state_dict(checkpoint["policy"])
     policy_model.eval().to(device)
@@ -84,9 +98,14 @@ def main():
                 }
 
                 action_probas, _ = policy_model.compute(state_tensor, eval=True)
-                action_probas = action_probas.reshape(
-                    (1, env_config["n_robots"], env_config["n_tasks"] + 1)
-                )
+                if use_idle:
+                    action_probas = action_probas.reshape(
+                        (1, env_config["n_robots"], env_config["n_tasks"] + 1)
+                    )
+                else:
+                    action_probas = action_probas.reshape(
+                        (1, env_config["n_robots"], env_config["n_tasks"])
+                    )
 
                 probs = action_probas.squeeze(0)
 

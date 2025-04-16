@@ -81,18 +81,27 @@ if __name__ == "__main__":
         help="Type of scheduling problem (e.g., 'random_with_precedence' or 'random_all_robots_all_skills')",
     )
 
+    argument_parser.add_argument(
+        "--not_use_idle",
+        action="store_true",
+        default=False,
+        help="Use pretrained model",
+    )
+
     args = argument_parser.parse_args()
+    use_idle = not args.not_use_idle
+
     env_id = "SchedulingRLEnvironment-v0"
     gym.register(
         id=env_id,
         entry_point="gym_environment_rl:SchedulingRLEnvironment",
-        kwargs={"problem_type": args.problem_type},
+        kwargs={"problem_type": args.problem_type, "use_idle": use_idle},
     )
     envs = gym.make_vec(
         env_id,
         num_envs=args.N_ENVS,
         vectorization_mode="async",
-        kwargs={"problem_type": args.problem_type},
+        kwargs={"problem_type": args.problem_type, "use_idle": use_idle},
     )
     env_configs = envs.call("get_config")
     first_env_config = env_configs[0]
@@ -124,7 +133,7 @@ if __name__ == "__main__":
 
     trainer_cfg = PARALLEL_TRAINER_DEFAULT_CONFIG.copy()
     trainer_cfg["timesteps"] = 1_000_000
-    trainer_cfg["headless"] = False
+    trainer_cfg["headless"] = True
     trainer_cfg["idle_task_id"] = first_env_config["n_tasks"]
 
     ppo_config = PPO_DEFAULT_CONFIG.copy()
@@ -146,7 +155,9 @@ if __name__ == "__main__":
         device,
         policy_config=policy_config,
         pretrained=args.IL_pretrained_policy,
+        use_idle=use_idle,
     )
+
     value_model = SchedulerValue(envs.observation_space, envs.action_space, value_config)
 
     agent = PPO(
