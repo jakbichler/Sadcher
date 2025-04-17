@@ -131,10 +131,18 @@ class Simulation:
 
         self.timestep += 1
 
-    def step_until_next_decision_point(self, max_no_new_assignment_steps=10_000):
-        no_new_assignment_steps = 0
+    def step_until_next_decision_point(
+        self,
+        max_no_new_assignment_steps=10_000,
+        render_fn=None,
+        timesteps_to_trigger_rendering=2,
+    ):
+        current_steps = 0
         while not self.sim_done:
             self.step()
+
+            if render_fn and not current_steps % timesteps_to_trigger_rendering:
+                render_fn()
 
             current_available = len([r for r in self.robots if r.available])
             previous_available = self.num_available_robots_in_previous_timestep
@@ -144,12 +152,7 @@ class Simulation:
                 current_available != previous_available
             )
 
-            maxed_out_time_without_assignments = (
-                no_new_assignment_steps >= max_no_new_assignment_steps
-            )
-
-            if (self.sim_done or change_in_available_robots) or maxed_out_time_without_assignments:
-                no_new_assignment_steps = 0
+            if self.sim_done or change_in_available_robots:
                 break
 
             # Force termination if timestep exceeds worst-case threshold
@@ -159,7 +162,7 @@ class Simulation:
                 print(f"Scheduler did not find a feasible solution at timestep {self.timestep}")
                 break
 
-            no_new_assignment_steps += 1
+            current_steps += 1
 
     def update_task_status(self):
         for task in self.tasks:
