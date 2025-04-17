@@ -23,12 +23,19 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
         policy_config,
         pretrained=False,
         use_idle=True,
+        use_positional_encoding=False,
     ):
         MultiCategoricalMixin.__init__(self, unnormalized_log_prob=False, reduction="sum")  #
         Model.__init__(self, observation_space, action_space, device)
         self.device = device
         self.use_idle = use_idle
-        robot_input_dimensions = policy_config["robot_input_dimensions"]
+        self.use_positional_encoding = use_positional_encoding
+
+        if use_positional_encoding:
+            robot_input_dimensions = policy_config["robot_input_dimensions"] + 1
+        else:
+            robot_input_dimensions = policy_config["robot_input_dimensions"]
+
         task_input_dimension = policy_config["task_input_dimension"]
         embed_dim = policy_config["embed_dim"]
         ff_dim = policy_config["ff_dim"]
@@ -69,6 +76,15 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
             self.device
         )  # shape: (batch, n_tasks, n_tasks)
 
+        if self.use_positional_encoding:  # Append noramlized robot id
+            batch_size, n_robots, input_dim = robot_features.shape
+            robot_ids = (
+                torch.arange(n_robots).unsqueeze(0).expand(batch_size, n_robots).to(self.device)
+            )  # Shape: (B, N)
+            normalized_robot_ids = robot_ids / (n_robots - 1)  # Normalize to the range [0, 1]
+            robot_features = torch.cat(
+                [robot_features, normalized_robot_ids.unsqueeze(-1)], dim=-1
+            )  # Shape: (B, N, robot_input_dimensions + 1)
         # For robots: last element is availability (1: available, 0: not)
         robot_availability = robot_features[:, :, -1]  # shape: (batch, n_robots)
         # For tasks: assume index -3 is the ready flag last three are (ready, assigned, incomplete)
@@ -106,6 +122,23 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
         logits = reward_matrix.masked_fill(mask == 0, -1e9).float()
         probas = torch.softmax(logits, dim=-1)  # shape: (batch, n_robots, n_tasks + 1)
         net_output = probas.view(batch_size, n_robots * n_actions)
+
+        # Assuming probas is already calculated as the softmax probabilities
+        top_k_values, top_k_indices = probas.topk(
+            5, dim=-1
+        )  # Get top 5 values and indices along the last dimension
+
+        ## Print the top 5 probabilities for each robot rounded to 2 decimals
+        # for i in range(batch_size):  # Loop over each batch
+        # for j in range(n_robots):  # Loop over each robot in the batch
+        # top_5_probs = (
+        # top_k_values[i, j].cpu().numpy()
+        # )  # Get top 5 probabilities for robot j
+        # top_5_tasks = top_k_indices[i, j].cpu().numpy()  # Get corresponding task indices
+        # print(f"  Robot {j}:")
+        # for k in range(5):
+        # print(f"    Task {top_5_tasks[k] + 1}: {top_5_probs[k]:.2f}")
+        # print()
 
         return net_output, {}
 
