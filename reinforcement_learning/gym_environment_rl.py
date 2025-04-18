@@ -35,6 +35,7 @@ class SchedulingRLEnvironment(gym.Env):
         problem_type="random_with_precedence",
         render_mode="human",
         use_idle=True,
+        subtractive_assignment=False,
         **kwargs,
     ):
         super().__init__()
@@ -47,6 +48,7 @@ class SchedulingRLEnvironment(gym.Env):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.render_counter_threshold = 20
         self.use_idle = use_idle
+        self.subtractive_assignment = subtractive_assignment
         dim_robots = 7  # (x,y,duration,[skill0, skill1, skill2], available)
         dim_tasks = 9  # (x,y,duration,[skill0, skill1, skill2],ready, assigned, incomplete)
 
@@ -120,6 +122,21 @@ class SchedulingRLEnvironment(gym.Env):
     def _get_observation(self):
         task_features, robot_features = self.sim.return_task_robot_states()
 
+        if self.subtractive_assignment:
+            first_skill_index = 3  # [0,1,2] is location and duration
+            skill_slice = slice(first_skill_index, first_skill_index + self.n_skills)
+            real_tasks = self.sim.tasks[1:-2] if self.use_idle else self.sim.tasks[1:-1]
+
+            for task_index, task in enumerate(real_tasks):
+                required = np.array(task.requirements, dtype=bool)
+                covered = np.zeros(self.n_skills, dtype=bool)
+                for robot in self.sim.robots:
+                    if robot.current_task is task:
+                        covered |= np.array(robot.capabilities, dtype=bool)
+                remaining = required & ~covered  # bool vector length n_skills
+
+                task_features[task_index, skill_slice] = torch.tensor(remaining)
+
         return {
             "robot_features": robot_features,
             "task_features": task_features,
@@ -142,13 +159,15 @@ class SchedulingRLEnvironment(gym.Env):
     def step(self, action):
         truncated = False
 
-        robot_assignments = self.calculate_robot_assignment(action)
+        robot_assignments, filter_triggered = self.calculate_robot_assignment(action)
 
         if self.render_simulation:
             self._low_level_render()
 
         self.sim.assign_tasks_to_robots(Instantaneous_Schedule(robot_assignments))
-        self.sim.step_until_next_decision_point(render_fn=self.render_fn)
+        self.sim.step_until_next_decision_point(
+            render_fn=self.render_fn, filter_triggered=filter_triggered
+        )
 
         # Force termination if timestep exceeds worst-case threshold
         if self.sim.timestep >= self.worst_case_makespan:
@@ -168,6 +187,7 @@ class SchedulingRLEnvironment(gym.Env):
         incomplete_tasks = [
             task for task in self.sim.tasks if task.incomplete and task.status == "PENDING"
         ]
+        filter_triggered = False
         # Check if all normal tasks are done -> send all robots to the exit task
         if len(incomplete_tasks) == 1:  # Only end task incomplete
             robot_assignments = {robot: self.sim.tasks[-1].task_id for robot in available_robot_ids}
@@ -179,14 +199,17 @@ class SchedulingRLEnvironment(gym.Env):
                 if robot_id in available_robot_ids
             }
 
-            action_dict_filtered = action_dict
-            # action_dict_filtered = filter_redundant_assignments(action_dict, self.sim)
-            # action_dict_filtered = filter_overassignments(action_dict_filtered, self.sim)
+            # action_dict_filtered = action_dict
+            action_dict_filtered = filter_redundant_assignments(action_dict, self.sim)
+            action_dict_filtered = filter_overassignments(action_dict_filtered, self.sim)
             robot_assignments = {
                 robot: task for (robot, task), val in action_dict_filtered.items() if val == 1
             }
 
-        return robot_assignments
+            if action_dict_filtered != action_dict and len(incomplete_tasks) > 4:
+                filter_triggered = True
+
+        return robot_assignments, filter_triggered
 
     def render(self, mode=None):
         self.render_mode = mode
@@ -202,7 +225,7 @@ class SchedulingRLEnvironment(gym.Env):
         update_plot(self.sim, self.ax, self.fig, self.colors, self.n_skills, video_mode=True)
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
-        time.sleep(1)
+        time.sleep(0.1)
 
     def get_config(self):
         return {
