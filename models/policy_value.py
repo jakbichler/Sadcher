@@ -58,7 +58,9 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
 
         if pretrained:
             checkpoint_path = "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_2_8t3r3s/best_checkpoint.pt"
-            self.scheduler_net.load_state_dict(torch.load(checkpoint_path, weights_only=True))
+            # self.scheduler_net.load_state_dict(torch.load(checkpoint_path, weights_only=True))
+            self.load_pretrained_weights(checkpoint_path)
+            self.freeze_encoder_layers()
 
     def compute(self, states, taken_actions=None, timesteps=None, eval=False, **kwargs):
         """
@@ -123,27 +125,102 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
         probas = torch.softmax(logits, dim=-1)  # shape: (batch, n_robots, n_tasks + 1)
         net_output = probas.view(batch_size, n_robots * n_actions)
 
-        # Assuming probas is already calculated as the softmax probabilities
-        top_k_values, top_k_indices = probas.topk(
-            5, dim=-1
-        )  # Get top 5 values and indices along the last dimension
+        ## Assuming probas is already calculated as the softmax probabilities
+        # top_k_values, top_k_indices = probas.topk(
+        # 5, dim=-1
+        # )  # Get top 5 values and indices along the last dimension
 
         ## Print the top 5 probabilities for each robot rounded to 2 decimals
         # for i in range(batch_size):  # Loop over each batch
         # for j in range(n_robots):  # Loop over each robot in the batch
         # top_5_probs = (
-        # top_k_values[i, j].cpu().numpy()
+        # top_k_values[i, j].detach().cpu().numpy()
         # )  # Get top 5 probabilities for robot j
-        # top_5_tasks = top_k_indices[i, j].cpu().numpy()  # Get corresponding task indices
+        # top_5_tasks = (
+        # top_k_indices[i, j].detach().cpu().numpy()
+        # )  # Get corresponding task indices
         # print(f"  Robot {j}:")
         # for k in range(5):
         # print(f"    Task {top_5_tasks[k] + 1}: {top_5_probs[k]:.2f}")
-        # print()
 
         return net_output, {}
 
+    def load_pretrained_weights(self, checkpoint_path):
+        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        checkpoint_state_dict = checkpoint.get(
+            "state_dict", checkpoint
+        )  # In case the checkpoint is wrapped
+
+        current_state_dict = self.scheduler_net.state_dict()
+
+        filtered_checkpoint_state_dict = {
+            k: v
+            for k, v in checkpoint_state_dict.items()
+            if k in current_state_dict and v.size() == current_state_dict[k].size()
+        }
+
+        skipped_layers = [
+            k
+            for k, v in checkpoint_state_dict.items()
+            if k not in current_state_dict or v.size() != current_state_dict[k].size()
+        ]
+
+        self.scheduler_net.load_state_dict(filtered_checkpoint_state_dict, strict=False)
+
+        if skipped_layers:
+            print("Skipped layers due to shape mismatch or missing in the new model:")
+            for layer in skipped_layers:
+                print(f"  - {layer}")
+        else:
+            print("No layers were skipped.")
+
+        print(f"Loaded {len(filtered_checkpoint_state_dict)} matching layers from checkpoint.")
+        print(f"Skipped {len(skipped_layers)} layers.")
+
+    def freeze_encoder_layers(self):
+        frozen_count = 0
+        trainable_count = 0
+
+        for param in self.scheduler_net.robot_GATN.parameters():
+            if param.requires_grad:
+                param.requires_grad = False
+                frozen_count += param.numel()
+        for param in self.scheduler_net.task_GATN.parameters():
+            if param.requires_grad:
+                param.requires_grad = False
+                frozen_count += param.numel()
+
+        for param in self.scheduler_net.robot_transformer_encoder.parameters():
+            if param.requires_grad:
+                param.requires_grad = False
+                frozen_count += param.numel()
+        for param in self.scheduler_net.task_transformer_encoder.parameters():
+            if param.requires_grad:
+                param.requires_grad = False
+                frozen_count += param.numel()
+
+        for param in self.scheduler_net.robot_embedding.parameters():
+            if param.requires_grad:
+                param.requires_grad = False
+                frozen_count += param.numel()
+        for param in self.scheduler_net.task_embedding.parameters():
+            if param.requires_grad:
+                param.requires_grad = False
+                frozen_count += param.numel()
+
+        for param in self.scheduler_net.parameters():
+            if param.requires_grad:
+                trainable_count += param.numel()
+
+        total_params = frozen_count + trainable_count
+        print(f"Total parameters in the scheduler network: {total_params}")
+        print(f"Frozen parameters (elements): {frozen_count}")
+        print(f"Trainable parameters (elements): {trainable_count}")
+
+        print("All encoder layers in the scheduler network have been frozen.")
+
     # ====================================
-    # Custom Value Network (No Masking Needed)
+    # Custom Value Network
     # ====================================
 
 
