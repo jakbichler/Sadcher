@@ -3,11 +3,8 @@ import torch
 
 from helper_functions.schedules import Instantaneous_Schedule
 from models.scheduler_network import SchedulerNetwork
-from schedulers.bipartite_matching import (
-    filter_overassignments,
-    filter_redundant_assignments,
-    solve_bipartite_matching,
-)
+from schedulers.bipartite_matching import solve_bipartite_matching
+from schedulers.filtering_assignments import filter_overassignments, filter_redundant_assignments
 
 
 class SadcherScheduler:
@@ -101,7 +98,6 @@ class SadcherScheduler:
             ).squeeze(0)  # remove batch dim
 
         predicted_reward = torch.clamp(predicted_reward_raw, min=1e-6)
-        # predicted_reward = torch.softmax(predicted_reward_raw, dim=1)
 
         # Add  negative rewards for for the start and end task --> not to be selected, will be handled by the scheduler
         reward_start_end = torch.ones(n_robots, 1).to(self.device) * (-1000)
