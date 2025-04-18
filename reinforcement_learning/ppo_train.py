@@ -95,13 +95,21 @@ if __name__ == "__main__":
     gym.register(
         id=env_id,
         entry_point="gym_environment_rl:SchedulingRLEnvironment",
-        kwargs={"problem_type": args.problem_type, "use_idle": use_idle},
+        kwargs={
+            "problem_type": args.problem_type,
+            "use_idle": use_idle,
+            "subtractive_assignment": True,
+        },
     )
     envs = gym.make_vec(
         env_id,
         num_envs=args.N_ENVS,
         vectorization_mode="async",
-        kwargs={"problem_type": args.problem_type, "use_idle": use_idle},
+        kwargs={
+            "problem_type": args.problem_type,
+            "use_idle": use_idle,
+            "subtractive_assignment": True,
+        },
     )
     env_configs = envs.call("get_config")
     first_env_config = env_configs[0]
@@ -112,20 +120,20 @@ if __name__ == "__main__":
     policy_config = {
         "robot_input_dimensions": 7,
         "task_input_dimension": 9,
-        "embed_dim": 32,
-        "ff_dim": 64,
-        "n_transformer_heads": 1,
-        "n_transformer_layers": 1,
-        "n_gatn_heads": 1,
+        "embed_dim": 256,
+        "ff_dim": 512,
+        "n_transformer_heads": 4,
+        "n_transformer_layers": 2,
+        "n_gatn_heads": 8,
         "n_gatn_layers": 1,
     }
 
     value_config = {
         "robot_input_dim": 7,
         "task_input_dim": 9,
-        "embed_dim": 32,
-        "ff_dim": 64,
-        "n_transformer_heads": 1,
+        "embed_dim": 128,
+        "ff_dim": 256,
+        "n_transformer_heads": 2,
         "n_transformer_layers": 1,
         "n_gatn_heads": 1,
         "n_gatn_layers": 1,
@@ -144,8 +152,9 @@ if __name__ == "__main__":
     ppo_config["learning_rate"] = 3e-4
     ppo_config["mixed_precision"] = False
     ppo_config["experiment"]["write_interval"] = args.N_ROLLOUTS
-    ppo_config["experiment"]["checkpoint_interval"] = trainer_cfg["timesteps"] // 20
+    ppo_config["experiment"]["checkpoint_interval"] = 10_000
     ppo_config["kl_threshold"] = 0.02
+    ppo_config["clip_ratio"] = 0.2
 
     memory = RandomMemory(memory_size=args.N_ROLLOUTS, num_envs=args.N_ENVS, device=device)
 
@@ -156,6 +165,7 @@ if __name__ == "__main__":
         policy_config=policy_config,
         pretrained=args.IL_pretrained_policy,
         use_idle=use_idle,
+        use_positional_encoding=False,
     )
 
     value_model = SchedulerValue(envs.observation_space, envs.action_space, value_config)

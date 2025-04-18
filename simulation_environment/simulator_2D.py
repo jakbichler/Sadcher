@@ -135,7 +135,8 @@ class Simulation:
         self,
         max_no_new_assignment_steps=10_000,
         render_fn=None,
-        timesteps_to_trigger_rendering=2,
+        timesteps_to_trigger_rendering=5,
+        filter_triggered=False,
     ):
         current_steps = 0
         while not self.sim_done:
@@ -152,7 +153,7 @@ class Simulation:
                 current_available != previous_available
             )
 
-            if self.sim_done or change_in_available_robots:
+            if self.sim_done or change_in_available_robots or filter_triggered:
                 break
 
             # Force termination if timestep exceeds worst-case threshold
