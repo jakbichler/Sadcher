@@ -24,12 +24,14 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
         pretrained=False,
         use_idle=True,
         use_positional_encoding=False,
+        debug=False,
     ):
         MultiCategoricalMixin.__init__(self, unnormalized_log_prob=False, reduction="sum")  #
         Model.__init__(self, observation_space, action_space, device)
         self.device = device
         self.use_idle = use_idle
         self.use_positional_encoding = use_positional_encoding
+        self.debug = debug
 
         if use_positional_encoding:
             robot_input_dimensions = policy_config["robot_input_dimensions"] + 1
@@ -78,25 +80,25 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
             self.device
         )  # shape: (batch, n_tasks, n_tasks)
 
-        if self.use_positional_encoding:  # Append noramlized robot id
-            batch_size, n_robots, input_dim = robot_features.shape
-            robot_ids = (
-                torch.arange(n_robots).unsqueeze(0).expand(batch_size, n_robots).to(self.device)
-            )  # Shape: (B, N)
-            normalized_robot_ids = robot_ids / (n_robots - 1)  # Normalize to the range [0, 1]
-            robot_features = torch.cat(
-                [robot_features, normalized_robot_ids.unsqueeze(-1)], dim=-1
-            )  # Shape: (B, N, robot_input_dimensions + 1)
-        # For robots: last element is availability (1: available, 0: not)
-        robot_availability = robot_features[:, :, -1]  # shape: (batch, n_robots)
-        # For tasks: assume index -3 is the ready flag last three are (ready, assigned, incomplete)
-        task_incomplete = task_features[:, :, -1]  # shape: (batch, n_tasks)
-        task_ready = task_features[:, :, -3]  # shape: (batch, n_tasks)
-        task_ready_incomplete = torch.logical_and(task_ready, task_incomplete)
-
         batch_size = robot_features.shape[0]
         n_robots = robot_features.shape[1]
         n_tasks = task_features.shape[1]
+
+        # For robots: last element is availability (1: available, 0: not)
+        rx, ry, workload, c0, c1, c2, available = robot_features.unbind(dim=-1)
+        robot_caps = torch.stack((c0, c1, c2), dim=-1).bool()  # (batch, n_robots, 3)
+        robot_availability = available.bool()  # (batch, n_robots)
+
+        # For tasks
+        tx, ty, dur, r0, r1, r2, ready, assigned, incomplete = task_features.unbind(dim=-1)
+        reqs = torch.stack((r0, r1, r2), -1).bool()
+        # per-robot/task overlap
+
+        can_contribute_mask = (robot_caps.unsqueeze(2) & reqs.unsqueeze(1)).any(
+            dim=-1
+        )  # (batch, n_robots, n_tasks)
+
+        task_mask = ready.bool() & incomplete.bool()  # (batch, n_tasks)
 
         if self.use_idle:
             # Our action space is defined as n_tasks + 1 (normal + IDLE)
@@ -106,17 +108,15 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
 
         # Build a mask of shape (batch, n_robots, n_actions) that indicates valid actions.
         mask = torch.ones((batch_size, n_robots, n_actions), device=self.device)
-        availability_mask = robot_availability.unsqueeze(-1).to(self.device)  # (batch, n_robots, 1)
-        ready_incomplete_mask = task_ready_incomplete.unsqueeze(1).to(
-            self.device
-        )  # (batch, 1, n_tasks)
-        task_mask = availability_mask * ready_incomplete_mask  # (batch, n_robots, n_tasks)
+        robot_mask = robot_availability.unsqueeze(-1).to(self.device)  # (batch, n_robots, 1)
+        task_mask = task_mask.unsqueeze(1).to(self.device)  # (batch, 1, n_tasks)
+        robot_task_mask = robot_mask & task_mask & can_contribute_mask  # (batch, n_robots, n_tasks)
 
         if self.use_idle:
             # Insert the task_mask into the valid action indices (until -1 for IDLE, always ready).
-            mask[:, :, :-1] = task_mask
+            mask[:, :, :-1] = robot_task_mask
         else:
-            mask = task_mask
+            mask = robot_task_mask
 
         reward_matrix = self.scheduler_net(
             robot_features, task_features, task_adjacency
@@ -125,23 +125,15 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
         probas = torch.softmax(logits, dim=-1)  # shape: (batch, n_robots, n_tasks + 1)
         net_output = probas.view(batch_size, n_robots * n_actions)
 
-        ## Assuming probas is already calculated as the softmax probabilities
-        # top_k_values, top_k_indices = probas.topk(
-        # 5, dim=-1
-        # )  # Get top 5 values and indices along the last dimension
-
-        ## Print the top 5 probabilities for each robot rounded to 2 decimals
-        # for i in range(batch_size):  # Loop over each batch
-        # for j in range(n_robots):  # Loop over each robot in the batch
-        # top_5_probs = (
-        # top_k_values[i, j].detach().cpu().numpy()
-        # )  # Get top 5 probabilities for robot j
-        # top_5_tasks = (
-        # top_k_indices[i, j].detach().cpu().numpy()
-        # )  # Get corresponding task indices
-        # print(f"  Robot {j}:")
-        # for k in range(5):
-        # print(f"    Task {top_5_tasks[k] + 1}: {top_5_probs[k]:.2f}")
+        if self.debug:
+            top_k_values, top_k_indices = probas.topk(3, dim=-1)
+            for i in range(batch_size):  # Loop over each batch
+                for j in range(n_robots):  # Loop over each robot in the batch
+                    top_3_probs = top_k_values[i, j].detach().cpu().numpy()
+                    top_3_tasks = top_k_indices[i, j].detach().cpu().numpy()
+                    print(f"  Robot {j}:")
+                    for k in range(3):
+                        print(f"    Task {top_3_tasks[k] + 1}: {top_3_probs[k]:.2f}")
 
         return net_output, {}
 
