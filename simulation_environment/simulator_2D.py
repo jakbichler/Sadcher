@@ -260,23 +260,6 @@ class Simulation:
             if highest_non_idle_reward > 0.1:
                 task_to_premove_to = self.tasks[highest_non_idle_reward_id]
 
-        # elif self.scheduler_name == "sadcher_rl":
-        # unassigned_tasks = [
-        # task for task in self.tasks[:-1] if task.incomplete and not task.assigned
-        # ]
-        # if not unassigned_tasks:
-        # return None
-        # tasks_robot_can_contribute_to = []
-        # for task in unassigned_tasks:
-        # if np.any(np.logical_and(robot.capabilities, task.requirements)):
-        # tasks_robot_can_contribute_to.append(task)
-
-        # distances = [
-        # np.linalg.norm(robot.location - task.location)
-        # for task in tasks_robot_can_contribute_to
-        # ]
-        # task_to_premove_to = tasks_robot_can_contribute_to[np.argmin(distances)]
-
         return task_to_premove_to
 
     def assign_tasks_to_robots(self, instantaneous_schedule):

@@ -1,10 +1,10 @@
 import torch
 
 from helper_functions.schedules import Instantaneous_Schedule
-from schedulers.bipartite_matching import (
+from schedulers.bipartite_matching import solve_bipartite_matching
+from schedulers.filtering_assignments import (
     filter_overassignments,
     filter_redundant_assignments,
-    solve_bipartite_matching,
 )
 
 
