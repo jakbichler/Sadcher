@@ -42,7 +42,7 @@ class SchedulingRLEnvironment(gym.Env):
         super().__init__()
 
         self.n_robots = 4
-        self.n_tasks = 12
+        self.n_tasks = 15
         self.n_skills = 3
         self.n_precedence = 3
         self.num_robots_available_in_previous_timestep = -1
@@ -180,7 +180,7 @@ class SchedulingRLEnvironment(gym.Env):
         if self.sim.timestep >= self.worst_case_makespan:
             self.sim.finish_simulation()
             self.sim.makespan = self.worst_case_makespan
-            print(f"Scheduler did not find a feasible solution at timestep {self.sim.timestep}")
+            # print(f"Scheduler did not find a feasible solution at timestep {self.sim.timestep}")
             truncated = True
 
         reward = self.calculate_reward()
@@ -225,8 +225,16 @@ class SchedulingRLEnvironment(gym.Env):
                 robot: task for (robot, task), val in action_dict_filtered.items() if val == 1
             }
 
-            if action_dict_filtered != action_dict:
-                filter_triggered = True
+            removed = [
+                (rid, tid)
+                for (rid, tid), val in action_dict.items()
+                if val == 1 and action_dict_filtered.get((rid, tid), 0) == 0
+            ]
+
+            filter_triggered = any(
+                self.sim.robot_can_still_contribute_to_other_tasks(self.sim.robots[rid])
+                for rid, _ in removed
+            )
 
         return robot_assignments, filter_triggered
 
@@ -244,7 +252,7 @@ class SchedulingRLEnvironment(gym.Env):
         update_plot(self.sim, self.ax, self.fig, self.colors, self.n_skills, video_mode=True)
         self.fig.canvas.draw()
         self.fig.canvas.flush_events()
-        time.sleep(0.01)
+        time.sleep(0.1)
 
     def get_config(self):
         return {
