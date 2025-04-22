@@ -249,7 +249,7 @@ def select_earliest_robot(
     return earliest_robot, arrival_time
 
 
-def calculate_task_end_times(Y_max, T_execution, T_travel, n_tasks, print_flag=True):
+def calculate_task_end_times(Y_max, T_execution, T_travel, n_tasks, print_flag=False):
     task_end_times = [Y_max[task] + T_execution[task] for task in range(1, n_tasks + 1)]
     last_task_finished = np.argmax(task_end_times)
     finish_task = n_tasks + 1

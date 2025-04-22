@@ -134,6 +134,7 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
                     print(f"  Robot {j}:")
                     for k in range(3):
                         print(f"    Task {top_3_tasks[k] + 1}: {top_3_probs[k]:.2f}")
+            print("############################################################")
 
         return net_output, {}
 

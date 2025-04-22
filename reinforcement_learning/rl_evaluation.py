@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from models.policy_value import SchedulerPolicy
+from models.policy_value_discrete import SchedulerPolicy
 from visualizations.benchmark_visualizations import (
     compare_makespans_1v1,
     plot_violin,
@@ -47,7 +47,7 @@ def main():
     args = parser.parse_args()
     use_idle = not args.not_use_idle
 
-    seed = 42
+    seed = 105
     np.random.seed(seed)
     env_id = "SchedulingRLEnvironment-v0"
     gym.register(
@@ -62,11 +62,11 @@ def main():
     policy_config = {
         "robot_input_dimensions": 7,
         "task_input_dimension": 9,
-        "embed_dim": 32,
-        "ff_dim": 64,
-        "n_transformer_heads": 1,
-        "n_transformer_layers": 1,
-        "n_gatn_heads": 1,
+        "embed_dim": 256,
+        "ff_dim": 512,
+        "n_transformer_heads": 4,
+        "n_transformer_layers": 2,
+        "n_gatn_heads": 8,
         "n_gatn_layers": 1,
     }
 
@@ -80,6 +80,7 @@ def main():
     greedy_makespans = []
     sadcher_rl_makespans = []
     trial_count = 1 if args.policy_mode == "argmax" else args.n_trials_per_run
+    max_probs_per_run = []
 
     for run in tqdm(range(args.n_runs)):
         state, info = env.reset()
@@ -108,6 +109,7 @@ def main():
                     )
 
                 probs = action_probas.squeeze(0)
+                max_probs_per_run.append(probs.max().item())
 
                 if args.policy_mode == "argmax":
                     action = torch.argmax(probs, dim=1).cpu()
@@ -123,6 +125,9 @@ def main():
             best_rl_makespan = min(best_rl_makespan, current_rl_makespan)
 
         sadcher_rl_makespans.append(best_rl_makespan)
+
+    avg_max_prob = np.mean(max_probs_per_run)
+    print(f"\nAverage max action probability across all steps: {avg_max_prob:.4f}")
 
     fig, axs = plt.subplots(1, 2, figsize=(12, 6))
     data = {"Greedy": greedy_makespans, "Sadcher-RL": sadcher_rl_makespans}

@@ -11,7 +11,7 @@ from skrl.envs.torch import wrap_env
 from skrl.memories.torch import RandomMemory
 from skrl.trainers.torch.parallel import PARALLEL_TRAINER_DEFAULT_CONFIG, ParallelTrainer
 
-from models.policy_value import SchedulerPolicy, SchedulerValue
+from models.policy_value_discrete import SchedulerPolicy, SchedulerValue
 
 
 def write_config(
@@ -117,6 +117,8 @@ if __name__ == "__main__":
     envs = wrap_env(envs)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    debug = args.N_ENVS == 1
+
     policy_config = {
         "robot_input_dimensions": 7,
         "task_input_dimension": 9,
@@ -141,7 +143,7 @@ if __name__ == "__main__":
 
     trainer_cfg = PARALLEL_TRAINER_DEFAULT_CONFIG.copy()
     trainer_cfg["timesteps"] = 1_000_000
-    trainer_cfg["headless"] = True
+    trainer_cfg["headless"] = not debug
     trainer_cfg["idle_task_id"] = first_env_config["n_tasks"]
 
     ppo_config = PPO_DEFAULT_CONFIG.copy()
@@ -154,7 +156,8 @@ if __name__ == "__main__":
     ppo_config["experiment"]["write_interval"] = args.N_ROLLOUTS
     ppo_config["experiment"]["checkpoint_interval"] = 10_000
     ppo_config["kl_threshold"] = 0.02
-    ppo_config["clip_ratio"] = 0.2
+    ppo_config["clip_ratio"] = 0.1
+    ppo_config["entropy_loss_scale"] = 0.02
 
     memory = RandomMemory(memory_size=args.N_ROLLOUTS, num_envs=args.N_ENVS, device=device)
 
@@ -166,6 +169,7 @@ if __name__ == "__main__":
         pretrained=args.IL_pretrained_policy,
         use_idle=use_idle,
         use_positional_encoding=False,
+        debug=debug,
     )
 
     value_model = SchedulerValue(envs.observation_space, envs.action_space, value_config)
