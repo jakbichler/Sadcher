@@ -45,11 +45,11 @@ class SadcherScheduler:
         else:
             raise ValueError("Invalid model name")
 
-        self.trained_model.load_state_dict(torch.load(checkpoint_path, weights_only=True))
         self.trained_model.eval()
         self.debug = debugging
         self.duration_normalization = duration_normalization
         self.location_normalization = location_normalization
+        self.load_model_weights(checkpoint_path, debugging)
 
     def calculate_robot_assignment(self, sim):
         n_robots = len(sim.robots)
@@ -156,3 +156,45 @@ class SadcherScheduler:
         }
 
         return predicted_reward, Instantaneous_Schedule(robot_assignments)
+
+    def load_model_weights(self, checkpoint_path, debugging):
+        if checkpoint_path is None:
+            raise ValueError("Checkpoint path must be provided")
+        if not isinstance(checkpoint_path, str):
+            raise ValueError("Checkpoint path must be a string")
+
+        checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=True)
+        checkpoint_state_dict = checkpoint.get("state_dict", checkpoint).get("policy", checkpoint)
+
+        for prefix in ["scheduler_net."]:
+            if all(k.startswith(prefix) for k in checkpoint_state_dict):
+                checkpoint_state_dict = {
+                    k[len(prefix) :]: v for k, v in checkpoint_state_dict.items()
+                }
+                break
+
+        current_state_dict = self.trained_model.state_dict()
+        filtered_checkpoint_state_dict = {
+            k: v
+            for k, v in checkpoint_state_dict.items()
+            if k in current_state_dict and v.size() == current_state_dict[k].size()
+        }
+
+        self.trained_model.load_state_dict(filtered_checkpoint_state_dict, strict=False)
+
+        skipped_layers = [
+            k
+            for k, v in checkpoint_state_dict.items()
+            if k not in current_state_dict or v.size() != current_state_dict[k].size()
+        ]
+
+        if debugging:
+            if skipped_layers:
+                print("Skipped layers due to shape mismatch or missing in the new model:")
+                for layer in skipped_layers:
+                    print(f"  - {layer}")
+            else:
+                print("No layers were skipped.")
+
+        print(f"Loaded {len(filtered_checkpoint_state_dict)} matching layers from checkpoint.")
+        print(f"Skipped {len(skipped_layers)} layers.")
