@@ -71,8 +71,9 @@ class ContinuousSchedulerPolicy(MultivariateGaussianMixin, Model):
             self.freeze_encoder_layers()
 
         if predict_stddev:
-            self.log_stddev = nn.Parameter(torch.ones(1) * log_stddev_init, requires_grad=True).to(
-                self.device
+            action_dim = np.prod(action_space.shape)
+            self.log_stddev = nn.Parameter(
+                torch.ones(action_dim, device=self.device) * log_stddev_init, requires_grad=True
             )
 
     def compute(self, states, taken_actions=None, timesteps=None, eval=False, **kwargs):
@@ -101,9 +102,8 @@ class ContinuousSchedulerPolicy(MultivariateGaussianMixin, Model):
         )  # shape: (batch, n_robot , n_actions)
 
         mu = mu.view(batch_size, n_robots * n_actions)
-        log_stddev = self.log_stddev.expand(n_robots * n_actions)
 
-        return mu, log_stddev, {}
+        return mu, self.log_stddev, {}
 
     def load_pretrained_weights(self, checkpoint_path):
         checkpoint = torch.load(checkpoint_path, map_location=self.device)
@@ -293,3 +293,13 @@ class SchedulerValue(DeterministicMixin, Model):
         values = values.mean(dim=(-2, -1), keepdim=True).squeeze(-1)  # shape: (B,1)
 
         return values, {}
+
+
+class ZeroCritic(DeterministicMixin, Model):
+    def __init__(self, obs_space, act_space, device):
+        Model.__init__(self, obs_space, act_space, device)
+        DeterministicMixin.__init__(self, clip_actions=False)
+
+    def compute(self, states, role):
+        batch = states["states"].shape[0]
+        return torch.zeros(batch, 1, device=self.device), {}

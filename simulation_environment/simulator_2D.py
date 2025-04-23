@@ -254,7 +254,7 @@ class Simulation:
     def find_task_to_premove_to(self, robot):
         task_to_premove_to = None
 
-        if self.scheduler_name == "sadcher":
+        if self.scheduler_name in ["sadcher", "sadcher_rl_continuous"]:
             highest_non_idle_reward = self.highest_non_idle_rewards[robot.robot_id]
             highest_non_idle_reward_id = self.highest_non_idle_reward_ids[robot.robot_id]
             if highest_non_idle_reward > 0.1:
