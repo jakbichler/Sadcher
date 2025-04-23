@@ -3,7 +3,7 @@ import torch
 
 from helper_functions.schedules import Instantaneous_Schedule
 from models.scheduler_network import SchedulerNetwork
-from schedulers.bipartite_matching import solve_bipartite_matching
+from schedulers.bipartite_matching import CachedBipartiteMatcher
 from schedulers.filtering_assignments import filter_overassignments, filter_redundant_assignments
 
 
@@ -50,6 +50,7 @@ class SadcherScheduler:
         self.duration_normalization = duration_normalization
         self.location_normalization = location_normalization
         self.load_model_weights(checkpoint_path, debugging)
+        self.bipartite_matcher = None
 
     def calculate_robot_assignment(self, sim):
         n_robots = len(sim.robots)
@@ -120,7 +121,12 @@ class SadcherScheduler:
                     f"Robot {robot_idx} feature vector: {robot_features[0][robot_idx].cpu().numpy()}"
                 )
 
-        bipartite_matching_solution = solve_bipartite_matching(predicted_reward, sim)
+        if self.bipartite_matcher is None:
+            self.bipartite_matcher = CachedBipartiteMatcher(sim)
+        bipartite_matching_solution = self.bipartite_matcher.solve(
+            predicted_reward, n_threads=6, gap=0.0
+        )
+
         if self.debug:
             print(
                 *[

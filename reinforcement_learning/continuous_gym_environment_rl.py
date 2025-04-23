@@ -15,7 +15,7 @@ from data_generation.problem_generator import (
     generate_random_data_with_precedence,
 )
 from helper_functions.schedules import Instantaneous_Schedule
-from schedulers.bipartite_matching import solve_bipartite_matching
+from schedulers.bipartite_matching import CachedBipartiteMatcher
 from schedulers.filtering_assignments import (
     filter_overassignments,
     filter_redundant_assignments,
@@ -101,6 +101,7 @@ class ContinuousSchedulingRLEnvironment(gym.Env):
         self.sim = Simulation(
             self.problem_instance, scheduler_name="sadcher_rl_continuous", use_idle=self.use_idle
         )
+        self.bipartite_matcher = CachedBipartiteMatcher(self.sim)
 
         self.greedy_makespan = greedy_scheduling(self.problem_instance, print_flag=False).makespan
         self.worst_case_makespan = np.sum(self.problem_instance["T_e"]) + np.sum(
@@ -177,7 +178,6 @@ class ContinuousSchedulingRLEnvironment(gym.Env):
         if self.sim.timestep >= self.worst_case_makespan:
             self.sim.finish_simulation()
             self.sim.makespan = self.worst_case_makespan
-            # print(f"Scheduler did not find a feasible solution at timestep {self.sim.timestep}")
             truncated = True
 
         reward = self.calculate_reward()
@@ -186,7 +186,6 @@ class ContinuousSchedulingRLEnvironment(gym.Env):
         return self._get_observation(), reward, terminated, truncated, {}
 
     def calculate_continuous_robot_assignment(self, action):
-        # ic(action.round(2))
         action = torch.tensor(action, dtype=torch.float32).view(self.n_robots, self.n_actions)
 
         robot_assignments = {}
@@ -204,6 +203,7 @@ class ContinuousSchedulingRLEnvironment(gym.Env):
 
         if only_end_task_left or all_tasks_assigned:
             robot_assignments = {robot: self.sim.tasks[-1].task_id for robot in available_robot_ids}
+            print("All tasks assigned or only end task left")
         else:
             # If a robot cannot contribute anymore -> send to end location
             for robot in available_robots:
@@ -219,9 +219,10 @@ class ContinuousSchedulingRLEnvironment(gym.Env):
                 (reward_start_end, predicted_reward, reward_start_end), dim=1
             )
 
-            bipartite_matching_solution = solve_bipartite_matching(
-                predicted_reward, self.sim, n_threads=1
+            bipartite_matching_solution = self.bipartite_matcher.solve(
+                predicted_reward, n_threads=1, gap=0.0
             )
+
             filtered_solution = filter_redundant_assignments(bipartite_matching_solution, self.sim)
             filtered_solution = filter_overassignments(filtered_solution, self.sim)
 
@@ -230,55 +231,6 @@ class ContinuousSchedulingRLEnvironment(gym.Env):
             }
 
         return robot_assignments, False
-
-        # robot_assignments = {}
-        # available_robots = [robot for robot in self.sim.robots if robot.available]
-        # available_robot_ids = [robot.robot_id for robot in available_robots]
-        # incomplete_tasks = [
-        # task for task in self.sim.tasks if task.incomplete and task.status == "PENDING"
-        # ]
-        # filter_triggered = False
-        # only_end_task_left = len(incomplete_tasks) == 1
-        # all_tasks_assigned = all(
-        # self.sim.all_skills_assigned(task)
-        # for task in incomplete_tasks
-        # if task.task_id != self.sim.last_task_id
-        # )
-
-        # if only_end_task_left or all_tasks_assigned:
-        # robot_assignments = {robot: self.sim.tasks[-1].task_id for robot in available_robot_ids}
-        # else:
-        ## If a robot cannot contribute anymore -> send to end location
-        # for robot in available_robots:
-        # if not self.sim.robot_can_still_contribute_to_other_tasks(robot):
-        # robot_assignments[robot.robot_id] = self.sim.tasks[-1].task_id
-
-        ## Only assign available robots
-        # action_dict = {
-        # (robot_id, task_id + 1): 1  # +1 since task 0 is start task (not predicted)
-        # for (robot_id, task_id) in enumerate(action)
-        # if robot_id in available_robot_ids and robot_id not in robot_assignments
-        # }
-
-        # action_dict_filtered = filter_redundant_assignments(action_dict, self.sim)
-        # action_dict_filtered = filter_overassignments(action_dict_filtered, self.sim)
-        # action_dict_filtered = filter_unqualified_assignments(action_dict_filtered, self.sim)
-        # robot_assignments = {
-        # robot: task for (robot, task), val in action_dict_filtered.items() if val == 1
-        # }
-
-        # removed = [
-        # (rid, tid)
-        # for (rid, tid), val in action_dict.items()
-        # if val == 1 and action_dict_filtered.get((rid, tid), 0) == 0
-        # ]
-
-        # filter_triggered = any(
-        # self.sim.robot_can_still_contribute_to_other_tasks(self.sim.robots[rid])
-        # for rid, _ in removed
-        # )
-
-        #        return robot_assignments, filter_triggered
 
     def render(self, mode=None):
         self.render_mode = mode
