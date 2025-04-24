@@ -173,11 +173,10 @@ class SadcherScheduler:
         checkpoint_state_dict = checkpoint.get("state_dict", checkpoint).get("policy", checkpoint)
 
         for prefix in ["scheduler_net."]:
-            if all(k.startswith(prefix) for k in checkpoint_state_dict):
-                checkpoint_state_dict = {
-                    k[len(prefix) :]: v for k, v in checkpoint_state_dict.items()
-                }
-                break
+            checkpoint_state_dict = {
+                (k[len(prefix) :] if k.startswith(prefix) else k): v
+                for k, v in checkpoint_state_dict.items()
+            }
 
         current_state_dict = self.trained_model.state_dict()
         filtered_checkpoint_state_dict = {
