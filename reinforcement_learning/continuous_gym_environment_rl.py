@@ -5,7 +5,6 @@ import gymnasium as gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from icecream import ic
 
 sys.path.append("..")
 
@@ -19,7 +18,6 @@ from schedulers.bipartite_matching import CachedBipartiteMatcher
 from schedulers.filtering_assignments import (
     filter_overassignments,
     filter_redundant_assignments,
-    filter_unqualified_assignments,
 )
 from simulation_environment.display_simulation import update_plot
 from simulation_environment.simulator_2D import Simulation
@@ -68,7 +66,7 @@ class ContinuousSchedulingRLEnvironment(gym.Env):
                     low=0.0, high=1.0, shape=(self.n_tasks, dim_tasks), dtype=np.float32
                 ),
                 "task_adjacency": gym.spaces.Box(
-                    low=0.0, high=1.0, shape=(self.n_tasks, self.n_tasks), dtype=np.float32
+                    low=0.0, high=1.0, shape=(self.n_tasks, self.n_tasks), dtype=int
                 ),
             }
         )
@@ -203,7 +201,6 @@ class ContinuousSchedulingRLEnvironment(gym.Env):
 
         if only_end_task_left or all_tasks_assigned:
             robot_assignments = {robot: self.sim.tasks[-1].task_id for robot in available_robot_ids}
-            print("All tasks assigned or only end task left")
         else:
             # If a robot cannot contribute anymore -> send to end location
             for robot in available_robots:

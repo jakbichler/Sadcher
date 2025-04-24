@@ -30,6 +30,7 @@ class ContinuousSchedulerPolicy(MultivariateGaussianMixin, Model):
         min_log_std=-20,
         max_log_std=2,
         log_stddev_init=-0.5,
+        frozen_encoders=True,
     ):
         MultivariateGaussianMixin.__init__(
             self,
@@ -68,7 +69,8 @@ class ContinuousSchedulerPolicy(MultivariateGaussianMixin, Model):
         if pretrained:
             checkpoint_path = "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_2_8t3r3s/best_checkpoint.pt"
             self.load_pretrained_weights(checkpoint_path)
-            self.freeze_encoder_layers()
+            if frozen_encoders:
+                self.freeze_encoder_layers()
 
         if predict_stddev:
             action_dim = np.prod(action_space.shape)
@@ -237,9 +239,9 @@ class SchedulerValue(DeterministicMixin, Model):
     def compute(self, states, role):
         states = unflatten_tensorized_space(self.observation_space, states["states"])
         # Flatten the observation.
-        robot_features = states["robot_features"].to(self.device)
-        task_features = states["task_features"].to(self.device)
-        task_adjacency = states["task_adjacency"].to(self.device)
+        robot_features = torch.tensor(states["robot_features"]).to(self.device)
+        task_features = torch.tensor(states["task_features"].to(self.device))
+        task_adjacency = torch.tensor(states["task_adjacency"].to(self.device))
 
         B, N, _ = robot_features.shape
         _, M, _ = task_features.shape

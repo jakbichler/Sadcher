@@ -81,7 +81,7 @@ class Simulation:
         return tasks
 
     def create_task_adjacency_matrix(self):
-        task_adjacency = torch.zeros((self.n_real_tasks, self.n_real_tasks))
+        task_adjacency = np.zeros((self.n_real_tasks, self.n_real_tasks), dtype=int)
 
         if self.precedence_constraints:
             for precedence in self.precedence_constraints:
@@ -326,9 +326,6 @@ class Simulation:
             ],
             dtype=np.float32,
         )
-
-        task_features = torch.tensor(task_features, dtype=torch.float32)
-        robot_features = torch.tensor(robot_features, dtype=torch.float32)
 
         return task_features, robot_features
 
