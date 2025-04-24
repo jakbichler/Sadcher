@@ -49,7 +49,7 @@ REPORT_EVERY = 500
 PLATEAU_DELTA = 0.005  # min absolute improvement considered “progress”
 PLATEAU_PATIENCE = 50  # number of report intervals with no progress
 SMOOTH_ALPHA = 0.02  # 0<α≤1
-INITIAL_SMOOTHING_EPISODES = 10_000
+EMA_INITIAL = 0.04  # initial value for EMA (for 20 5 we expect roughly 4% advantage over greedy in the beginning)
 ###############################################################################
 #  Storage helpers                                                             #
 ###############################################################################
@@ -82,7 +82,7 @@ def get_study(storage_url: str, study_name: str, resume: bool) -> optuna.Study:
 
 def suggest_params(trial: optuna.Trial) -> Dict:
     cfg: Dict = {}
-    cfg["n_envs"] = trial.suggest_categorical("n_envs", [16, 32, 64, 96, 128])
+    cfg["n_envs"] = trial.suggest_categorical("n_envs", [48, 64, 96, 128, 256])
     cfg["n_rollouts"] = trial.suggest_categorical("n_rollouts", [32, 64, 96, 128, 256])
     cfg["learning_epochs"] = trial.suggest_categorical("learning_epochs", [2, 4, 6])
     cfg["learning_rate"] = trial.suggest_categorical("learning_rate", [5e-5, 1e-4, 5e-4])
@@ -158,7 +158,7 @@ def make_vec_env(num_envs: int):
 
 def train_and_report(agent: PPO, env, cfg: Dict, trial: optuna.Trial):
     states, _ = env.reset()
-    ep_returns = np.zeros(env.num_envs, dtype=np.float32)
+    ep_returns = torch.zeros(env.num_envs, device=agent.device)
     completed_returns: deque[float] = deque(maxlen=500)  # buffer for mean calc
 
     episodes_done = 0
@@ -166,10 +166,12 @@ def train_and_report(agent: PPO, env, cfg: Dict, trial: optuna.Trial):
     ema_mean = None
     step = 0
     plateau_cnt = 0
+    next_report_at = REPORT_EVERY
 
     while episodes_done < MAX_EPISODES:
         agent.pre_interaction(step, MAX_EPISODES)
-        with torch.no_grad():
+
+        with torch.inference_mode():
             actions, _, _ = agent.act(states, timestep=step, timesteps=MAX_EPISODES)
             next_states, rewards, terminated, truncated, infos = env.step(actions)
             agent.record_transition(
@@ -183,47 +185,50 @@ def train_and_report(agent: PPO, env, cfg: Dict, trial: optuna.Trial):
                 step,
                 MAX_EPISODES,
             )
-        # accumulate returns
-        r_np = rewards.cpu().numpy()
-        if r_np.ndim > 1:  # e.g. shape (n_envs, n_agents)
-            r_np = r_np.mean(axis=-1)  # collapse to scalar per env
-        ep_returns += r_np
 
-        done_mask = (terminated | truncated).cpu().numpy()
-        if done_mask.ndim > 1:  # collapse if multi‑agent mask
-            done_mask = done_mask.any(axis=-1)
-        if done_mask.any():
-            finished = ep_returns[done_mask]
-            completed_returns.extend(finished.tolist())
-            ep_returns[done_mask] = 0.0
-            episodes_done += int(done_mask.sum())
+            # accumulate returns
+            r = rewards.mean(-1) if rewards.ndim > 1 else rewards
+            ep_returns += r
+
+            done_mask = terminated | truncated
+            if done_mask.ndim > 1:  # collapse if multi‑agent mask
+                done_mask = done_mask.any(-1)
+            if done_mask.any():
+                finished = ep_returns.masked_select(done_mask)
+                completed_returns.extend(finished.tolist())
+                ep_returns.masked_fill_(done_mask, 0.0)
+                episodes_done += int(done_mask.sum())
+
         agent.post_interaction(step, MAX_EPISODES, episode_counter=episodes_done)
         states = next_states
         step += 1
 
-        # reporting
-        if episodes_done % REPORT_EVERY == 0 or episodes_done >= MAX_EPISODES:
+        # -------- Optuna reporting -------------------------------------------
+        if episodes_done >= next_report_at or episodes_done >= MAX_EPISODES:
             if completed_returns:
-                current_mean = float(np.mean(completed_returns))
-                if ema_mean is None:
-                    ema_mean = current_mean
+                returns_t = torch.tensor(list(completed_returns), device=agent.device)
+                current_mean = returns_t.mean()
+                ema_mean = (
+                    EMA_INITIAL
+                    if ema_mean is None
+                    else SMOOTH_ALPHA * current_mean + (1 - SMOOTH_ALPHA) * ema_mean
+                )
+                metric = float(ema_mean)
+
+                if metric > best_mean + PLATEAU_DELTA:
+                    best_mean = metric
+                    plateau_cnt = 0
                 else:
-                    ema_mean = SMOOTH_ALPHA * current_mean + (1 - SMOOTH_ALPHA) * ema_mean
-                metric = ema_mean
+                    plateau_cnt += 1
+                if plateau_cnt >= PLATEAU_PATIENCE:
+                    raise TrialPruned("Stalled (plateau or collapse)")
 
-                if episodes_done >= INITIAL_SMOOTHING_EPISODES:
-                    if metric > best_mean + PLATEAU_DELTA:
-                        best_mean = metric
-                        plateau_cnt = 0
-                    else:
-                        plateau_cnt += 1
-                    if plateau_cnt >= PLATEAU_PATIENCE:
-                        raise TrialPruned("Stalled (plateau or collapse)")
+                trial.report(metric, episodes_done)
+                if trial.should_prune():
+                    raise TrialPruned("pruning")
 
-                    # -------- Optuna reporting -----------------------------------------
-                    trial.report(metric, episodes_done)
-                    if trial.should_prune():
-                        raise TrialPruned("pruning")
+            next_report_at += REPORT_EVERY
+
     return best_mean
 
 
