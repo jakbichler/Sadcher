@@ -44,11 +44,11 @@ from models.policy_value_continuous import ContinuousSchedulerPolicy, ZeroCritic
 
 SAFE_BATCH_SAMPLES_FROZEN = 1024
 SAFE_BATCH_SAMPLES_UNFROZEN = 512
-MAX_EPISODES = 100_000  # hard cap per trial
+MAX_EPISODES = 150_000  # hard cap per trial
 REPORT_EVERY = 500
 PLATEAU_DELTA = 0.005  # min absolute improvement considered “progress”
-PLATEAU_PATIENCE = 50  # number of report intervals with no progress
-SMOOTH_ALPHA = 0.02  # 0<α≤1
+PLATEAU_PATIENCE = 75  # number of report intervals with no progress
+SMOOTH_ALPHA = 0.01  # 0<α≤1
 EMA_INITIAL = 0.04  # initial value for EMA (for 20 5 we expect roughly 4% advantage over greedy in the beginning)
 ###############################################################################
 #  Storage helpers                                                             #
@@ -159,10 +159,10 @@ def make_vec_env(num_envs: int):
 def train_and_report(agent: PPO, env, cfg: Dict, trial: optuna.Trial):
     states, _ = env.reset()
     ep_returns = torch.zeros(env.num_envs, device=agent.device)
-    completed_returns: deque[float] = deque(maxlen=500)  # buffer for mean calc
+    completed_returns: deque[float] = deque(maxlen=REPORT_EVERY)  # buffer for mean calc
 
     episodes_done = 0
-    best_mean = -np.inf
+    best_mean = -2  # Given our reward formulation, - 2 is the worst possible mean
     ema_mean = None
     step = 0
     plateau_cnt = 0
@@ -221,11 +221,13 @@ def train_and_report(agent: PPO, env, cfg: Dict, trial: optuna.Trial):
                 else:
                     plateau_cnt += 1
                 if plateau_cnt >= PLATEAU_PATIENCE:
-                    raise TrialPruned("Stalled (plateau or collapse)")
+                    trial.set_user_attr("stop reason", "plateau/collapse")
+                    break
 
                 trial.report(metric, episodes_done)
                 if trial.should_prune():
-                    raise TrialPruned("pruning")
+                    trial.set_user_attr("stop reason", "median_pruned")
+                    break
 
             next_report_at += REPORT_EVERY
 
