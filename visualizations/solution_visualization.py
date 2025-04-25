@@ -13,6 +13,7 @@ def plot_gantt_chart(title, schedule, travel_times=None, ax=None, fontsize=6):
     yticks = []
     yticklabels = []
     legend_elements = []
+    makespan = schedule.makespan
 
     for idx, robot in enumerate(reversed(range(schedule.n_robots))):
         yticks.append(idx)
@@ -85,8 +86,9 @@ def plot_gantt_chart(title, schedule, travel_times=None, ax=None, fontsize=6):
     ax.set_yticks(yticks)
     ax.set_yticklabels(yticklabels)
     ax.set_xlabel("Time")
+    ax.set_xticks(np.arange(0, schedule.makespan, 50))
     ax.set_title(title)
-    ax.grid(True)
+    ax.grid(axis="x", linestyle="-", alpha=0.7)
     ax.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc="upper left")
     ax.set_xlim(0, schedule.makespan + 10)
     ax.axvline(x=schedule.makespan, color="red", linestyle="--", label="Makespan")
