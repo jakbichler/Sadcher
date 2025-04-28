@@ -54,6 +54,10 @@ class ContinuousSchedulerPolicy(MultivariateGaussianMixin, Model):
         n_gatn_heads = policy_config["n_gatn_heads"]
         n_gatn_layers = policy_config["n_gatn_layers"]
 
+        self.n_robots = observation_space["robot_features"].shape[0]
+        idle_action = 1 if use_idle else 0
+        self.n_actions = observation_space["task_features"].shape[0] + idle_action
+
         self.scheduler_net = SchedulerNetwork(
             robot_input_dimensions=robot_input_dimensions,
             task_input_dimension=task_input_dimension,
@@ -108,7 +112,7 @@ class ContinuousSchedulerPolicy(MultivariateGaussianMixin, Model):
         return mu, self.log_stddev, {}
 
     def load_pretrained_weights(self, checkpoint_path):
-        checkpoint = torch.load(checkpoint_path, map_location=self.device)
+        checkpoint = torch.load(checkpoint_path, map_location=self.device, weights_only=True)
         checkpoint_state_dict = checkpoint.get(
             "state_dict", checkpoint
         )  # In case the checkpoint is wrapped
@@ -181,9 +185,32 @@ class ContinuousSchedulerPolicy(MultivariateGaussianMixin, Model):
 
         print("All encoder layers in the scheduler network have been frozen.")
 
-    # ====================================
-    # Custom Value Network
-    # ====================================
+    def log_prob_matrix(
+        self, dist: torch.distributions.MultivariateNormal, actions: torch.Tensor
+    ) -> torch.Tensor:
+        """
+        Returns the elementwise log‐prob per robot×action before summation.
+
+        Args:
+          dist:    the MultivariateNormal from self.distribution()
+          actions: Tensor of shape [B, D] where D = n_robots * n_actions
+
+        Returns:
+          Tensor of shape [B, n_robots, n_actions]
+        """
+        B, D = actions.shape  # D == self.n_robots * self.n_actions
+
+        mean = dist.loc  # [B, D]
+
+        var = dist.covariance_matrix.diagonal(dim1=-2, dim2=-1)
+        if var.dim() == 1:
+            var = var.unsqueeze(0).expand(B, D)
+        std = var.sqrt()  # [B, D]
+
+        normal = torch.distributions.Normal(mean, std)
+        lp = normal.log_prob(actions)  # [B, D]
+
+        return lp.view(B, self.n_robots, self.n_actions)
 
 
 class SchedulerValue(DeterministicMixin, Model):
