@@ -103,6 +103,13 @@ if __name__ == "__main__":
         help="Use zero critic instead of a learned one",
     )
 
+    argument_parser.add_argument(
+        "--frozen_encoders",
+        action="store_true",
+        default=False,
+        help="Freeze the encoders of the policy and value models",
+    )
+
     args = argument_parser.parse_args()
     use_idle = not args.not_use_idle
 
@@ -176,22 +183,22 @@ if __name__ == "__main__":
 
     ppo_config = PPO_DEFAULT_CONFIG.copy()
     ppo_config["rollouts"] = args.N_ROLLOUTS
-    ppo_config["learning_epochs"] = 6
-    ppo_config["mini_batches"] = 16
+    ppo_config["learning_epochs"] = 4
+    ppo_config["mini_batches"] = 24
     ppo_config["discount_factor"] = 0.99
-    ppo_config["learning_rate"] = 2e-4
+    ppo_config["learning_rate"] = 5e-5
     ppo_config["mixed_precision"] = False
     ppo_config["experiment"]["write_interval"] = args.N_ROLLOUTS
     ppo_config["experiment"]["checkpoint_interval"] = 2_000
-    ppo_config["kl_threshold"] = 0.03
-    ppo_config["clip_ratio"] = 0.1
-    ppo_config["entropy_loss_scale"] = 0.001
+    ppo_config["kl_threshold"] = 0.01
+    ppo_config["clip_ratio"] = 0.2
+    ppo_config["entropy_loss_scale"] = 0.0
     if args.zero_critic:
         ppo_config["value_loss_scale"] = 0.0
     else:
         ppo_config["value_loss_scale"] = 1.0
 
-    log_stddev_init = 0
+    log_stddev_init = -0.5
 
     memory = RandomMemory(memory_size=args.N_ROLLOUTS, num_envs=args.N_ENVS, device=device)
 
@@ -208,6 +215,7 @@ if __name__ == "__main__":
             min_log_std=-20,
             max_log_std=2,
             log_stddev_init=log_stddev_init,
+            frozen_encoders=args.frozen_encoders,
         )
 
     else:
@@ -221,8 +229,6 @@ if __name__ == "__main__":
             use_positional_encoding=False,
             debug=debug,
         )
-
-    print(type(policy_model))
 
     if args.zero_critic:
         value_model = ZeroCritic(

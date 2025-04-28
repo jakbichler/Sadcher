@@ -25,6 +25,7 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
         use_idle=True,
         use_positional_encoding=False,
         debug=False,
+        frozen_encoders=True,
     ):
         MultiCategoricalMixin.__init__(self, unnormalized_log_prob=False, reduction="sum")  #
         Model.__init__(self, observation_space, action_space, device)
@@ -62,7 +63,8 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
             checkpoint_path = "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_2_8t3r3s/best_checkpoint.pt"
             # self.scheduler_net.load_state_dict(torch.load(checkpoint_path, weights_only=True))
             self.load_pretrained_weights(checkpoint_path)
-            self.freeze_encoder_layers()
+            if self.frozen_encoders:
+                self.freeze_encoder_layers()
 
     def compute(self, states, taken_actions=None, timesteps=None, eval=False, **kwargs):
         """
