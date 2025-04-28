@@ -106,7 +106,9 @@ class ContinuousSchedulingRLEnvironment(gym.Env):
             [np.max(self.problem_instance["T_t"][task]) for task in range(self.n_tasks + 1)]
         )
 
-        return self._get_observation(), {}
+        available_robot_mask = np.array([robot.available for robot in self.sim.robots], dtype=bool)
+
+        return self._get_observation(), {"available_robot_mask": available_robot_mask}
 
     def reset_same_problem_instance(self):
         print("Resetting same problem instance")
@@ -181,7 +183,15 @@ class ContinuousSchedulingRLEnvironment(gym.Env):
         reward = self.calculate_reward()
         terminated = self.sim.sim_done
 
-        return self._get_observation(), reward, terminated, truncated, {}
+        available_robot_mask = np.array([robot.available for robot in self.sim.robots], dtype=bool)
+
+        return (
+            self._get_observation(),
+            reward,
+            terminated,
+            truncated,
+            {"available_robot_mask": available_robot_mask},
+        )
 
     def calculate_continuous_robot_assignment(self, action):
         action = torch.tensor(action, dtype=torch.float32).view(self.n_robots, self.n_actions)
