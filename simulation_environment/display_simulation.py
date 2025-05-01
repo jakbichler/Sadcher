@@ -205,7 +205,11 @@ def update_plot(sim, ax, fig, colors, n_skills, video_mode=True):
                 colors,
             )
             ax.text(
-                task.location[0], task.location[1], f"Task {task.task_id}", fontsize=10, ha="center"
+                task.location[0],
+                task.location[1],
+                f" {task.task_id}",
+                fontsize=12,
+                ha="center",
             )
 
     for robot in sim.robots:
@@ -217,7 +221,6 @@ def update_plot(sim, ax, fig, colors, n_skills, video_mode=True):
         color="green",
         s=150,
         marker="x",
-        label="Start (Task 0)",
     )
     ax.text(
         sim.tasks[0].location[0] + 6,
@@ -232,7 +235,6 @@ def update_plot(sim, ax, fig, colors, n_skills, video_mode=True):
         color="red",
         s=150,
         marker="x",
-        label="End (Task -1)",
     )
     ax.text(
         sim.tasks[-1].location[0] + 6,
