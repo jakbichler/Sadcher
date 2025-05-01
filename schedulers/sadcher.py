@@ -93,9 +93,11 @@ class SadcherScheduler:
             torch.tensor(robot_features, dtype=torch.float32).unsqueeze(0).to(self.device)
         )
 
+        task_adjacency = torch.tensor(sim.task_adjacency, dtype=torch.float32).to(self.device)
+
         with torch.no_grad():
             predicted_reward_raw = self.trained_model(
-                robot_features, task_features, sim.task_adjacency.to(self.device)
+                robot_features, task_features, task_adjacency
             ).squeeze(0)  # remove batch dim
 
         predicted_reward = torch.clamp(predicted_reward_raw, min=1e-6)
