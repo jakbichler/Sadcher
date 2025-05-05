@@ -9,7 +9,7 @@ from tqdm import tqdm
 sys.path.append("..")
 import os
 
-from benchmark_schedulers import create_simulation
+from benchmark_schedulers import run_one_simulation
 
 from baselines.aswale_23.MILP_solver import milp_scheduling
 from data_generation.problem_generator import (
@@ -29,7 +29,7 @@ def main():
     parser.add_argument("--n_skills", type=int, default=2, help="Number of skills")
     parser.add_argument("--n_runs", type=int, default=10, help="Number of runs per configuration")
     parser.add_argument(
-        "--including_milp",
+        "--include_milp",
         default=False,
         action="store_true",
         help="Include MILP in the comparison",
@@ -45,24 +45,43 @@ def main():
         type=str,
         help="Path to scheduler checkpoint",
     )
-    parser.add_argument("--model_name", type=str, default="6t2r2s", help="Model name for scheduler")
+    parser.add_argument("--model_name", type=str, default="8t3r3s", help="Model name for scheduler")
     parser.add_argument(
         "--output_file", type=str, required=True, help="JSON Lines file to append results to"
     )
     parser.add_argument(
-        "--problem_type", type=str, default="random", help="Type of problem to generate"
+        "--problem_type",
+        type=str,
+        default="random_with_precedence",
+        help="Type of problem to generate",
     )
     parser.add_argument(
-        "--n_precedence", type=int, default=0, help="Number of precedence constraints"
+        "--n_precedence", type=int, default=3, help="Number of precedence constraints"
+    )
+
+    parser.add_argument(
+        "--include_stochastic_sadcher",
+        default=False,
+        action="store_true",
+        help="Include stochastic Sadcher in the comparison",
+    )
+
+    parser.add_argument(
+        "--n_stochastic_runs",
+        type=int,
+        default=10,
+        help="Number of stochastic runs for Sadcher",
     )
 
     args = parser.parse_args()
     os.makedirs(os.path.dirname(args.output_file), exist_ok=True)
 
-    if args.including_milp:
-        schedulers = ["milp", "greedy", "sadcher"]
-    else:
-        schedulers = ["greedy", "sadcher"]
+    scheduler_names = ["greedy", "sadcher", "random_bipartite"]
+
+    if args.include_milp:
+        scheduler_names.append("milp")
+    if args.include_stochastic_sadcher:
+        scheduler_names.append("stochastic_sadcher")
 
     total_iterations = (
         ((args.max_tasks - args.min_tasks) // args.step_tasks + 1)
@@ -93,7 +112,7 @@ def main():
                         [np.max(problem_instance["T_t"][task]) for task in range(n_tasks + 1)]
                     )
 
-                    for scheduler in schedulers:
+                    for scheduler in scheduler_names:
                         if scheduler == "milp":
                             start_time = time.time()
                             optimal_schedule = milp_scheduling(
@@ -109,29 +128,38 @@ def main():
                             avg_comp_time = elapsed_time
                             total_comp_time = elapsed_time
 
-                        else:
-                            sim = create_simulation(
-                                problem_instance,
-                                scheduler,
-                                checkpoint_path=args.checkpoint_path,
-                                move_while_waiting=args.move_while_waiting,
-                                model_name=args.model_name,
-                            )
-                            infeasible_flag = 0
-                            while not sim.sim_done:
-                                sim.step()
-                                if sim.timestep > worst_case_makespan:
-                                    sim.makespan = worst_case_makespan  # mark as infeasible
-                                    infeasible_flag = 1
-                                    break
-                            if len(sim.scheduler_computation_times) > 0:
-                                avg_comp_time = float(np.mean(sim.scheduler_computation_times))
-                                total_comp_time = float(np.sum(sim.scheduler_computation_times))
+                        elif scheduler == "stochastic_sadcher":
+                            best_ms = float("inf")
+
+                            for _ in range(args.n_stochastic_runs):
+                                makespan, feasible, current_run_computation_times = (
+                                    run_one_simulation(
+                                        problem_instance, scheduler, args.checkpoint_path
+                                    )
+                                )
+
+                                best_ms = min(best_ms, makespan) if feasible else best_ms
+
+                            if len(current_run_computation_times) > 0:
+                                avg_comp_time = float(np.mean(current_run_computation_times))
+                                total_comp_time = float(np.sum(current_run_computation_times))
                             else:
                                 avg_comp_time = 0.0
                                 total_comp_time = 0.0
-                            makespan = sim.makespan
-                            infeasible = infeasible_flag
+                            makespan = best_ms
+                            infeasible = 1 if best_ms == float("inf") else 0
+
+                        else:
+                            makespan, feasible, current_run_computation_times = run_one_simulation(
+                                problem_instance, scheduler, args.checkpoint_path
+                            )
+                            if len(current_run_computation_times) > 0:
+                                avg_comp_time = float(np.mean(current_run_computation_times))
+                                total_comp_time = float(np.sum(current_run_computation_times))
+                            else:
+                                avg_comp_time = 0.0
+                                total_comp_time = 0.0
+                            infeasible = not feasible
 
                         result = {
                             "n_tasks": n_tasks,
