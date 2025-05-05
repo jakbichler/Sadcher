@@ -8,6 +8,10 @@ from schedulers.filtering_assignments import filter_overassignments, filter_redu
 
 
 class SadcherScheduler:
+    """
+    Scheduler that uses a neural network to predict the reward for each robot-task pair.
+    """
+
     def __init__(
         self,
         debugging,
@@ -34,12 +38,12 @@ class SadcherScheduler:
             self.trained_model = SchedulerNetwork(
                 robot_input_dimensions=7,
                 task_input_dimension=9,
-                embed_dim=256,
-                ff_dim=512,
+                embed_dim=128,
+                ff_dim=256,
                 n_transformer_heads=4,
-                n_transformer_layers=2,
-                n_gatn_heads=8,
-                n_gatn_layers=1,
+                n_transformer_layers=4,
+                n_gatn_heads=4,
+                n_gatn_layers=2,
             ).to(self.device)
 
         else:
@@ -57,7 +61,6 @@ class SadcherScheduler:
         robot_assignments = {}
         # Special case for the last task
         available_robots = [robot for robot in sim.robots if robot.available]
-        available_robot_ids = [robot.robot_id for robot in sim.robots if robot.available]
         incomplete_tasks = [
             task for task in sim.tasks if task.incomplete and task.status == "PENDING"
         ]
@@ -101,6 +104,9 @@ class SadcherScheduler:
             ).squeeze(0)  # remove batch dim
 
         predicted_reward = torch.clamp(predicted_reward_raw, min=1e-6)
+
+        # For Stochastic
+        predicted_reward = self.sample_rewards(predicted_reward)
 
         # Add  negative rewards for for the start and end task --> not to be selected, will be handled by the scheduler
         reward_start_end = torch.ones(n_robots, 1).to(self.device) * (-1000)
@@ -205,3 +211,34 @@ class SadcherScheduler:
 
         print(f"Loaded {len(filtered_checkpoint_state_dict)} matching layers from checkpoint.")
         print(f"Skipped {len(skipped_layers)} layers.")
+
+    def sample_rewards(self, predicted_reward):
+        return predicted_reward
+
+
+class StochasticSadcherScheduler(SadcherScheduler):
+    """
+    Stochastic version of the SadcherScheduler. It samples rewards from a normal distribution
+    which is centered around the predicted reward.
+    """
+
+    def __init__(
+        self,
+        debugging,
+        checkpoint_path,
+        duration_normalization,
+        location_normalization,
+        model_name="8t3r3s",
+        stddev=0.5,
+    ):
+        super().__init__(
+            debugging, checkpoint_path, duration_normalization, location_normalization, model_name
+        )
+        self.stddev = stddev
+
+    def sample_rewards(self, predicted_reward):
+        """
+        Sample rewards from a normal distribution around the mean of the predicted rewards.
+        """
+
+        return torch.clamp(torch.normal(predicted_reward, self.stddev), min=1e-6)
