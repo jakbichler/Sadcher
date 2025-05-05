@@ -20,7 +20,7 @@ def visualize(sim, scheduler):
     n_skills = len(sim.tasks[0].requirements)  # Assume all tasks have the same number of skills
     colors = plt.cm.Set1(np.linspace(0, 1, n_skills))  # Generate a color palette
     fig, ax = plt.subplots(figsize=(8, 8))
-    plt.subplots_adjust(bottom=0.3)  # Make space for buttons
+    plt.subplots_adjust(bottom=0.2)  # Make space for buttons
 
     # Create buttons
     ax_button_next = plt.axes([0.3, 0.92, 0.2, 0.07])  # 'Next Timestep' button
@@ -123,7 +123,7 @@ def add_precedence_constraints_text(fig, precedence_constraints):
 def add_current_task_text(fig, robots):
     # Create or reuse a dedicated axes for current task text
     if not hasattr(fig, "_current_task_ax"):
-        fig._current_task_ax = fig.add_axes([0.5, 0.0, 0.7, 0.1])
+        fig._current_task_ax = fig.add_axes([0.5, 0.0, 0.7, 0.2])
         fig._current_task_ax.axis("off")
     else:
         fig._current_task_ax.cla()  # Clear previous text
@@ -185,7 +185,7 @@ def draw_robot_skills_squares(ax, robot, colors, square_size=2.5):
     )
 
 
-def update_plot(sim, ax, fig, colors, n_skills, video_mode=False):
+def update_plot(sim, ax, fig, colors, n_skills, video_mode=True):
     ax.clear()
 
     for task in sim.tasks:
@@ -205,7 +205,11 @@ def update_plot(sim, ax, fig, colors, n_skills, video_mode=False):
                 colors,
             )
             ax.text(
-                task.location[0], task.location[1], f"Task {task.task_id}", fontsize=10, ha="center"
+                task.location[0],
+                task.location[1],
+                f" {task.task_id}",
+                fontsize=12,
+                ha="center",
             )
 
     for robot in sim.robots:
@@ -217,7 +221,6 @@ def update_plot(sim, ax, fig, colors, n_skills, video_mode=False):
         color="green",
         s=150,
         marker="x",
-        label="Start (Task 0)",
     )
     ax.text(
         sim.tasks[0].location[0] + 6,
@@ -232,7 +235,6 @@ def update_plot(sim, ax, fig, colors, n_skills, video_mode=False):
         color="red",
         s=150,
         marker="x",
-        label="End (Task -1)",
     )
     ax.text(
         sim.tasks[-1].location[0] + 6,

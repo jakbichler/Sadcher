@@ -64,6 +64,7 @@ if __name__ == "__main__":
         args.sadcher_model_name,
         duration_normalization=sim.duration_normalization,
         location_normalization=sim.location_normalization,
+        debugging=args.debug,
     )
 
     if args.video:

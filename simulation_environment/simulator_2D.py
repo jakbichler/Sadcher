@@ -81,7 +81,7 @@ class Simulation:
         return tasks
 
     def create_task_adjacency_matrix(self):
-        task_adjacency = torch.zeros((self.n_real_tasks, self.n_real_tasks))
+        task_adjacency = np.zeros((self.n_real_tasks, self.n_real_tasks), dtype=int)
 
         if self.precedence_constraints:
             for precedence in self.precedence_constraints:
@@ -131,10 +131,19 @@ class Simulation:
 
         self.timestep += 1
 
-    def step_until_next_decision_point(self, max_no_new_assignment_steps=10_000):
-        no_new_assignment_steps = 0
+    def step_until_next_decision_point(
+        self,
+        max_no_new_assignment_steps=10_000,
+        render_fn=None,
+        timesteps_to_trigger_rendering=5,
+        filter_triggered=False,
+    ):
+        current_steps = 0
         while not self.sim_done:
             self.step()
+
+            if render_fn and not current_steps % timesteps_to_trigger_rendering:
+                render_fn()
 
             current_available = len([r for r in self.robots if r.available])
             previous_available = self.num_available_robots_in_previous_timestep
@@ -144,12 +153,7 @@ class Simulation:
                 current_available != previous_available
             )
 
-            maxed_out_time_without_assignments = (
-                no_new_assignment_steps >= max_no_new_assignment_steps
-            )
-
-            if (self.sim_done or change_in_available_robots) or maxed_out_time_without_assignments:
-                no_new_assignment_steps = 0
+            if self.sim_done or change_in_available_robots or filter_triggered:
                 break
 
             # Force termination if timestep exceeds worst-case threshold
@@ -159,7 +163,7 @@ class Simulation:
                 print(f"Scheduler did not find a feasible solution at timestep {self.timestep}")
                 break
 
-            no_new_assignment_steps += 1
+            current_steps += 1
 
     def update_task_status(self):
         for task in self.tasks:
@@ -250,28 +254,11 @@ class Simulation:
     def find_task_to_premove_to(self, robot):
         task_to_premove_to = None
 
-        if self.scheduler_name == "sadcher":
+        if self.scheduler_name in ["sadcher", "sadcher_rl_continuous"]:
             highest_non_idle_reward = self.highest_non_idle_rewards[robot.robot_id]
             highest_non_idle_reward_id = self.highest_non_idle_reward_ids[robot.robot_id]
             if highest_non_idle_reward > 0.1:
                 task_to_premove_to = self.tasks[highest_non_idle_reward_id]
-
-        # elif self.scheduler_name == "sadcher_rl":
-        # unassigned_tasks = [
-        # task for task in self.tasks[:-1] if task.incomplete and not task.assigned
-        # ]
-        # if not unassigned_tasks:
-        # return None
-        # tasks_robot_can_contribute_to = []
-        # for task in unassigned_tasks:
-        # if np.any(np.logical_and(robot.capabilities, task.requirements)):
-        # tasks_robot_can_contribute_to.append(task)
-
-        # distances = [
-        # np.linalg.norm(robot.location - task.location)
-        # for task in tasks_robot_can_contribute_to
-        # ]
-        # task_to_premove_to = tasks_robot_can_contribute_to[np.argmin(distances)]
 
         return task_to_premove_to
 
@@ -339,9 +326,6 @@ class Simulation:
             ],
             dtype=np.float32,
         )
-
-        task_features = torch.tensor(task_features, dtype=torch.float32)
-        robot_features = torch.tensor(robot_features, dtype=torch.float32)
 
         return task_features, robot_features
 

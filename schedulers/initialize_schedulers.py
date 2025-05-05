@@ -9,6 +9,7 @@ def create_scheduler(
     model_name=None,
     duration_normalization=100,
     location_normalization=100,
+    debugging=False,
 ):
     if name == "greedy":
         return GreedyInstantaneousScheduler()
@@ -16,7 +17,7 @@ def create_scheduler(
         return RandomBipartiteMatchingScheduler()
     elif name == "sadcher":
         return SadcherScheduler(
-            debugging=False,
+            debugging=debugging,
             checkpoint_path=checkpoint_path,
             duration_normalization=duration_normalization,
             location_normalization=location_normalization,

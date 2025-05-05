@@ -11,7 +11,8 @@ from skrl.envs.torch import wrap_env
 from skrl.memories.torch import RandomMemory
 from skrl.trainers.torch.parallel import PARALLEL_TRAINER_DEFAULT_CONFIG, ParallelTrainer
 
-from models.policy_value import SchedulerPolicy, SchedulerValue
+from models.policy_value_continuous import ContinuousSchedulerPolicy, ZeroCritic
+from models.policy_value_discrete import SchedulerPolicy, SchedulerValue
 
 
 def write_config(
@@ -88,20 +89,62 @@ if __name__ == "__main__":
         help="Use pretrained model",
     )
 
+    argument_parser.add_argument(
+        "--continuous_RL",
+        action="store_true",
+        default=False,
+        help="Use continuous RL",
+    )
+
+    argument_parser.add_argument(
+        "--zero_critic",
+        action="store_true",
+        default=False,
+        help="Use zero critic instead of a learned one",
+    )
+
+    argument_parser.add_argument(
+        "--frozen_encoders",
+        action="store_true",
+        default=False,
+        help="Freeze the encoders of the policy and value models",
+    )
+
     args = argument_parser.parse_args()
     use_idle = not args.not_use_idle
 
-    env_id = "SchedulingRLEnvironment-v0"
-    gym.register(
-        id=env_id,
-        entry_point="gym_environment_rl:SchedulingRLEnvironment",
-        kwargs={"problem_type": args.problem_type, "use_idle": use_idle},
-    )
+    if args.continuous_RL:
+        env_id = "SchedulingRLEnvironmentContinuous-v0"
+
+        gym.register(
+            id=env_id,
+            entry_point="continuous_gym_environment_rl:ContinuousSchedulingRLEnvironment",
+            kwargs={
+                "problem_type": args.problem_type,
+                "use_idle": use_idle,
+                "subtractive_assignment": False,
+            },
+        )
+    else:
+        env_id = "SchedulingRLEnvironmentDiscrete-v0"
+        gym.register(
+            id=env_id,
+            entry_point="discrete_gym_environment_rl:SchedulingRLEnvironment",
+            kwargs={
+                "problem_type": args.problem_type,
+                "use_idle": use_idle,
+                "subtractive_assignment": True,
+            },
+        )
     envs = gym.make_vec(
         env_id,
         num_envs=args.N_ENVS,
         vectorization_mode="async",
-        kwargs={"problem_type": args.problem_type, "use_idle": use_idle},
+        kwargs={
+            "problem_type": args.problem_type,
+            "use_idle": use_idle,
+            "subtractive_assignment": True,
+        },
     )
     env_configs = envs.call("get_config")
     first_env_config = env_configs[0]
@@ -109,23 +152,25 @@ if __name__ == "__main__":
     envs = wrap_env(envs)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
+    debug = args.N_ENVS == 1
+
     policy_config = {
         "robot_input_dimensions": 7,
         "task_input_dimension": 9,
-        "embed_dim": 32,
-        "ff_dim": 64,
-        "n_transformer_heads": 1,
-        "n_transformer_layers": 1,
-        "n_gatn_heads": 1,
+        "embed_dim": 256,
+        "ff_dim": 512,
+        "n_transformer_heads": 4,
+        "n_transformer_layers": 2,
+        "n_gatn_heads": 8,
         "n_gatn_layers": 1,
     }
 
     value_config = {
         "robot_input_dim": 7,
         "task_input_dim": 9,
-        "embed_dim": 32,
-        "ff_dim": 64,
-        "n_transformer_heads": 1,
+        "embed_dim": 128,
+        "ff_dim": 256,
+        "n_transformer_heads": 2,
         "n_transformer_layers": 1,
         "n_gatn_heads": 1,
         "n_gatn_layers": 1,
@@ -133,32 +178,68 @@ if __name__ == "__main__":
 
     trainer_cfg = PARALLEL_TRAINER_DEFAULT_CONFIG.copy()
     trainer_cfg["timesteps"] = 1_000_000
-    trainer_cfg["headless"] = True
+    trainer_cfg["headless"] = not debug
     trainer_cfg["idle_task_id"] = first_env_config["n_tasks"]
 
     ppo_config = PPO_DEFAULT_CONFIG.copy()
     ppo_config["rollouts"] = args.N_ROLLOUTS
-    ppo_config["learning_epochs"] = 10
+    ppo_config["learning_epochs"] = 4
     ppo_config["mini_batches"] = 4
     ppo_config["discount_factor"] = 0.99
-    ppo_config["learning_rate"] = 3e-4
+    ppo_config["learning_rate"] = 1e-4
     ppo_config["mixed_precision"] = False
     ppo_config["experiment"]["write_interval"] = args.N_ROLLOUTS
-    ppo_config["experiment"]["checkpoint_interval"] = trainer_cfg["timesteps"] // 20
+    ppo_config["experiment"]["checkpoint_interval"] = 5_000
     ppo_config["kl_threshold"] = 0.02
+    ppo_config["clip_ratio"] = 0.2
+    ppo_config["entropy_loss_scale"] = 0.0
+    if args.zero_critic:
+        ppo_config["value_loss_scale"] = 0.0
+    else:
+        ppo_config["value_loss_scale"] = 1.0
+
+    log_stddev_init = -0.5
 
     memory = RandomMemory(memory_size=args.N_ROLLOUTS, num_envs=args.N_ENVS, device=device)
 
-    policy_model = SchedulerPolicy(
-        envs.observation_space,
-        envs.action_space,
-        device,
-        policy_config=policy_config,
-        pretrained=args.IL_pretrained_policy,
-        use_idle=use_idle,
-    )
+    if args.continuous_RL:
+        policy_model = ContinuousSchedulerPolicy(
+            envs.observation_space,
+            envs.action_space,
+            device,
+            policy_config=policy_config,
+            pretrained=args.IL_pretrained_policy,
+            use_idle=use_idle,
+            debug=debug,
+            clip_log_std=True,
+            min_log_std=-20,
+            max_log_std=2,
+            log_stddev_init=log_stddev_init,
+            frozen_encoders=args.frozen_encoders,
+        )
 
-    value_model = SchedulerValue(envs.observation_space, envs.action_space, value_config)
+    else:
+        policy_model = SchedulerPolicy(
+            envs.observation_space,
+            envs.action_space,
+            device,
+            policy_config=policy_config,
+            pretrained=args.IL_pretrained_policy,
+            use_idle=use_idle,
+            use_positional_encoding=False,
+            debug=debug,
+        )
+
+    if args.zero_critic:
+        value_model = ZeroCritic(
+            envs.observation_space,
+            envs.action_space,
+            device,
+        )
+    else:
+        value_model = SchedulerValue(envs.observation_space, envs.action_space, value_config).to(
+            device
+        )
 
     agent = PPO(
         models={"policy": policy_model, "value": value_model},

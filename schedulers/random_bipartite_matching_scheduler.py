@@ -1,16 +1,16 @@
 import torch
 
 from helper_functions.schedules import Instantaneous_Schedule
-from schedulers.bipartite_matching import (
+from schedulers.bipartite_matching import CachedBipartiteMatcher
+from schedulers.filtering_assignments import (
     filter_overassignments,
     filter_redundant_assignments,
-    solve_bipartite_matching,
 )
 
 
 class RandomBipartiteMatchingScheduler:
     def __init__(self):
-        pass
+        self.bipartite_matcher = None
 
     def calculate_robot_assignment(self, sim):
         n_robots = len(sim.robots)
@@ -31,7 +31,10 @@ class RandomBipartiteMatchingScheduler:
         # Create random reward matrix
         R = torch.randint(0, 10, size=(n_robots, n_tasks - 2))
         R = torch.cat((torch.zeros(n_robots, 1), R, torch.zeros(n_robots, 1)), dim=1)
-        bipartite_matching_solution = solve_bipartite_matching(R, sim)
+
+        if self.bipartite_matcher is None:
+            self.bipartite_matcher = CachedBipartiteMatcher(sim)
+        bipartite_matching_solution = self.bipartite_matcher.solve(R, n_threads=6, gap=0.0)
         filtered_solution = filter_redundant_assignments(bipartite_matching_solution, sim)
         filtered_solution = filter_overassignments(filtered_solution, sim)
         robot_assignments = {

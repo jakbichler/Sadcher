@@ -22,11 +22,11 @@ from visualizations.benchmark_visualizations import (
 )
 
 if __name__ == "__main__":
-    n_tasks = 8
-    n_robots = 3
+    n_tasks = 30
+    n_robots = 10
     n_skills = 3
     n_precedence = 3
-    seed = 5367
+    seed = 12312
     np.random.seed(seed)
     model_name = "8t3r3s"
     checkpoint_path = (
