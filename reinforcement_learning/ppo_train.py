@@ -184,13 +184,13 @@ if __name__ == "__main__":
     ppo_config = PPO_DEFAULT_CONFIG.copy()
     ppo_config["rollouts"] = args.N_ROLLOUTS
     ppo_config["learning_epochs"] = 4
-    ppo_config["mini_batches"] = 24
+    ppo_config["mini_batches"] = 4
     ppo_config["discount_factor"] = 0.99
-    ppo_config["learning_rate"] = 5e-5
+    ppo_config["learning_rate"] = 1e-4
     ppo_config["mixed_precision"] = False
     ppo_config["experiment"]["write_interval"] = args.N_ROLLOUTS
-    ppo_config["experiment"]["checkpoint_interval"] = 2_000
-    ppo_config["kl_threshold"] = 0.01
+    ppo_config["experiment"]["checkpoint_interval"] = 5_000
+    ppo_config["kl_threshold"] = 0.02
     ppo_config["clip_ratio"] = 0.2
     ppo_config["entropy_loss_scale"] = 0.0
     if args.zero_critic:

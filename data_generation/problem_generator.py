@@ -66,9 +66,6 @@ def generate_random_data(
 def generate_random_data_with_precedence(
     n_tasks: int, n_robots: int, n_skills: int, n_precedence: int = 0
 ) -> ProblemData:
-    # ------------------------
-    # 1) Same random data generation as generate_random_data
-    # ------------------------
     # Q[i][s] = 1 if robot i has skill s, 0 otherwise
     Q = np.random.randint(0, 2, (n_robots, n_skills))
     # Ensure each robot has at least one skill

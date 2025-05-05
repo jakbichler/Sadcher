@@ -1,31 +1,7 @@
-#!/usr/bin/env python3
-"""Optuna hyper‑parameter search targeting **best average reward** within
-150 k episodes on the Scheduling PPO problem.
-
-Key points
-~~~~~~~~~~
-* **Episode budget**: each trial trains for ≤ 150 000 episodes (across all parallel envs).
-* **Objective**: maximum evaluation mean‑reward observed during training.
-* **Entropy schedule**: choose *constant* or *linear decay* (no exponential).
-* **Models**: "simple" and "IL_pretrained" only.
-* **Pruning**: MedianPruner + automatic CUDA‑OOM pruning.
-* **GPU safety**:   `mini_batches = ceil((n_envs × n_rollouts) / 2304)`
-* **Faster sweep**: learning‑rate sampled from **{1e‑4, 2.5e‑4, 5e‑4}** and learning‑epochs from **{2, 4, 6}** only.
-
-Run examples
-------------
-```bash
-python optuna_scheduler_study.py                     # fresh study
-python optuna_scheduler_study.py --resume            # resume existing
-```
-Adjust `--storage`, `--study-name`, `--n-trials`, or `--n-jobs` on the CLI.
-"""
-
 from __future__ import annotations
 
 import argparse
 import math
-import sys
 from collections import deque
 from typing import Dict, Tuple
 
@@ -33,12 +9,7 @@ import gymnasium as gym
 import numpy as np
 import optuna
 import torch
-
-# ── project‑local imports ------------------------------------------------------
-from gym_environment_rl import SchedulingRLEnvironment  # env registration happens inside
 from optuna.exceptions import TrialPruned
-
-# ── SKRL imports ───────────────────────────────────────────────────────────────
 from skrl.agents.torch.ppo import PPO, PPO_DEFAULT_CONFIG
 from skrl.envs.torch import wrap_env
 from skrl.memories.torch import RandomMemory
@@ -51,6 +22,8 @@ REPORT_EVERY = 1_000
 PLATEAU_DELTA = 0.02  # min absolute improvement considered “progress”
 PLATEAU_PATIENCE = 20  # number of report intervals with no progress
 SMOOTH_ALPHA = 0.20  # 0<α≤1
+
+
 ###############################################################################
 #  Storage helpers                                                             #
 ###############################################################################

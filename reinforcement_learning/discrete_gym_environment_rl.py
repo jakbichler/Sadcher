@@ -5,7 +5,6 @@ import gymnasium as gym
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
-from icecream import ic
 
 sys.path.append("..")
 
