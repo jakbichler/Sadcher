@@ -1,22 +1,15 @@
+import os
 import pickle
-from dataclasses import asdict  # to keep ProblemData untouched
+import sys
 
 import numpy as np
 
-GRID = 100  # same value used in generate_random_data()
-import os
-import sys
-
-task_env_path = os.path.abspath("/home/jakob/HeteroMRTA/")
-sys.path.append(task_env_path)
+sys.path.append(os.path.abspath("/home/jakob/HeteroMRTA/"))
 sys.path.append("../..")
 
 from env.task_env import TaskEnv
 
-from data_generation.problem_generator import (
-    ProblemData,
-    generate_random_data_with_precedence,
-)
+from data_generation.problem_generator import generate_random_data_with_precedence
 
 
 def build_env(task_specs, species_specs):
@@ -50,7 +43,7 @@ def build_env(task_specs, species_specs):
         # abilities & counts
         species_dict["abilities"].append(np.array(s["abil"]))
         species_dict["number"].append(s["n"])
-        species_dict[sid] = []  # <- NEW: list of member IDs
+        species_dict[sid] = []
 
         # depot
         depot_dic[sid] = {"location": np.array(s["depot"]), "members": [], "ID": -sid - 1}
@@ -91,10 +84,6 @@ def build_env(task_specs, species_specs):
     return task_dic, agent_dic, depot_dic, species_dict
 
 
-TARGET_DIM = 5  # TaskEnv always expects 5-wide ability / requirement vectors
-GRID = 100  # in generate_random_data()
-
-
 def _pad(v, dim=5):
     "Pad 2-D array v with trailing zeros so it has exactly <dim> columns."
     if v.shape[1] == dim:
@@ -103,7 +92,7 @@ def _pad(v, dim=5):
     return np.hstack([v, np.zeros((v.shape[0], pad), dtype=v.dtype)])
 
 
-def problem_to_taskenv(pb):
+def problem_to_taskenv(pb, grid_size, duration_factor):
     """
     Convert a ProblemData instance (possibly using only 3 skills)
     into a TaskEnv that always has 5 skill slots.
@@ -111,13 +100,13 @@ def problem_to_taskenv(pb):
     Q_raw, R_raw = pb["Q"], pb["R"][1:-1]  # strip start/end dummy tasks
     Q, R = _pad(Q_raw), _pad(R_raw)  # <- **padding step**
     T_e = pb["T_e"][1:-1]
-    loc = pb["task_locations"][1:-1] / GRID  # scale to [0,1]
+    loc = pb["task_locations"][1:-1] / grid_size  # scale to [0,1]
 
     # ----------- build species list (unique ability patterns) -----------------
     uniq, inv = np.unique(Q, axis=0, return_inverse=True)
     species_specs = [
         {
-            "depot": pb["task_locations"][0],  # random depot per species
+            "depot": pb["task_locations"][0] / grid_size,
             "abil": uniq[s],
             "n": int(sum(inv == s)),
         }
@@ -125,19 +114,24 @@ def problem_to_taskenv(pb):
     ]
 
     # ----------- task list ----------------------------------------------------
-    tasks = [{"loc": loc[k], "req": R[k].astype(int), "dur": float(T_e[k])} for k in range(len(R))]
+    tasks = [
+        {"loc": loc[k], "req": R[k].astype(int), "dur": float(T_e[k]) / duration_factor}
+        for k in range(len(R))
+    ]
 
     # ----------- instantiate TaskEnv -----------------------------------------
-    env = TaskEnv(traits_dim=TARGET_DIM)  # ranges don't matter; we overwrite
+    env = TaskEnv(traits_dim=5)  # ranges don't matter; we overwrite
     env.reset(test_env=build_env(tasks, species_specs))
-    env.species_distance_matrix, env.species_neighbor_matrix = env.generate_distance_matrix()
-    env.init_state()
     return env
 
 
 # --------------- example ---------------
 if __name__ == "__main__":
-    np.random.seed(1)
+    np.random.seed(4)
+    grid_size = 100
+    sadcher_max_task_duration = 100
+    marmot_max_task_duration = 5
+    duration_factor = sadcher_max_task_duration / marmot_max_task_duration
 
     problem_instance = generate_random_data_with_precedence(
         n_tasks=10, n_robots=3, n_skills=3, n_precedence=0
@@ -147,8 +141,11 @@ if __name__ == "__main__":
         0
     ]  # make start end depot same to comply with MARMOTLAB code
 
-    env = problem_to_taskenv(problem_instance)
+    env = problem_to_taskenv(problem_instance, grid_size, duration_factor)
+
+    import os
 
     pkl_path = "SadcherTestSet/env_0.pkl"
+    os.makedirs("SadcherTestSet/env_0", exist_ok=True)
     pickle.dump(env, open(pkl_path, "wb"))
     print("✅ custom env saved")
