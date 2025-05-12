@@ -1,4 +1,5 @@
 import argparse
+import json
 import sys
 
 import numpy as np
@@ -31,6 +32,11 @@ if __name__ == "__main__":
         help="Move robots towards second highest reward task while waiting",
     )
     parser.add_argument("--sadcher_model_name", type=str, help="Name of the model to use")
+    parser.add_argument(
+        "--start_end_identical",
+        action="store_true",
+        help="Whether the start and end depot should be in the sm location (to compare against MARMOTLAB)",
+    )
     args = parser.parse_args()
 
     with open("simulation_config.yaml", "r") as file:
@@ -47,6 +53,15 @@ if __name__ == "__main__":
     problem_instance = generate_random_data_with_precedence(
         n_tasks, n_robots, n_skills, n_precedence
     )
+
+    if args.start_end_identical:
+        problem_instance["task_locations"][-1] = problem_instance["task_locations"][0].copy()
+
+    # problem_instance = json.load(
+    # open(
+    # "/home/jakob/thesis/datasets/delft_blue_8t3r3s/8t3r3s1p/8t3r3s1p/problem_instances/problem_instance_001422.json"
+    # )
+    # )
 
     sim = Simulation(
         problem_instance,
