@@ -87,9 +87,9 @@ def plot_gantt_chart(title, schedule, travel_times=None, ax=None, fontsize=6):
     ax.set_yticklabels(yticklabels)
     ax.set_xlabel("Time")
     ax.set_xticks(np.arange(0, schedule.makespan, 50))
-    ax.set_title(title)
+    # ax.set_title(title)
     ax.grid(axis="x", linestyle="-", alpha=0.7)
-    ax.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc="upper left")
+    # ax.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), loc="upper left")
     ax.set_xlim(0, schedule.makespan + 10)
     ax.axvline(x=schedule.makespan, color="red", linestyle="--", label="Makespan")
 
@@ -150,7 +150,7 @@ def plot_robot_trajectories(task_locations, robot_schedules, T_execution, R, ax=
             skills_required / total_skills if total_skills > 0 else np.zeros_like(skills_required)
         )
         draw_pie(ax, x, y, skill_sizes, marker_sizes[idx - 1] / 50)
-        ax.text(x, y + 2, f"Task {idx}", fontsize=10, ha="right")
+        ax.text(x, y + 2.5, f"{idx}", fontsize=10, ha="right")
 
     ax.scatter(
         task_locations[0, 0],
@@ -160,7 +160,7 @@ def plot_robot_trajectories(task_locations, robot_schedules, T_execution, R, ax=
         marker="x",
         label="Start (Task 0)",
     )
-    ax.text(task_locations[0, 0] + 6, task_locations[0, 1] - 1, "Start", fontsize=12, ha="center")
+    # ax.text(task_locations[0, 0] + 6, task_locations[0, 1] - 1, "Start", fontsize=12, ha="center")
     ax.scatter(
         task_locations[-1, 0],
         task_locations[-1, 1],
@@ -169,7 +169,7 @@ def plot_robot_trajectories(task_locations, robot_schedules, T_execution, R, ax=
         marker="x",
         label="End (Task -1)",
     )
-    ax.text(task_locations[-1, 0] + 6, task_locations[-1, 1] - 1, "End", fontsize=12, ha="center")
+    # ax.text(task_locations[-1, 0] + 6, task_locations[-1, 1] - 1, "End", fontsize=12, ha="center")
 
     trajectory_colors = ["black", "royalblue", "darkorange", "green"]
     for idx, (robot_id, tasks) in enumerate(robot_schedules.items()):
@@ -207,13 +207,28 @@ def plot_robot_trajectories(task_locations, robot_schedules, T_execution, R, ax=
 
     legend_patches = legend_patches_skills + legend_patches_robots
 
-    ax.legend(handles=legend_patches, title="Task Skills", loc="upper right")
+    ax.legend(
+        handles=legend_patches,
+        title="Task Skills",
+        loc="upper right",
+        fontsize=8,
+        title_fontsize=9,
+        handletextpad=0.4,
+        borderpad=0.4,
+        labelspacing=0.3,
+        handlelength=1.5,
+        borderaxespad=0.5,
+        markerscale=0.8,
+        frameon=True,
+        framealpha=0.9,
+    )
 
     ax.set_xlabel("X Coordinate")
     ax.set_ylabel("Y Coordinate")
     ax.set_title("Robot Trajectories with Task Skill Representation")
     ax.set_xlim(0, 100)
     ax.set_ylim(0, 100)
+    ax.set_aspect("equal", adjustable="box")
 
     if ax is None:
         plt.show()
@@ -228,7 +243,7 @@ def add_precedence_constraints_text(fig, precedence_constraints):
     ax_text.text(0.5, 0.5, precedence_text, ha="center", va="center", fontsize=10, wrap=True)
 
 
-def plot_gantt_and_trajectories(title, schedule, problem_instance):
+def plot_gantt_and_trajectories(title, schedule, problem_instance, return_plots=False):
     travel_times = problem_instance["T_t"]
     task_locations = problem_instance["task_locations"]
     T_execution = problem_instance["T_e"]
@@ -241,8 +256,11 @@ def plot_gantt_and_trajectories(title, schedule, problem_instance):
     plot_robot_trajectories(
         task_locations, schedule.robot_schedules, T_execution, R, ax=axs[1], Q=Q
     )
+    # if precedence_constraints:
+    # add_precedence_constraints_text(fig, precedence_constraints)
 
-    if precedence_constraints:
-        add_precedence_constraints_text(fig, precedence_constraints)
+    if not return_plots:
+        plt.show()
 
-    plt.show()
+    else:
+        return fig, axs

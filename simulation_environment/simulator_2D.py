@@ -281,10 +281,17 @@ class Simulation:
             highest_non_idle_rewards_ids + 1
         )  # + 1 to accoutn for cutting off start task
 
-    def robot_can_still_contribute_to_other_tasks(self, robot):
-        pending_tasks = [
-            task for task in self.tasks if (task.status == "PENDING" and not task.assigned)
-        ]
+    def robot_can_still_contribute_to_other_tasks(self, robot, only_full_assignments=True):
+        if only_full_assignments:
+            # For IL or continuous RL -> we only assign tasks to coalitions that can start them
+            pending_tasks = [
+                task for task in self.tasks if (task.status == "PENDING" and not task.assigned)
+            ]
+
+        else:
+            # For usage with discrete RL -> we also assign tasks to robots taht can't start them alone
+            pending_tasks = [task for task in self.tasks if task.status == "PENDING"]
+
         if not pending_tasks:
             return False
 
