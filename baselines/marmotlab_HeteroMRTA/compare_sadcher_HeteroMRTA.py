@@ -7,6 +7,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
+# TO-DO: FIX IMPORTS
 sys.path.append(os.path.abspath("/home/jakob/HeteroMRTA/"))
 sys.path.append("../..")
 
@@ -22,7 +23,7 @@ from schedulers.initialize_schedulers import create_scheduler
 from simulation_environment.simulator_2D import Simulation
 
 """
-Scaling between Sadcher and HeteroMRTA:
+Scaling between Sadcher and HeteroMRTA (https://github.com/marmotlab/HeteroMRTA):
 
 – In Sadcher, tasks live on a [0,100]×[0,100] grid with robot speed = 1 unit/timestep.
 – In HeteroMRTA, tasks live on a [0,1]×[0,1] grid with robot speed = 0.2 units/timestep.
@@ -113,7 +114,7 @@ for _ in tqdm(range(N_RUNS)):
         TrainParams.TASK_INPUT_DIM,
         TrainParams.EMBEDDING_DIM,
     ).to(device)
-    ckpt = torch.load(CHECKPOINT_HETEROMRTA, map_location="cpu")
+    ckpt = torch.load(CHECKPOINT_HETEROMRTA, map_location=device)
     net.load_state_dict(ckpt["best_model"])
     worker = Worker(0, net, net, 0, device)
 

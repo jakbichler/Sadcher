@@ -4,12 +4,45 @@ import sys
 
 import numpy as np
 
+# TO-DO: FIX IMPORTS
 sys.path.append(os.path.abspath("/home/jakob/HeteroMRTA/"))
 sys.path.append("../..")
 
 from env.task_env import TaskEnv
 
 from data_generation.problem_generator import generate_random_data_with_precedence
+
+
+def problem_to_taskenv(problem_instance, grid_size, duration_factor):
+    """
+    Convert a ProblemData instance  into a TaskEnv that can be handled by HeteroMRTA
+    framework from https://github.com/marmotlab/HeteroMRTA.
+    """
+    Q_raw, R_raw = problem_instance["Q"], problem_instance["R"][1:-1]  # strip start/end dummy tasks
+    Q, R = _pad(Q_raw), _pad(R_raw)
+    T_e = problem_instance["T_e"][1:-1]
+    loc = problem_instance["task_locations"][1:-1] / grid_size  # scale to [0,1]
+
+    # ----------- build species list (unique ability patterns) -----------------
+    uniq, inv = np.unique(Q, axis=0, return_inverse=True)
+    species_specs = [
+        {
+            "depot": problem_instance["task_locations"][0] / grid_size,
+            "abil": uniq[s],
+            "n": int(sum(inv == s)),
+        }
+        for s in range(len(uniq))
+    ]
+
+    # ----------- task list ----------------------------------------------------
+    tasks = [
+        {"loc": loc[k], "req": R[k].astype(int), "dur": float(T_e[k]) / duration_factor}
+        for k in range(len(R))
+    ]
+
+    env = TaskEnv(traits_dim=5)
+    env.reset(test_env=build_env(tasks, species_specs))
+    return env
 
 
 def build_env(task_specs, species_specs):
@@ -92,42 +125,8 @@ def _pad(v, dim=5):
     return np.hstack([v, np.zeros((v.shape[0], pad), dtype=v.dtype)])
 
 
-def problem_to_taskenv(pb, grid_size, duration_factor):
-    """
-    Convert a ProblemData instance (possibly using only 3 skills)
-    into a TaskEnv that always has 5 skill slots.
-    """
-    Q_raw, R_raw = pb["Q"], pb["R"][1:-1]  # strip start/end dummy tasks
-    Q, R = _pad(Q_raw), _pad(R_raw)  # <- **padding step**
-    T_e = pb["T_e"][1:-1]
-    loc = pb["task_locations"][1:-1] / grid_size  # scale to [0,1]
-
-    # ----------- build species list (unique ability patterns) -----------------
-    uniq, inv = np.unique(Q, axis=0, return_inverse=True)
-    species_specs = [
-        {
-            "depot": pb["task_locations"][0] / grid_size,
-            "abil": uniq[s],
-            "n": int(sum(inv == s)),
-        }
-        for s in range(len(uniq))
-    ]
-
-    # ----------- task list ----------------------------------------------------
-    tasks = [
-        {"loc": loc[k], "req": R[k].astype(int), "dur": float(T_e[k]) / duration_factor}
-        for k in range(len(R))
-    ]
-
-    # ----------- instantiate TaskEnv -----------------------------------------
-    env = TaskEnv(traits_dim=5)  # ranges don't matter; we overwrite
-    env.reset(test_env=build_env(tasks, species_specs))
-    return env
-
-
-# --------------- example ---------------
 if __name__ == "__main__":
-    np.random.seed(4)
+    np.random.seed(0)
     grid_size = 100
     sadcher_max_task_duration = 100
     marmot_max_task_duration = 5
@@ -142,8 +141,6 @@ if __name__ == "__main__":
     ]  # make start end depot same to comply with MARMOTLAB code
 
     env = problem_to_taskenv(problem_instance, grid_size, duration_factor)
-
-    import os
 
     pkl_path = "SadcherTestSet/env_0.pkl"
     os.makedirs("SadcherTestSet/env_0", exist_ok=True)
