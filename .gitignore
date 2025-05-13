@@ -9,3 +9,5 @@ checkpoints/
 archived_runs/
 runs/
 *.mp4
+*.gif
+*.db

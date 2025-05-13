@@ -111,3 +111,18 @@ class Instantaneous_Schedule:
         for robot, task in self.robot_assignments.items():
             result += f"  Robot {robot}: Task {task}\n"
         return result
+
+
+def calculate_traveled_distance(schedule: Full_Horizon_Schedule, travel_times):
+    # Sadcher travel speed = 1 -> travel distance = travel time
+    last_task_index = len(travel_times) - 1
+    total_distance = 0.0
+    for robot_id, robot_schedule in schedule.robot_schedules.items():
+        visited_tasks = [0] + [task_id for task_id, _, _ in robot_schedule] + [last_task_index]
+        for i in range(len(visited_tasks) - 1):
+            from_task = visited_tasks[i]
+            to_task = visited_tasks[i + 1]
+            distance = travel_times[from_task][to_task]
+            total_distance += distance
+
+    return total_distance
