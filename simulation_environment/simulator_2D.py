@@ -175,7 +175,7 @@ class Simulation:
             # Special handling of last task
             if task.task_id == self.last_task_id:
                 incomplete_tasks = [task for task in self.tasks if task.incomplete]
-                if self.all_robots_at_exit_location(threshold=0.01) and len(incomplete_tasks) == 1:
+                if self.all_robots_at_exit_location(threshold=0.01) and len(incomplete_tasks) <= 1:
                     task.status = "DONE"
                     self.finish_simulation()
                 else:

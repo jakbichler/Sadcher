@@ -50,6 +50,7 @@ if __name__ == "__main__":
     precedence_constraints = config["precedence_constraints"]
 
     # problem_instance = generate_random_data(n_tasks, n_robots, n_skills, precedence_constraints)
+
     problem_instance = generate_random_data_with_precedence(
         n_tasks, n_robots, n_skills, n_precedence
     )

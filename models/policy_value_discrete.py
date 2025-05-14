@@ -33,6 +33,7 @@ class SchedulerPolicy(MultiCategoricalMixin, Model):
         self.use_idle = use_idle
         self.use_positional_encoding = use_positional_encoding
         self.debug = debug
+        self.frozen_encoders = frozen_encoders
 
         if use_positional_encoding:
             robot_input_dimensions = policy_config["robot_input_dimensions"] + 1

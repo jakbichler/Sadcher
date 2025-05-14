@@ -38,12 +38,12 @@ class SadcherScheduler:
             self.trained_model = SchedulerNetwork(
                 robot_input_dimensions=7,
                 task_input_dimension=9,
-                embed_dim=128,
-                ff_dim=256,
+                embed_dim=256,
+                ff_dim=512,
                 n_transformer_heads=4,
-                n_transformer_layers=4,
-                n_gatn_heads=4,
-                n_gatn_layers=2,
+                n_transformer_layers=2,
+                n_gatn_heads=8,
+                n_gatn_layers=1,
             ).to(self.device)
 
         else:

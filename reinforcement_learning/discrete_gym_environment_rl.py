@@ -40,8 +40,8 @@ class SchedulingRLEnvironment(gym.Env):
     ):
         super().__init__()
 
-        self.n_robots = 4
-        self.n_tasks = 15
+        self.n_robots = 3
+        self.n_tasks = 10
         self.n_skills = 3
         self.n_precedence = 3
         self.num_robots_available_in_previous_timestep = -1
@@ -96,7 +96,6 @@ class SchedulingRLEnvironment(gym.Env):
             self.problem_instance = generate_random_data_all_robots_all_skills(
                 self.n_tasks, self.n_robots, self.n_skills
             )
-
         else:
             raise ValueError(f"Unknown problem type: {self.problem_type}")
 
@@ -207,7 +206,9 @@ class SchedulingRLEnvironment(gym.Env):
         else:
             # If a robot cannot contribute anymore -> send to end location
             for robot in available_robots:
-                if not self.sim.robot_can_still_contribute_to_other_tasks(robot):
+                if not self.sim.robot_can_still_contribute_to_other_tasks(
+                    robot, only_full_assignments=False
+                ):
                     robot_assignments[robot.robot_id] = self.sim.tasks[-1].task_id
 
             # Only assign available robots
