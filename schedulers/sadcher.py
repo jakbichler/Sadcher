@@ -216,7 +216,7 @@ class SadcherScheduler:
         return predicted_reward
 
 
-class StochasticSadcherScheduler(SadcherScheduler):
+class StochasticILSadcherScheduler(SadcherScheduler):
     """
     Stochastic version of the SadcherScheduler. It samples rewards from a normal distribution
     which is centered around the predicted reward.
