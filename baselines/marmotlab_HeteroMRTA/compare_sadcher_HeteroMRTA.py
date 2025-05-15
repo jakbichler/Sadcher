@@ -43,11 +43,12 @@ HeteroMRTA environment to match the distribution that HeteroMRTA was trained on.
 Afterwards, we multiply all HeteroMRTA makespans by 20 to compare the values.
 This results in the exact fair comparison (can be verified: instances with same schedule have same makespan).
 """
-N_TASKS = 50
-N_ROBOTS = 20
+N_TASKS = 8
+N_ROBOTS = 3
 N_SKILLS = 3
 N_PRECEDENCE = 0
 N_RUNS = 100
+N_SAMPLING_STOCH = 10
 RANDOM_SEED = 0
 GRID_SIZE = 100
 DURATION_FACTOR = 100 / 5
@@ -57,14 +58,14 @@ CHECKPOINT_SADCHER = (
     "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_2_8t3r3s/best_checkpoint.pt"
 )
 CHECKPOINT_HETEROMRTA = "/home/jakob/HeteroMRTA/model/save/checkpoint.pth"
+
 # ──────────────────────────────────────────────────────────────────────────────
 
-sadcher_makespans = []
-sadcher_travel_distances = []
-sadcher_times = []
-heteromrta_makespans = []
-heteromrta_times = []
-heteromrta_travel_distances = []
+sadcher_makespans, sadcher_travel_distances, sadcher_times = [], [], []
+stoch_sadcher_makespans, stoch_sadcher_travel_distances, stoch_sadcher_times = [], [], []
+heteromrta_makespans, heteromrta_times, heteromrta_travel_distances = [], [], []
+stoch_heteromrta_makespans, stoch_heteromrta_times, stoch_heteromrta_travel_distances = [], [], []
+
 
 np.random.seed(RANDOM_SEED)
 torch.manual_seed(RANDOM_SEED)
@@ -94,12 +95,45 @@ for _ in tqdm(range(N_RUNS)):
         sim.assign_tasks_to_robots(inst_sched)
         sim.step_until_next_decision_point()
     rolled_out_schedule = Full_Horizon_Schedule(sim.makespan, sim.robot_schedules, N_TASKS)
-    sadcher_travel_distances.append(
-        calculate_traveled_distance(rolled_out_schedule, problem_instance["T_t"])
+    sadcher_travel_distance = calculate_traveled_distance(
+        rolled_out_schedule, problem_instance["T_t"]
     )
     t_sad = time.time() - t0
-    sadcher_makespans.append(sim.makespan)
     sadcher_times.append(t_sad)
+    sadcher_makespans.append(sim.makespan)
+    sadcher_travel_distances.append(sadcher_travel_distance)
+
+    #  ─── Stochastic  Sadcher run ─────────────────────────────────────────────────────────
+    best_ms, best_dist = None, None
+    t_sto0 = time.time()
+
+    for _ in range(N_SAMPLING_STOCH):
+        sim_sto = Simulation(problem_instance, scheduler_name="stochastic_sadcher", debug=False)
+        scheduler_sto = create_scheduler(
+            "stochastic_sadcher",
+            CHECKPOINT_SADCHER,
+            "8t3r3s",
+            duration_normalization=sim_sto.duration_normalization,
+            location_normalization=sim_sto.location_normalization,
+            debugging=False,
+            stddev=1,  # ← tweak if you want a different exploration width
+        )
+
+        while not sim_sto.sim_done:
+            pred_reward, inst_sched = scheduler_sto.calculate_robot_assignment(sim_sto)
+            sim_sto.find_highest_non_idle_reward(pred_reward)
+            sim_sto.assign_tasks_to_robots(inst_sched)
+            sim_sto.step_until_next_decision_point()
+
+        sched = Full_Horizon_Schedule(sim_sto.makespan, sim_sto.robot_schedules, N_TASKS)
+        travel = calculate_traveled_distance(sched, problem_instance["T_t"])
+
+        if (best_ms is None) or (sim_sto.makespan < best_ms):
+            best_ms, best_dist = sim_sto.makespan, travel
+
+    stoch_sadcher_times.append(time.time() - t_sto0)
+    stoch_sadcher_makespans.append(best_ms)
+    stoch_sadcher_travel_distances.append(best_dist)
 
     # ─── HeteroMRTA run ───────────────────────────────────────────────────────
     EnvParams.TRAIT_DIM = 5
@@ -124,59 +158,138 @@ for _ in tqdm(range(N_RUNS)):
     _, _, rl_res = worker.run_episode(False, sample=False, max_waiting=False)
 
     t_het = time.time() - t1
+    heteromrta_times.append(t_het)
     heteromrta_makespans.append(rl_res["makespan"][-1])
     heteromrta_travel_distances.append(rl_res["travel_dist"][-1])
-    heteromrta_times.append(t_het)
+
+    # ─── Stochastic/Sampling HeteroMRTA run ───────────────────────────────────────────────────────
+    EnvParams.TRAIT_DIM = 5
+    TrainParams.EMBEDDING_DIM = 128
+    TrainParams.AGENT_INPUT_DIM = 6 + EnvParams.TRAIT_DIM
+    TrainParams.TASK_INPUT_DIM = 5 + 2 * EnvParams.TRAIT_DIM
+
+    env: TaskEnv = problem_to_taskenv(problem_instance, GRID_SIZE, DURATION_FACTOR)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    net = AttentionNet(
+        TrainParams.AGENT_INPUT_DIM,
+        TrainParams.TASK_INPUT_DIM,
+        TrainParams.EMBEDDING_DIM,
+    ).to(device)
+    ckpt = torch.load(CHECKPOINT_HETEROMRTA, map_location=device)
+    net.load_state_dict(ckpt["best_model"])
+    worker = Worker(0, net, net, 0, device)
+
+    heteromrta_results_best = None
+    t1 = time.time()
+    for _ in range(N_SAMPLING_STOCH):
+        env.init_state()
+        worker.env = env
+        _, _, heteromrta_results = worker.run_episode(False, sample=True, max_waiting=False)
+        if heteromrta_results_best is None:
+            heteromrta_results_best = heteromrta_results
+        else:
+            if heteromrta_results_best["makespan"] >= heteromrta_results["makespan"]:
+                heteromrta_results_best = heteromrta_results
+
+    t_het = time.time() - t1
+    stoch_heteromrta_times.append(t_het)
+    stoch_heteromrta_makespans.append(heteromrta_results_best["makespan"][-1])
+    stoch_heteromrta_travel_distances.append(heteromrta_results_best["travel_dist"][-1])
 
 
-# ─── Conversion for comparison  ───────────────────────────────────────────────────────────
+# ─── Conversion for comparison  ───────────────────────────────────────────────
 heteromrta_makespans = [ms * MAKESPAN_FACTOR for ms in heteromrta_makespans]
 heteromrta_travel_distances = [td * TRAVEL_DISTANCE_FACTOR for td in heteromrta_travel_distances]
+stoch_heteromrta_makespans = [ms * MAKESPAN_FACTOR for ms in stoch_heteromrta_makespans]
+stoch_heteromrta_travel_distances = [
+    td * TRAVEL_DISTANCE_FACTOR for td in stoch_heteromrta_travel_distances
+]
 
-# ─── Plots ───────────────────────────────────────────────────────────
-fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+# ─── Plots (all 4 algorithms) ────────────────────────────────────────────────
+fig, axs = plt.subplots(1, 3, figsize=(14, 4))
 fig.suptitle(
-    f"On {N_RUNS} randomized instances of {N_TASKS}t, {N_ROBOTS}r, {N_SKILLS}s, {N_PRECEDENCE}p"
+    f"{N_RUNS} random instances, with: {N_TASKS}t | {N_ROBOTS}r | {N_SKILLS}s | {N_PRECEDENCE}p"
 )
 
-mean_sad_ms = np.mean(sadcher_makespans)
-mean_het_ms = np.mean(heteromrta_makespans)
-mean_sad_t = np.mean(sadcher_times)
-mean_het_t = np.mean(heteromrta_times)
-mean_sad_dist = np.mean(sadcher_travel_distances)
-mean_het_dist = np.mean(heteromrta_travel_distances)
+labels = [
+    "Sadcher",
+    f"Sto-Sadcher-{N_SAMPLING_STOCH}",
+    "HeteroMRTA",
+    f"Sto-HeteroMRTA-{N_SAMPLING_STOCH}",
+]
+
+means_ms = list(
+    map(
+        np.mean,
+        [
+            sadcher_makespans,
+            stoch_sadcher_makespans,
+            heteromrta_makespans,
+            stoch_heteromrta_makespans,
+        ],
+    )
+)
+means_time = list(
+    map(np.mean, [sadcher_times, stoch_sadcher_times, heteromrta_times, stoch_heteromrta_times])
+)
+means_dist = list(
+    map(
+        np.mean,
+        [
+            sadcher_travel_distances,
+            stoch_sadcher_travel_distances,
+            heteromrta_travel_distances,
+            stoch_heteromrta_travel_distances,
+        ],
+    )
+)
 
 # ─ Makespan  ─
 ax = axs[0]
-ax.violinplot([sadcher_makespans, heteromrta_makespans], positions=[1, 2], showmeans=True)
-ax.text(1.25, mean_sad_ms, f"{mean_sad_ms:.1f}", ha="center", va="bottom")
-ax.text(2.25, mean_het_ms, f"{mean_het_ms:.1f}", ha="center", va="bottom")
-ax.set_xticks([1, 2])
-ax.set_xticklabels(["Sadcher", "HeteroMRTA"])
+ax.violinplot(
+    [sadcher_makespans, stoch_sadcher_makespans, heteromrta_makespans, stoch_heteromrta_makespans],
+    positions=[1, 2, 3, 4],
+    showmeans=True,
+)
+ax.set_xticks([1, 2, 3, 4])
+ax.set_xticklabels(labels, rotation=12)
 ax.set_ylabel("Makespan")
-ax.set_title("Makespan Comparison")
+ax.set_title("Makespan")
+for x, m in enumerate(means_ms, start=1):
+    ax.text(x + 0.25, m, f"{m:.1f}", ha="center", va="bottom")
 
 # ─ Runtime  ─
 ax = axs[1]
-ax.violinplot([sadcher_times, heteromrta_times], positions=[1, 2], showmeans=True)
-ax.text(1.25, mean_sad_t, f"{mean_sad_t:.2f}", ha="center", va="bottom")
-ax.text(2.25, mean_het_t, f"{mean_het_t:.2f}", ha="center", va="bottom")
-ax.set_xticks([1, 2])
-ax.set_xticklabels(["Sadcher", "HeteroMRTA"])
-ax.set_ylabel("Wall Time (s)")
-ax.set_title("Runtime Comparison")
+ax.violinplot(
+    [sadcher_times, stoch_sadcher_times, heteromrta_times, stoch_heteromrta_times],
+    positions=[1, 2, 3, 4],
+    showmeans=True,
+)
+ax.set_xticks([1, 2, 3, 4])
+ax.set_xticklabels(labels, rotation=12)
+ax.set_ylabel("Wall-clock time (s)")
+ax.set_title("Runtime")
+for x, m in enumerate(means_time, start=1):
+    ax.text(x + 0.25, m, f"{m:.2f}", ha="center", va="bottom")
 
-# ─ Travel Distance  ─
+# ─ Travel distance  ─
 ax = axs[2]
 ax.violinplot(
-    [sadcher_travel_distances, heteromrta_travel_distances], positions=[1, 2], showmeans=True
+    [
+        sadcher_travel_distances,
+        stoch_sadcher_travel_distances,
+        heteromrta_travel_distances,
+        stoch_heteromrta_travel_distances,
+    ],
+    positions=[1, 2, 3, 4],
+    showmeans=True,
 )
-ax.text(1.25, mean_sad_dist, f"{mean_sad_dist:.1f}", ha="center", va="bottom")
-ax.text(2.25, mean_het_dist, f"{mean_het_dist:.1f}", ha="center", va="bottom")
-ax.set_xticks([1, 2])
-ax.set_xticklabels(["Sadcher", "HeteroMRTA"])
-ax.set_ylabel("Travel Distance")
-ax.set_title("Distance Comparison")
+ax.set_xticks([1, 2, 3, 4])
+ax.set_xticklabels(labels, rotation=12)
+ax.set_ylabel("Travel distance")
+ax.set_title("Distance")
+for x, m in enumerate(means_dist, start=1):
+    ax.text(x + 0.25, m, f"{m:.1f}", ha="center", va="bottom")
 
 plt.tight_layout()
 plt.show()
