@@ -183,10 +183,10 @@ if __name__ == "__main__":
 
     ppo_config = PPO_DEFAULT_CONFIG.copy()
     ppo_config["rollouts"] = args.N_ROLLOUTS
-    ppo_config["learning_epochs"] = 4
-    ppo_config["mini_batches"] = 4
+    ppo_config["learning_epochs"] = 12
+    ppo_config["mini_batches"] = 2
     ppo_config["discount_factor"] = 0.99
-    ppo_config["learning_rate"] = 1e-4
+    ppo_config["learning_rate"] = 3e-5
     ppo_config["mixed_precision"] = False
     ppo_config["experiment"]["write_interval"] = args.N_ROLLOUTS
     ppo_config["experiment"]["checkpoint_interval"] = 5_000
@@ -224,10 +224,11 @@ if __name__ == "__main__":
             envs.action_space,
             device,
             policy_config=policy_config,
-            pretrained=args.IL_pretrained_policy,
+            IL_pretrained=args.IL_pretrained_policy,
             use_idle=use_idle,
             use_positional_encoding=False,
             debug=debug,
+            frozen_encoders=args.frozen_encoders,
         )
 
     if args.zero_critic:
@@ -252,6 +253,7 @@ if __name__ == "__main__":
 
     if args.RL_pretrained:
         agent.load(path=args.RL_pretrained_path)
+        print("Loaded RL path")
 
     write_config(
         policy_config,
