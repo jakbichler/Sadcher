@@ -62,11 +62,13 @@ class RLSadcherScheduler:
             if task.task_id != sim.last_task_id
         )
 
+        # Send all robots to end location if no tasks left
         if only_end_task_left or all_tasks_assigned:
             robot_assignments = {robot: sim.tasks[-1].task_id for robot in available_robot_ids}
             return Instantaneous_Schedule(robot_assignments), False
 
-        else:  # Calculate robot assignment
+        # Calculate robot assignments
+        else:
             # If a robot cannot contribute anymore -> send to end location
             for robot in available_robots:
                 if not sim.robot_can_still_contribute_to_other_tasks(
@@ -74,89 +76,27 @@ class RLSadcherScheduler:
                 ):
                     robot_assignments[robot.robot_id] = sim.tasks[-1].task_id
 
-            task_features = np.array(
-                [
-                    task.feature_vector(self.location_normalization, self.duration_normalization)
-                    for task in sim.tasks[1:-1]
-                ]
-            )
-
-            # Subtract already covered skills
-            first_skill_index = 3  # [0,1,2] is location and duration
-            n_skills = 3
-            skill_slice = slice(first_skill_index, first_skill_index + n_skills)
-            real_tasks = sim.tasks[1:-1]
-
-            for task_index, task in enumerate(real_tasks):
-                required = np.array(task.requirements, dtype=bool)
-                covered = np.zeros(n_skills, dtype=bool)
-
-                # Task is complete -> all are covered
-                if not task.incomplete:
-                    covered = required
-                else:
-                    for robot in sim.robots:
-                        if robot.current_task is task:
-                            covered |= np.array(robot.capabilities, dtype=bool)
-                remaining = required & ~covered
-
-                task_features[task_index, skill_slice] = torch.tensor(remaining)
-            task_features = (
-                torch.tensor(task_features, dtype=torch.float32).unsqueeze(0).to(self.device)
-            )
-
-            robot_features = np.array(
-                [
-                    robot.feature_vector(self.location_normalization, self.duration_normalization)
-                    for robot in sim.robots
-                ]
-            )
-
-            robot_features = (
-                torch.tensor(robot_features, dtype=torch.float32).unsqueeze(0).to(self.device)
-            )
-
+            robot_features, task_features = self.extract_features(sim)
             task_adjacency = torch.tensor(sim.task_adjacency, dtype=torch.float32).to(self.device)
 
-            # For robots: last element is availability (1: available, 0: not)
-            rx, ry, workload, c0, c1, c2, available = robot_features.unbind(dim=-1)
-            robot_caps = torch.stack((c0, c1, c2), dim=-1).bool()  # (n_robots, 3)
-            robot_availability = available.bool()  # (n_robots)
-
-            # For tasks
-            tx, ty, dur, r0, r1, r2, ready, assigned, incomplete = task_features.unbind(dim=-1)
-            reqs = torch.stack((r0, r1, r2), -1).bool()
-
-            can_contribute_mask = (robot_caps.unsqueeze(2) & reqs.unsqueeze(1)).any(
-                dim=-1
-            )  # (n_robots, n_tasks)
-
-            task_mask = ready.bool() & incomplete.bool()  # (n_tasks)
-
-            n_tasks = task_features.shape[1]
-            # Build a mask of shape (n_robots, n_actions) that indicates valid actions.
-            mask = torch.ones((n_robots, n_tasks), device=self.device)
-            robot_mask = robot_availability.unsqueeze(-1).to(self.device)  # (n_robots, 1)
-            task_mask = task_mask.unsqueeze(0).to(self.device)  # (1, n_tasks)
-            robot_task_mask = robot_mask & task_mask & can_contribute_mask  # (n_robots, n_tasks)
-
-            mask = robot_task_mask
-
-            reward_matrix = self.trained_model(
+            logits = self.trained_model(
                 robot_features, task_features, task_adjacency
             )  # shape: (batch, n_robots, n_tasks + 1)
-            logits = reward_matrix.masked_fill(mask == 0, -1e9).float()
+
+            mask = self.create_task_robot_mask(task_features, robot_features)
+            logits = logits.masked_fill(mask == 0, -1e9).float()
             action_probas = torch.softmax(logits, dim=-1)  # shape: (n_robots, n_tasks)
 
             if sampling:
                 action_distributions = [
-                    Categorical(logits=action_proba)
+                    Categorical(probs=action_proba)
                     for action_proba in torch.split(action_probas, n_robots)
                 ]
 
                 actions = [distribution.sample() for distribution in action_distributions]
             else:
                 actions = [torch.argmax(probas, dim=-1) for probas in action_probas]
+
             actions = torch.cat(actions).flatten()
             # Only assign available robots
             action_dict = {
@@ -183,6 +123,85 @@ class RLSadcherScheduler:
             )
 
             return Instantaneous_Schedule(robot_assignments), filter_triggered
+
+    def extract_features(self, sim):
+        """
+        Returns robot and task features.
+        """
+        robot_features = (
+            torch.tensor(
+                np.array(
+                    [
+                        r.feature_vector(self.location_normalization, self.duration_normalization)
+                        for r in sim.robots
+                    ]
+                ),
+                dtype=torch.float32,
+            )
+            .unsqueeze(0)
+            .to(self.device)
+        )
+
+        task_features = np.array(
+            [
+                t.feature_vector(self.location_normalization, self.duration_normalization)
+                for t in sim.tasks[1:-1]
+            ]
+        )
+
+        task_features = self.subtract_assigned_task_requirements(sim, task_features)
+
+        return robot_features, task_features
+
+    def subtract_assigned_task_requirements(self, sim, task_features):
+        # Subtract already covered skills
+        first_skill_index = 3  # [0,1,2] is location and duration
+        n_skills = 3
+        skill_slice = slice(first_skill_index, first_skill_index + n_skills)
+        real_tasks = sim.tasks[1:-1]
+
+        for task_index, task in enumerate(real_tasks):
+            required = np.array(task.requirements, dtype=bool)
+            covered = np.zeros(n_skills, dtype=bool)
+
+            # Task is complete -> all are covered
+            if not task.incomplete:
+                covered = required
+            else:
+                for robot in sim.robots:
+                    if robot.current_task is task:
+                        covered |= np.array(robot.capabilities, dtype=bool)
+            remaining = required & ~covered
+
+            task_features[task_index, skill_slice] = torch.tensor(remaining)
+        task_features = (
+            torch.tensor(task_features, dtype=torch.float32).unsqueeze(0).to(self.device)
+        )
+
+        return task_features
+
+    def create_task_robot_mask(self, task_features, robot_features):
+        # For robots: last element is availability (1: available, 0: not)
+        rx, ry, workload, c0, c1, c2, available = robot_features.unbind(dim=-1)
+        robot_caps = torch.stack((c0, c1, c2), dim=-1).bool()  # (n_robots, 3)
+        robot_availability = available.bool()  # (n_robots)
+
+        # For tasks
+        tx, ty, dur, r0, r1, r2, ready, assigned, incomplete = task_features.unbind(dim=-1)
+        reqs = torch.stack((r0, r1, r2), -1).bool()
+
+        can_contribute_mask = (robot_caps.unsqueeze(2) & reqs.unsqueeze(1)).any(
+            dim=-1
+        )  # (n_robots, n_tasks)
+
+        task_mask = ready.bool() & incomplete.bool()  # (n_tasks)
+
+        # Build a mask of shape (n_robots, n_actions) that indicates valid actions.
+        robot_mask = robot_availability.unsqueeze(-1).to(self.device)  # (n_robots, 1)
+        task_mask = task_mask.unsqueeze(0).to(self.device)  # (1, n_tasks)
+        robot_task_mask = robot_mask & task_mask & can_contribute_mask  # (n_robots, n_tasks)
+
+        return robot_task_mask
 
     def load_model_weights(self, checkpoint_path, debugging):
         if checkpoint_path is None:
