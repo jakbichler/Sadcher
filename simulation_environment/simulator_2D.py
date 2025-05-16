@@ -13,7 +13,6 @@ class Simulation:
         problem_instance,
         scheduler_name=None,
         debug=False,
-        move_while_waiting=True,
         use_idle=True,
     ):
         self.use_idle = use_idle
@@ -22,7 +21,6 @@ class Simulation:
         self.makespan = -1  # Will be set when simulation is done
         self.debugging = debug
         self.scheduler_computation_times = []
-        self.move_while_waiting = move_while_waiting
         self.precedence_constraints: list = problem_instance["precedence_constraints"]
         self.duration_normalization = np.max(problem_instance["T_e"])
         self.location_normalization = np.max(problem_instance["task_locations"])
@@ -99,11 +97,7 @@ class Simulation:
                     # Move to assigned task location (Normal task)
                     robot.update_position_on_task()
 
-                elif (
-                    self.use_idle
-                    and robot.current_task.task_id is self.idle_task_id
-                    and self.move_while_waiting
-                ):
+                elif self.use_idle and robot.current_task.task_id is self.idle_task_id:
                     # Robot was assigned IDLE task
                     if self.robot_can_still_contribute_to_other_tasks(robot):
                         task_to_premove_to = self.find_task_to_premove_to(robot)
@@ -255,7 +249,7 @@ class Simulation:
     def find_task_to_premove_to(self, robot):
         task_to_premove_to = None
 
-        if self.scheduler_name in ["sadcher", "sadcher_rl_continuous"]:
+        if self.scheduler_name in ["sadcher", "stochastic_sadcher", "sadcher_rl_continuous"]:
             highest_non_idle_reward = self.highest_non_idle_rewards[robot.robot_id]
             highest_non_idle_reward_id = self.highest_non_idle_reward_ids[robot.robot_id]
             if highest_non_idle_reward > 0.1:

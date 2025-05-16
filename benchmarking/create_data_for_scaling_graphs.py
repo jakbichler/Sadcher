@@ -38,9 +38,6 @@ def main():
         "--milp_cutoff_time", type=int, default=10 * 60, help="Cutoff time for MILP"
     )
     parser.add_argument(
-        "--move_while_waiting", action="store_true", help="Allow robots to move while waiting"
-    )
-    parser.add_argument(
         "--checkpoint_path",
         type=str,
         help="Path to scheduler checkpoint",

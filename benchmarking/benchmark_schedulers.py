@@ -81,13 +81,6 @@ if __name__ == "__main__":
         "--n_iterations", type=int, default=50, help="Number of iterations to run"
     )
     arg_parser.add_argument(
-        "--move_while_waiting",
-        default=False,
-        action="store_true",
-        help="Allow robots to move while waiting for tasks",
-    )
-
-    arg_parser.add_argument(
         "--include_stochastic_sadcher",
         default=False,
         action="store_true",
