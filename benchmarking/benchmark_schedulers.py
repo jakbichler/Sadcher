@@ -31,7 +31,6 @@ def run_one_simulation(problem_instance, scheduler_name, checkpoint_path):
     scheduler = create_scheduler(
         scheduler_name,
         checkpoint_path,
-        model_name="8t3r3s",
         duration_normalization=sim.duration_normalization,
         location_normalization=sim.location_normalization,
         stddev=0.5,
@@ -64,12 +63,11 @@ if __name__ == "__main__":
     n_robots = 3
     n_skills = 3
     n_precedence = 3
-    n_stochastic_runs = 20
+    n_stochastic_runs = 10
     seed = 2
     np.random.seed(seed)
-    model_name = "8t3r3s"
     checkpoint_path = (
-        "/home/jakob/thesis/imitation_learning/checkpoints/8t3r3s_models/model_0/best_checkpoint.pt"
+        "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_2_8t3r3s/best_checkpoint.pt"
     )
 
     arg_parser = argparse.ArgumentParser()
@@ -112,7 +110,6 @@ if __name__ == "__main__":
 
     for iteration in tqdm(range(args.n_iterations)):
         # Generate a problem instance
-        # problem_instance = generate_random_data(n_tasks, n_robots, n_skills, [])
         print(iteration)
         problem_instance = generate_random_data_with_precedence(
             n_tasks, n_robots, n_skills, n_precedence

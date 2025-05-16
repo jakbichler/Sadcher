@@ -4,7 +4,6 @@ from torch.distributions import Categorical
 
 from helper_functions.schedules import Instantaneous_Schedule
 from models.scheduler_network import SchedulerNetwork
-from schedulers.bipartite_matching import CachedBipartiteMatcher
 from schedulers.filtering_assignments import (
     filter_overassignments,
     filter_redundant_assignments,
@@ -24,38 +23,20 @@ class RLSadcherScheduler:
         checkpoint_path,
         duration_normalization,
         location_normalization,
-        model_name="8t3r3s",
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        if model_name == "6t2r2s":
-            self.trained_model = SchedulerNetwork(
-                robot_input_dimensions=6,
-                task_input_dimension=8,
-                embed_dim=256,
-                ff_dim=512,
-                n_transformer_heads=8,
-                n_transformer_layers=1,
-                n_gatn_heads=2,
-                n_gatn_layers=1,
-                use_idle=False,
-            ).to(self.device)
-
-        elif model_name == "8t3r3s":
-            self.trained_model = SchedulerNetwork(
-                robot_input_dimensions=7,
-                task_input_dimension=9,
-                embed_dim=256,
-                ff_dim=512,
-                n_transformer_heads=4,
-                n_transformer_layers=2,
-                n_gatn_heads=8,
-                n_gatn_layers=1,
-                use_idle=False,
-            ).to(self.device)
-
-        else:
-            raise ValueError("Invalid model name")
+        self.trained_model = SchedulerNetwork(
+            robot_input_dimensions=7,
+            task_input_dimension=9,
+            embed_dim=256,
+            ff_dim=512,
+            n_transformer_heads=4,
+            n_transformer_layers=2,
+            n_gatn_heads=8,
+            n_gatn_layers=1,
+            use_idle=False,
+        ).to(self.device)
 
         self.trained_model.eval()
         self.debug = debugging
@@ -83,7 +64,7 @@ class RLSadcherScheduler:
 
         if only_end_task_left or all_tasks_assigned:
             robot_assignments = {robot: sim.tasks[-1].task_id for robot in available_robot_ids}
-            return Instantaneous_Schedule(robot_assignments)
+            return Instantaneous_Schedule(robot_assignments), False
 
         else:  # Calculate robot assignment
             # If a robot cannot contribute anymore -> send to end location

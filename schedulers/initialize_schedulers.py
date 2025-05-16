@@ -1,12 +1,12 @@
 from schedulers.greedy_instantaneous_scheduler import GreedyInstantaneousScheduler
 from schedulers.random_bipartite_matching_scheduler import RandomBipartiteMatchingScheduler
-from schedulers.sadcher import SadcherScheduler, StochasticSadcherScheduler
+from schedulers.sadcher import SadcherScheduler, StochasticILSadcherScheduler
+from schedulers.sadcherRL import RLSadcherScheduler
 
 
 def create_scheduler(
     name: str,
     checkpoint_path=None,
-    model_name=None,
     duration_normalization=100,
     location_normalization=100,
     debugging=False,
@@ -22,15 +22,20 @@ def create_scheduler(
             checkpoint_path=checkpoint_path,
             duration_normalization=duration_normalization,
             location_normalization=location_normalization,
-            model_name=model_name,
         )
-    elif name == "stochastic_sadcher":
-        return StochasticSadcherScheduler(
+    elif name == "rl_sadcher":
+        return RLSadcherScheduler(
             debugging=debugging,
             checkpoint_path=checkpoint_path,
             duration_normalization=duration_normalization,
             location_normalization=location_normalization,
-            model_name=model_name,
+        )
+    elif name == "stochastic_sadcher":
+        return StochasticILSadcherScheduler(
+            debugging=debugging,
+            checkpoint_path=checkpoint_path,
+            duration_normalization=duration_normalization,
+            location_normalization=location_normalization,
             stddev=stddev,
         )
     else:

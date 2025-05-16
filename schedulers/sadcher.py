@@ -18,36 +18,19 @@ class SadcherScheduler:
         checkpoint_path,
         duration_normalization,
         location_normalization,
-        model_name="8t3r3s",
     ):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        if model_name == "6t2r2s":
-            self.trained_model = SchedulerNetwork(
-                robot_input_dimensions=6,
-                task_input_dimension=8,
-                embed_dim=256,
-                ff_dim=512,
-                n_transformer_heads=8,
-                n_transformer_layers=1,
-                n_gatn_heads=2,
-                n_gatn_layers=1,
-            ).to(self.device)
-
-        elif model_name == "8t3r3s":
-            self.trained_model = SchedulerNetwork(
-                robot_input_dimensions=7,
-                task_input_dimension=9,
-                embed_dim=256,
-                ff_dim=512,
-                n_transformer_heads=4,
-                n_transformer_layers=2,
-                n_gatn_heads=8,
-                n_gatn_layers=1,
-            ).to(self.device)
-
-        else:
-            raise ValueError("Invalid model name")
+        self.trained_model = SchedulerNetwork(
+            robot_input_dimensions=7,
+            task_input_dimension=9,
+            embed_dim=256,
+            ff_dim=512,
+            n_transformer_heads=4,
+            n_transformer_layers=2,
+            n_gatn_heads=8,
+            n_gatn_layers=1,
+        ).to(self.device)
 
         self.trained_model.eval()
         self.debug = debugging
@@ -228,12 +211,9 @@ class StochasticILSadcherScheduler(SadcherScheduler):
         checkpoint_path,
         duration_normalization,
         location_normalization,
-        model_name="8t3r3s",
         stddev=0.5,
     ):
-        super().__init__(
-            debugging, checkpoint_path, duration_normalization, location_normalization, model_name
-        )
+        super().__init__(debugging, checkpoint_path, duration_normalization, location_normalization)
         self.stddev = stddev
 
     def sample_rewards(self, predicted_reward):
