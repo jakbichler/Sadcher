@@ -23,14 +23,14 @@ def create_scheduler(
             duration_normalization=duration_normalization,
             location_normalization=location_normalization,
         )
-    elif name == "rl_sadcher":
+    elif name in ["rl_sadcher", "rl_sadcher_sampling"]:
         return RLSadcherScheduler(
             debugging=debugging,
             checkpoint_path=checkpoint_path,
             duration_normalization=duration_normalization,
             location_normalization=location_normalization,
         )
-    elif name == "stochastic_sadcher":
+    elif name == "stochastic_IL_sadcher":
         return StochasticILSadcherScheduler(
             debugging=debugging,
             checkpoint_path=checkpoint_path,
