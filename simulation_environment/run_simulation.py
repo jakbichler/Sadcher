@@ -15,6 +15,7 @@ from data_generation.problem_generator import (
 from helper_functions.schedules import Full_Horizon_Schedule
 from schedulers.initialize_schedulers import create_scheduler
 from schedulers.sadcher import SadcherScheduler
+from schedulers.sadcherRL import RLSadcherScheduler
 from simulation_environment.display_simulation import run_video_mode, visualize
 from visualizations.solution_visualization import plot_gantt_and_trajectories
 
@@ -26,12 +27,6 @@ if __name__ == "__main__":
         "--scheduler", type=str, help="Scheduler to use (greedy or random_bipartite)"
     )
     parser.add_argument("--debug", action="store_true", help="Print debug information")
-    parser.add_argument(
-        "--move_while_waiting",
-        action="store_true",
-        help="Move robots towards second highest reward task while waiting",
-    )
-    parser.add_argument("--sadcher_model_name", type=str, help="Name of the model to use")
     parser.add_argument(
         "--start_end_identical",
         action="store_true",
@@ -64,20 +59,18 @@ if __name__ == "__main__":
     # )
     # )
 
-    sim = Simulation(
-        problem_instance,
-        scheduler_name=args.scheduler,
-        debug=True,
-    )
+    if args.scheduler == "rl_sadcher":
+        sim = Simulation(
+            problem_instance, scheduler_name=args.scheduler, debug=True, use_idle=False
+        )
+    else:
+        sim = Simulation(problem_instance, scheduler_name=args.scheduler, debug=True, use_idle=True)
 
-    checkpoint_path = (
-        "/home/jakob/thesis/imitation_learning/checkpoints/hyperparam_2_8t3r3s/best_checkpoint.pt"
-    )
+    checkpoint_path = "/home/jakob/thesis/reinforcement_learning/archived_runs/revisit_discrete/25-05-15_all_instances_frozen_encoders/checkpoints/best_agent.pt"
 
     scheduler = create_scheduler(
         args.scheduler,
         checkpoint_path,
-        args.sadcher_model_name,
         duration_normalization=sim.duration_normalization,
         location_normalization=sim.location_normalization,
         debugging=args.debug,
@@ -92,13 +85,18 @@ if __name__ == "__main__":
     else:
         # Run simulation until completion
         while not sim.sim_done:
+            filter_triggered = False
             if isinstance(scheduler, SadcherScheduler):
                 predicted_reward, instantaneous_schedule = scheduler.calculate_robot_assignment(sim)
                 sim.find_highest_non_idle_reward(predicted_reward)
+            elif isinstance(scheduler, RLSadcherScheduler):
+                instantaneous_schedule, filter_triggered = scheduler.calculate_robot_assignment(
+                    sim, sampling=False
+                )
             else:
                 instantaneous_schedule = scheduler.calculate_robot_assignment(sim)
             sim.assign_tasks_to_robots(instantaneous_schedule)
-            sim.step_until_next_decision_point()
+            sim.step_until_next_decision_point(filter_triggered=filter_triggered)
 
     rolled_out_schedule = Full_Horizon_Schedule(sim.makespan, sim.robot_schedules, n_tasks)
     print(rolled_out_schedule)

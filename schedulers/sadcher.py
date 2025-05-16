@@ -57,28 +57,7 @@ class SadcherScheduler:
                 robot_assignments
             )
 
-        task_features = np.array(
-            [
-                task.feature_vector(self.location_normalization, self.duration_normalization)
-                for task in sim.tasks[1:-2]
-            ]
-        )
-
-        task_features = (
-            torch.tensor(task_features, dtype=torch.float32).unsqueeze(0).to(self.device)
-        )
-
-        robot_features = np.array(
-            [
-                robot.feature_vector(self.location_normalization, self.duration_normalization)
-                for robot in sim.robots
-            ]
-        )
-
-        robot_features = (
-            torch.tensor(robot_features, dtype=torch.float32).unsqueeze(0).to(self.device)
-        )
-
+        task_features, robot_features = self.extract_task_robot_features(sim)
         task_adjacency = torch.tensor(sim.task_adjacency, dtype=torch.float32).to(self.device)
 
         with torch.no_grad():
@@ -118,41 +97,38 @@ class SadcherScheduler:
             predicted_reward, n_threads=6, gap=0.0
         )
 
-        if self.debug:
-            print(
-                *[
-                    task_robot_pair
-                    for task_robot_pair, assigned in bipartite_matching_solution.items()
-                    if assigned == 1
-                ]
-            )
         filtered_solution = filter_redundant_assignments(bipartite_matching_solution, sim)
-        if self.debug:
-            print(
-                *[
-                    task_robot_pair
-                    for task_robot_pair, assigned in filtered_solution.items()
-                    if assigned == 1
-                ]
-            )
-
         filtered_solution = filter_overassignments(filtered_solution, sim)
-
-        if self.debug:
-            print(
-                *[
-                    task_robot_pair
-                    for task_robot_pair, assigned in filtered_solution.items()
-                    if assigned == 1
-                ]
-            )
-            print("##############################################\n\n")
-
         robot_assignments = {
             robot: task for (robot, task), val in filtered_solution.items() if val == 1
         }
 
         return predicted_reward, Instantaneous_Schedule(robot_assignments)
+
+    def extract_task_robot_features(self, sim):
+        task_features = np.array(
+            [
+                task.feature_vector(self.location_normalization, self.duration_normalization)
+                for task in sim.tasks[1:-2]
+            ]
+        )
+
+        task_features = (
+            torch.tensor(task_features, dtype=torch.float32).unsqueeze(0).to(self.device)
+        )
+
+        robot_features = np.array(
+            [
+                robot.feature_vector(self.location_normalization, self.duration_normalization)
+                for robot in sim.robots
+            ]
+        )
+
+        robot_features = (
+            torch.tensor(robot_features, dtype=torch.float32).unsqueeze(0).to(self.device)
+        )
+
+        return task_features, robot_features
 
     def load_model_weights(self, checkpoint_path, debugging):
         if checkpoint_path is None:

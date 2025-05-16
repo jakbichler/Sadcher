@@ -42,7 +42,6 @@ def main():
         type=str,
         help="Path to scheduler checkpoint",
     )
-    parser.add_argument("--model_name", type=str, default="8t3r3s", help="Model name for scheduler")
     parser.add_argument(
         "--output_file", type=str, required=True, help="JSON Lines file to append results to"
     )
@@ -168,7 +167,6 @@ def main():
                             "avg_comp_time": avg_comp_time,
                             "total_comp_time": total_comp_time,
                             "infeasible_count": infeasible,
-                            "model_name": args.model_name,
                             "n_precedence": args.n_precedence,
                         }
 
