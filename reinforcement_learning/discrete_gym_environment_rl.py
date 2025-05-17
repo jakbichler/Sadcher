@@ -40,8 +40,8 @@ class SchedulingRLEnvironment(gym.Env):
     ):
         super().__init__()
 
-        self.n_robots = 3
-        self.n_tasks = 10
+        self.n_robots = 5
+        self.n_tasks = 15
         self.n_skills = 3
         self.n_precedence = 3
         self.num_robots_available_in_previous_timestep = -1
