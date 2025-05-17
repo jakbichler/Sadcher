@@ -329,3 +329,13 @@ class SchedulerValue(DeterministicMixin, Model):
         values = values.mean(dim=(-2, -1), keepdim=True).squeeze(-1)  # shape: (B,1)
 
         return values, {}
+
+
+class ZeroCritic(DeterministicMixin, Model):
+    def __init__(self, obs_space, act_space, device):
+        Model.__init__(self, obs_space, act_space, device)
+        DeterministicMixin.__init__(self, clip_actions=False)
+
+    def compute(self, states, role):
+        batch = states["states"].shape[0]
+        return torch.zeros(batch, 1, device=self.device), {}
