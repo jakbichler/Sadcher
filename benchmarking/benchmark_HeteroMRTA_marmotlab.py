@@ -9,14 +9,14 @@ from tqdm import tqdm
 
 # TO-DO: FIX IMPORTS
 sys.path.append(os.path.abspath("/home/jakob/HeteroMRTA/"))
-sys.path.append("../..")
+sys.path.append("..")
 
 from attention import AttentionNet
-from bridge import problem_to_taskenv
 from env.task_env import TaskEnv
 from parameters import EnvParams, TrainParams
 from worker import Worker
 
+from baselines.marmotlab_HeteroMRTA.bridge import problem_to_taskenv
 from data_generation.problem_generator import generate_random_data_with_precedence
 from helper_functions.schedules import Full_Horizon_Schedule, calculate_traveled_distance
 from schedulers.initialize_schedulers import create_scheduler
@@ -43,7 +43,7 @@ HeteroMRTA environment to match the distribution that HeteroMRTA was trained on.
 Afterwards, we multiply all HeteroMRTA makespans by 20 to compare the values.
 This results in the exact fair comparison (can be verified: instances with same schedule have same makespan).
 """
-N_TASKS = 8
+N_TASKS = 10
 N_ROBOTS = 3
 N_SKILLS = 3
 N_PRECEDENCE = 0
@@ -59,7 +59,6 @@ CHECKPOINT_SADCHER = (
 )
 CHECKPOINT_HETEROMRTA = "/home/jakob/HeteroMRTA/model/save/checkpoint.pth"
 
-# ──────────────────────────────────────────────────────────────────────────────
 
 sadcher_makespans, sadcher_travel_distances, sadcher_times = [], [], []
 stoch_sadcher_makespans, stoch_sadcher_travel_distances, stoch_sadcher_times = [], [], []
@@ -83,7 +82,6 @@ for _ in tqdm(range(N_RUNS)):
     scheduler = create_scheduler(
         "sadcher",
         CHECKPOINT_SADCHER,
-        "8t3r3s",
         duration_normalization=sim.duration_normalization,
         location_normalization=sim.location_normalization,
         debugging=False,
@@ -110,9 +108,8 @@ for _ in tqdm(range(N_RUNS)):
     for _ in range(N_SAMPLING_STOCH):
         sim_sto = Simulation(problem_instance, scheduler_name="stochastic_sadcher", debug=False)
         scheduler_sto = create_scheduler(
-            "stochastic_sadcher",
+            "stochastic_IL_sadcher",
             CHECKPOINT_SADCHER,
-            "8t3r3s",
             duration_normalization=sim_sto.duration_normalization,
             location_normalization=sim_sto.location_normalization,
             debugging=False,
