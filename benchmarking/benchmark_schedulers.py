@@ -2,7 +2,6 @@ import argparse
 import sys
 import time
 
-import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from tqdm import tqdm
@@ -14,17 +13,10 @@ from baselines.heteromrta.bridge import problem_to_taskenv
 from baselines.heteromrta.env.task_env import TaskEnv
 from baselines.heteromrta.parameters import EnvParams, TrainParams
 from baselines.heteromrta.worker import Worker
+from benchmarking.benchmark_helpers import evaluate_scheduler_in_simulation, get_scheduler_names
 from data_generation.problem_generator import generate_random_data_with_precedence
-from helper_functions.schedules import Full_Horizon_Schedule, calculate_traveled_distance
-from schedulers.initialize_schedulers import create_scheduler
-from schedulers.sadcher import SadcherScheduler
-from schedulers.sadcherRL import RLSadcherScheduler
-from simulation_environment.simulator_2D import Simulation
-from visualizations.benchmark_visualizations import (
-    compare_makespans_1v1,
-    plot_violin,
-    print_final_results,
-)
+from helper_functions.schedules import calculate_traveled_distance
+from visualizations.benchmark_visualizations import plot_results, print_final_results
 
 """
 Scaling between Sadcher and HeteroMRTA (https://github.com/marmotlab/HeteroMRTA):
@@ -48,15 +40,20 @@ Afterwards, we multiply all HeteroMRTA makespans by 20 to compare the values.
 This results in the exact fair comparison (can be verified: instances with same schedule have same makespan).
 """
 
-N_TASKS = 10
+N_TASKS = 8
 N_ROBOTS = 3
 N_SKILLS = 3
-N_PRECEDENCE = 0
+N_PRECEDENCE = 3
 N_STOCHASTIC_RUNS = 10
 GRID_SIZE = 100
 DURATION_FACTOR = 100 / 5
 MAKESPAN_FACTOR = 20
 TRAVEL_DISTANCE_FACTOR = 100
+EnvParams.TRAIT_DIM = 5
+TrainParams.EMBEDDING_DIM = 128
+TrainParams.AGENT_INPUT_DIM = 6 + EnvParams.TRAIT_DIM
+TrainParams.TASK_INPUT_DIM = 5 + 2 * EnvParams.TRAIT_DIM
+
 SEED = 0
 np.random.seed(SEED)
 
@@ -67,7 +64,7 @@ IL_checkpoint_path = (
 RL_checkpoint_path = "/home/jakob/thesis/reinforcement_learning/archived_runs/revisit_discrete/25-05-16_14-21-09-761174_PPO/checkpoints/best_agent.pt"
 CHECKPOINT_HETEROMRTA = "/home/jakob/HeteroMRTA/model/save/checkpoint.pth"
 
-checkpoint_map = {
+CHECKPOINT_MAP = {
     "sadcher": IL_checkpoint_path,
     "stochastic_IL_sadcher": IL_checkpoint_path,
     "rl_sadcher": RL_checkpoint_path,
@@ -86,172 +83,28 @@ def parse_args():
     return parser.parse_args()
 
 
-def run_one_simulation(problem_instance, scheduler_name, checkpoint_path, sampling=False):
-    worst_case_makespan = np.sum(problem_instance["T_e"]) + np.sum(
-        [np.max(problem_instance["T_t"][task]) for task in range(len(problem_instance["T_e"]))]
-    )
-    # RL models do not use idle, as they allow for direct assignment to tasks that can"t be exectued yet
-    use_idle = not scheduler_name.startswith("rl_sadcher")
-    sim = Simulation(problem_instance, scheduler_name, use_idle=use_idle)
-
-    scheduler = create_scheduler(
-        scheduler_name,
-        checkpoint_path,
-        duration_normalization=sim.duration_normalization,
-        location_normalization=sim.location_normalization,
-        stddev=0.5,
-    )
-
-    feasible = True
-    current_run_computation_times = []
-    while not sim.sim_done:
-        start_time = time.time()
-        filter_triggered = False
-
-        if isinstance(scheduler, SadcherScheduler):
-            predicted_reward, instantaneous_schedule = scheduler.calculate_robot_assignment(sim)
-            sim.find_highest_non_idle_reward(predicted_reward)
-
-        elif isinstance(scheduler, RLSadcherScheduler):
-            instantaneous_schedule, filter_triggered = scheduler.calculate_robot_assignment(
-                sim, sampling=sampling
-            )
-
-        else:
-            instantaneous_schedule = scheduler.calculate_robot_assignment(sim)
-
-        current_run_computation_times.append(time.time() - start_time)
-        sim.assign_tasks_to_robots(instantaneous_schedule)
-        sim.step_until_next_decision_point(filter_triggered=filter_triggered)
-
-        if sim.timestep > worst_case_makespan:
-            sim.makespan = worst_case_makespan
-            feasible = False
-            break
-
-    n_tasks = len(problem_instance["T_e"])
-    schedule = Full_Horizon_Schedule(sim.makespan, sim.robot_schedules, n_tasks)
-
-    return sim.makespan, feasible, current_run_computation_times, schedule
-
-
-def evaluate_scheduler_in_simulation(
-    scheduler_name, problem_instance, checkpoint_map, n_stochastic_runs=1, sampling=False
-):
-    all_makespans = []
-    all_times = []
-    all_feasible = []
-    all_distances = []
-
-    for _ in range(n_stochastic_runs):
-        makespan, feasible, times, schedule = run_one_simulation(
-            problem_instance, scheduler_name, checkpoint_map[scheduler_name], sampling=sampling
-        )
-
-        all_makespans.append(makespan)
-        all_feasible.append(feasible)
-        all_times.extend(times)
-        all_distances.append(calculate_traveled_distance(schedule, problem_instance["T_t"]))
-
-    best_run = np.argmin(all_makespans)
-    best_makespan = all_makespans[best_run]
-    best_distance = all_distances[best_run]
-    avg_time = np.mean(all_times)
-    feasible = any(all_feasible)
-
-    return (
-        best_makespan,
-        best_distance,
-        avg_time,
-        feasible,
-    )
-
-
-def plot_results(
-    makespans,
-    travel_distances,
-    computation_times,
-    scheduler_names,
-    args,
-    n_tasks,
-    n_robots,
-    n_skills,
-    n_precedence,
-):
-    fig, axs = plt.subplots(1, 3, figsize=(12, 10))
-
-    plot_violin(
-        axs[0],
-        makespans,
-        scheduler_names,
-        "makespan",
-        f"Makespan Comparison on {args.n_iterations} instances (seed 0) of {n_tasks}t{n_robots}r{n_skills}s{n_precedence}p",
-    )
-
-    plot_violin(
-        axs[1],
-        computation_times,
-        scheduler_names,
-        "computation_time",
-        "Computation Time Comparison",
-    )
-
-    plot_violin(
-        axs[2],
-        travel_distances,
-        scheduler_names,
-        "travel_distance",
-        "Travel Distance Comparison",
-    )
-
-    # compare_makespans_1v1(
-    # axs[0, 1], makespans["greedy"], makespans["sadcher"], "Greedy", "Sadcher-RT"
-    # )
-
-    # if args.include_milp:
-    # compare_makespans_1v1(
-    # axs[1, 1], makespans["milp"], makespans["sadcher"], "MILP", "Sadcher-RT"
-    # )
-    # else:
-    # fig.delaxes(axs[1, 1])
-
-    plt.tight_layout()
-    plt.show()
-
-
 if __name__ == "__main__":
     args = parse_args()
 
-    scheduler_names = ["greedy", "sadcher"]
+    if args.include_milp and N_TASKS >= 10:
+        print(
+            f"⚠️  Warning: You enabled MILP and N_TASKS={N_TASKS} ≥10. "
+            "MILP solve times may grow exponentially and take a very long time."
+        )
 
-    if args.include_milp:
-        scheduler_names.append("milp")
-    if args.include_stochastic_IL_sadcher:
-        scheduler_names.append("stochastic_IL_sadcher")
-    if args.include_RL_sadcher:
-        scheduler_names.extend(["rl_sadcher", "rl_sadcher_sampling"])
-    if args.include_heteromrta:
-        scheduler_names.extend(["heteromrta", "heteromrta_sampling"])
-
-    preferred_order = [
-        "milp",
-        "sadcher",
-        "stochastic_IL_sadcher",
-        "heteromrta",
-        "heteromrta_sampling",
-        "greedy",
-    ]
-
-    scheduler_names = [scheduler for scheduler in preferred_order if scheduler in scheduler_names]
-
+    scheduler_names = get_scheduler_names(args)
     makespans = {scheduler: [] for scheduler in scheduler_names}
     travel_distances = {scheduler: [] for scheduler in scheduler_names}
-    computation_times = {scheduler: [] for scheduler in scheduler_names}
-    infeasible_count = {scheduler: 0 for scheduler in scheduler_names}
+    computation_times_per_decision = {scheduler: [] for scheduler in scheduler_names}
+    computation_times_full_solution = {scheduler: [] for scheduler in scheduler_names}
+    feasibility = {scheduler: [] for scheduler in scheduler_names}
 
     for iteration in tqdm(range(args.n_iterations)):
         problem_instance = generate_random_data_with_precedence(
             N_TASKS, N_ROBOTS, N_SKILLS, N_PRECEDENCE
+        )
+        worst_case_makespan = np.sum(problem_instance["T_e"]) + np.sum(
+            [np.max(problem_instance["T_t"][task]) for task in range(len(problem_instance["T_e"]))]
         )
 
         for scheduler_name in scheduler_names:
@@ -261,20 +114,21 @@ if __name__ == "__main__":
                 optimal_schedule = milp_scheduling(
                     problem_instance, n_threads=6, cutoff_time_seconds=600
                 )
-                computation_times[scheduler_name].append(time.time() - start_time)
+
+                time_full_solution = time.time() - start_time
+                # MILP can not return intermediate decisions -> both times are the same
+                computation_times_per_decision[scheduler_name].append(time_full_solution)
+                computation_times_full_solution[scheduler_name].append(time_full_solution)
                 makespans[scheduler_name].append(optimal_schedule.makespan)
                 travel_distance = calculate_traveled_distance(
                     optimal_schedule, problem_instance["T_t"]
                 )
                 travel_distances[scheduler_name].append(travel_distance)
+                feasibility[scheduler_name].append(True)
 
             # HeteroMRTA runs
             elif scheduler_name in {"heteromrta", "heteromrta_sampling"}:
-                # set up env & model
-                EnvParams.TRAIT_DIM = 5
-                TrainParams.EMBEDDING_DIM = 128
-                TrainParams.AGENT_INPUT_DIM = 6 + EnvParams.TRAIT_DIM
-                TrainParams.TASK_INPUT_DIM = 5 + 2 * EnvParams.TRAIT_DIM
+                t_start = time.time()
 
                 # load network once per iteration
                 env: TaskEnv = problem_to_taskenv(problem_instance, GRID_SIZE, DURATION_FACTOR)
@@ -290,12 +144,14 @@ if __name__ == "__main__":
 
                 best_ms = None
                 runs = 1 if scheduler_name == "heteromrta" else N_STOCHASTIC_RUNS
+                found_feasible = False
                 for _ in range(runs):
+                    run_feasible = True
                     env.init_state()
                     worker.env = env
                     if scheduler_name == "heteromrta":
                         _, _, res = worker.run_episode(False, sample=False, max_waiting=False)
-                    else:
+                    elif scheduler_name == "heteromrta_sampling":
                         _, _, res_candidate = worker.run_episode(
                             False, sample=True, max_waiting=False
                         )
@@ -305,40 +161,65 @@ if __name__ == "__main__":
                             if best_ms is None or res_candidate["makespan"][-1] < best_ms
                             else res
                         )
+
                     ms = res["makespan"][-1] * MAKESPAN_FACTOR
+                    # if makespan is worse than worst case, set it to worst case (deadlock)
+                    if ms > worst_case_makespan:
+                        ms = worst_case_makespan
+                        run_feasible = False
+
                     best_ms = ms if best_ms is None else min(best_ms, ms)
+                    found_feasible = found_feasible or run_feasible
+
                 makespans[scheduler_name].append(best_ms)
                 travel_distances[scheduler_name].append(
                     res["travel_dist"][-1] * TRAVEL_DISTANCE_FACTOR
                 )
-                computation_times[scheduler_name].append(np.mean(res["time_per_decision"]))
+                computation_times_per_decision[scheduler_name].append(
+                    np.mean(res["time_per_decision"])
+                )
+                computation_times_full_solution[scheduler_name].append(time.time() - t_start)
+                feasibility[scheduler_name].append(found_feasible)
 
-            # All other schedulers need our  simulation
+            # All other schedulers need our simulation
             else:
                 is_stochastic = scheduler_name in SCHEDULERS_WITH_SAMPLING
                 n_runs = N_STOCHASTIC_RUNS if is_stochastic else 1
                 sampling = is_stochastic
 
-                best_ms, best_dist, avg_time, feasible = evaluate_scheduler_in_simulation(
-                    scheduler_name, problem_instance, checkpoint_map, n_runs, sampling
+                best_ms, best_dist, avg_time, total_time, feasible = (
+                    evaluate_scheduler_in_simulation(
+                        scheduler_name,
+                        problem_instance,
+                        CHECKPOINT_MAP,
+                        n_runs,
+                        sampling,
+                        worst_case_makespan,
+                    )
                 )
 
                 makespans[scheduler_name].append(best_ms)
                 travel_distances[scheduler_name].append(best_dist)
-                computation_times[scheduler_name].append(avg_time)
-                if not feasible:
-                    infeasible_count[scheduler_name] += 1
+                computation_times_per_decision[scheduler_name].append(avg_time)
+                computation_times_full_solution[scheduler_name].append(total_time)
+                feasibility[scheduler_name].append(feasible)
 
         iteration_results = sorted((makespans[s][-1], s) for s in scheduler_names)
 
     print_final_results(
-        scheduler_names, args.n_iterations, makespans, infeasible_count, computation_times
+        scheduler_names,
+        args.n_iterations,
+        makespans,
+        feasibility,
+        computation_times_per_decision,
     )
 
     plot_results(
         makespans,
         travel_distances,
-        computation_times,
+        computation_times_per_decision,
+        computation_times_full_solution,
+        feasibility,
         scheduler_names,
         args,
         N_TASKS,

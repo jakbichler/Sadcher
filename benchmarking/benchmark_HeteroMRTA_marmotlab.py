@@ -43,10 +43,10 @@ This results in the exact fair comparison (can be verified: instances with same 
 N_TASKS = 10
 N_ROBOTS = 3
 N_SKILLS = 3
-N_PRECEDENCE = 0
+N_PRECEDENCE = 3
 N_RUNS = 100
 N_SAMPLING_STOCH = 10
-RANDOM_SEED = 0
+RANDOM_SEED = 123
 GRID_SIZE = 100
 DURATION_FACTOR = 100 / 5
 MAKESPAN_FACTOR = 20
@@ -110,7 +110,7 @@ for _ in tqdm(range(N_RUNS)):
             duration_normalization=sim_sto.duration_normalization,
             location_normalization=sim_sto.location_normalization,
             debugging=False,
-            stddev=1,  # ← tweak if you want a different exploration width
+            stddev=1,  # ← tweak if you want a differeqqnt exploration width
         )
 
         while not sim_sto.sim_done:
@@ -199,7 +199,7 @@ stoch_heteromrta_travel_distances = [
     td * TRAVEL_DISTANCE_FACTOR for td in stoch_heteromrta_travel_distances
 ]
 
-# ─── Plots (all 4 algorithms) ────────────────────────────────────────────────
+# ─── Plots (all algorithms) ────────────────────────────────────────────────
 fig, axs = plt.subplots(1, 3, figsize=(14, 4))
 fig.suptitle(
     f"{N_RUNS} random instances, with: {N_TASKS}t | {N_ROBOTS}r | {N_SKILLS}s | {N_PRECEDENCE}p"
