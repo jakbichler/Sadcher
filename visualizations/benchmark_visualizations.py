@@ -4,12 +4,28 @@ import numpy as np
 def plot_violin(ax, data, scheduler_names, comparison_type, title):
     ax.violinplot(data.values(), showmeans=True)
     ax.set_xticks(range(1, len(scheduler_names) + 1))
-    ax.set_xticklabels(scheduler_names)
+
+    label_map = {
+        "greedy": "Greedy",
+        "milp": "MILP",
+        "sadcher": "Sadcher",
+        "stochastic_IL_sadcher": "Sample-Sadcher",
+        "heteromrta": "HeteroMRTA",
+        "heteromrta_sampling": "Sample-HeteroMRTA",
+        "rl_sadcher": "RL-Sadcher",
+        "rl_sadcher_sampling": "Sample-RL-Sadcher",
+    }
+
+    # Build labels in the same order as scheduler_names:
+    labels = [label_map.get(s, s) for s in scheduler_names]
+    ax.set_xticklabels(labels, rotation=45, ha="right")
 
     if comparison_type == "makespan":
         ylabel = "Makespan"
     elif comparison_type == "computation_time":
         ylabel = "Computation Time (s)"
+    elif comparison_type == "travel_distance":
+        ylabel = "Travel Distance"
     else:
         raise ValueError(f"Unknown comparison type: {comparison_type}")
     ax.set_ylabel(ylabel)
@@ -22,7 +38,9 @@ def plot_violin(ax, data, scheduler_names, comparison_type, title):
         if comparison_type == "makespan":
             ax.text(i + 1 + text_offset_x, avg_value, f"{avg_value:.1f}", ha="center")
         elif comparison_type == "computation_time":
-            ax.text(i + 1 + text_offset_x, avg_value, f"{avg_value:.4f}", ha="center")
+            ax.text(i + 1 + text_offset_x, avg_value, f"{avg_value:.3f}", ha="center")
+        elif comparison_type == "travel_distance":
+            ax.text(i + 1 + text_offset_x, avg_value, f"{avg_value:.1f}", ha="center")
 
     for i, scheduler in enumerate(scheduler_names, start=1):
         x_jitter = np.random.normal(0, 0.03, len(data[scheduler]))
