@@ -7,16 +7,13 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-# TO-DO: FIX IMPORTS
-sys.path.append(os.path.abspath("/home/jakob/HeteroMRTA/"))
 sys.path.append("..")
 
-from attention import AttentionNet
-from env.task_env import TaskEnv
-from parameters import EnvParams, TrainParams
-from worker import Worker
-
-from baselines.marmotlab_HeteroMRTA.bridge import problem_to_taskenv
+from baselines.heteromrta.attention import AttentionNet
+from baselines.heteromrta.bridge import problem_to_taskenv
+from baselines.heteromrta.env.task_env import TaskEnv
+from baselines.heteromrta.parameters import EnvParams, TrainParams
+from baselines.heteromrta.worker import Worker
 from data_generation.problem_generator import generate_random_data_with_precedence
 from helper_functions.schedules import Full_Horizon_Schedule, calculate_traveled_distance
 from schedulers.initialize_schedulers import create_scheduler
