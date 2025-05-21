@@ -22,15 +22,16 @@ def plot_results(
     computation_times_full_solution,
     feasibility,
     scheduler_names,
-    args,
+    n_iterations,
     n_tasks,
     n_robots,
     n_skills,
     n_precedence,
+    return_fig=False,
 ):
     fig, axs = plt.subplots(1, 3, figsize=(12, 10))
     fig.suptitle(
-        f"Scheduler Comparison on {args.n_iterations} instances of {n_tasks}t{n_robots}r{n_skills}s{n_precedence}p"
+        f"Scheduler Comparison on {n_iterations} instances of {n_tasks}t{n_robots}r{n_skills}s{n_precedence}p"
     )
     fig.subplots_adjust(hspace=0.4, wspace=0.8)
 
@@ -68,6 +69,13 @@ def plot_results(
         scheduler_names,
         title="Computation Time",
     )
+    # Horizontal padding for edgbe violin labels
+    for ax in axs:
+        ax.set_xlim(0.5, len(scheduler_names) + 1)
+
+    if return_fig:
+        return fig
+
     plt.tight_layout()
     plt.show()
 
@@ -89,21 +97,36 @@ def plot_violin(ax, data, scheduler_names, comparison_type, title):
     ax.set_ylabel(ylabel)
     ax.set_title(title)
 
-    text_offset_x = 0.25
+    text_offset_x = 0.4
+    fontsize = 10
     for i, s in enumerate(scheduler_names):
         avg_value = np.mean(data[s])
 
         if comparison_type == "makespan":
-            ax.text(i + 1 + text_offset_x, avg_value, f"{avg_value:.1f}", ha="center")
+            ax.text(
+                i + 1 + text_offset_x,
+                avg_value,
+                f"{avg_value:.1f}",
+                ha="center",
+                fontsize=fontsize,
+                fontweight="bold",
+            )
         elif comparison_type == "travel_distance":
-            ax.text(i + 1 + text_offset_x, avg_value, f"{avg_value:.1f}", ha="center")
+            ax.text(
+                i + 1 + text_offset_x,
+                avg_value,
+                f"{avg_value:.1f}",
+                ha="center",
+                fontsize=fontsize,
+                fontweight="bold",
+            )
 
     for i, scheduler in enumerate(scheduler_names, start=1):
-        x_jitter = np.random.normal(0, 0.03, len(data[scheduler]))
+        x_jitter = np.random.normal(0, 0.02, len(data[scheduler]))
         ax.scatter(
             np.full_like(data[scheduler], i) + x_jitter,
             data[scheduler],
-            alpha=0.5,
+            alpha=0.2,
             s=10,
             color="black",
         )
@@ -116,28 +139,37 @@ def plot_double_violin_computation_times(
     scheduler_names,
     title,
 ):
+    import numpy as np
+
     label1 = "Per Decision"
     label2 = "Full Solution"
 
     ax.set_yscale("log")
-    ax.yaxis.set_major_formatter(ScalarFormatter())
-    ax.ticklabel_format(style="scientific", axis="y", scilimits=(-3, 2))
-
     pos = np.arange(1, len(scheduler_names) + 1)
 
-    # prepare filtered list without MILP -> MILP only has one vilion as per decsion and full soliton is equal
-    sched_no_milp = [s for s in scheduler_names if s != "milp"]
-    pos_no_milp = [pos[i] for i, s in enumerate(scheduler_names) if s != "milp"]
+    # identify which schedulers only have full‐solution decisions
+    sched_only_full = {
+        "milp",
+        "stochastic_IL_sadcher",
+        "rl_sadcher_sampling",
+        "heteromrta_sampling",
+    }
+    instant_scheds = [s for s in scheduler_names if s not in sched_only_full]
+    instant_pos = [pos[i] for i, s in enumerate(scheduler_names) if s in instant_scheds]
 
-    # first violin (blue)
-    v1 = ax.violinplot([data1[s] for s in sched_no_milp], positions=pos_no_milp, showmeans=True)
+    # 1) per-decision violins (blue) — only for instant schedulers
+    v1 = ax.violinplot(
+        [data1[s] for s in instant_scheds],
+        positions=instant_pos,
+        showmeans=True,
+    )
     for pc in v1["bodies"]:
         pc.set_facecolor("C0")
         pc.set_edgecolor("k")
         pc.set_alpha(0.3)
     v1["cmeans"].set_color("k")
 
-    # second violin (orange) only for non‐MILP schedulers
+    # 2) full-solution violins (orange) — for all schedulers
     v2 = ax.violinplot(
         [data2[s] for s in scheduler_names],
         positions=pos,
@@ -149,29 +181,53 @@ def plot_double_violin_computation_times(
         pc.set_alpha(0.3)
     v2["cmeans"].set_color("k")
 
+    # x-axis
     ax.set_xticks(pos)
     labels = [LABEL_MAP.get(s, s) for s in scheduler_names]
     ax.set_xticklabels(labels, rotation=45, ha="right")
-
-    ylabel = "Computation Time (s, log‐scale)"
-    ax.set_ylabel(ylabel)
+    ax.set_ylabel("Computation Time (s, log‐scale)")
     ax.set_title(title)
 
-    text_offset_x = 0.25
+    # annotate means
+    text_offset_x = 0.5
+    fontsize = 10
     fmt = "{:.3g}"
     for i, s in enumerate(scheduler_names, start=1):
-        m1, m2 = np.mean(data1[s]), np.mean(data2[s])
-        ax.text(i + text_offset_x, m1, fmt.format(m1), ha="center", va="bottom")
-        if s != "milp":
-            ax.text(i + text_offset_x, m2, fmt.format(m2), ha="center", va="bottom")
+        if s in instant_scheds:
+            # show per-decision mean
+            m1 = np.mean(data1[s])
+            ax.text(
+                i + text_offset_x,
+                m1,
+                fmt.format(m1),
+                ha="center",
+                va="bottom",
+                fontsize=fontsize,
+                fontweight="bold",
+            )
+        # show full-solution mean for everyone
+        m2 = np.mean(data2[s])
+        ax.text(
+            i + text_offset_x,
+            m2,
+            fmt.format(m2),
+            ha="center",
+            va="bottom",
+            fontsize=fontsize,
+            fontweight="bold",
+        )
 
+    # scatter data points
     for i, s in enumerate(scheduler_names, start=1):
-        j1 = np.random.normal(0, 0.03, len(data1[s]))
-        ax.scatter(i + j1, data1[s], s=10, alpha=0.5, color="C0", edgecolor="k")
-        if s != "milp":
-            j2 = np.random.normal(0, 0.03, len(data2[s]))
-            ax.scatter(i + j2, data2[s], s=10, alpha=0.5, color="C1", edgecolor="k")
+        if s in instant_scheds:
+            # per-decision points
+            j1 = np.random.normal(0, 0.02, len(data1[s]))
+            ax.scatter(i + j1, data1[s], s=10, alpha=0.2, color="C0", edgecolor="k")
+        # full-solution points for all
+        j2 = np.random.normal(0, 0.02, len(data2[s]))
+        ax.scatter(i + j2, data2[s], s=10, alpha=0.2, color="C1", edgecolor="k")
 
+    # legend
     ax.legend(
         [
             Patch(facecolor="C0", edgecolor="k"),
