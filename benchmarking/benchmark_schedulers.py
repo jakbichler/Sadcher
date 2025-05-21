@@ -1,4 +1,5 @@
 import argparse
+import pickle
 import sys
 import time
 
@@ -112,8 +113,16 @@ if __name__ == "__main__":
             if scheduler_name == "milp":
                 start_time = time.time()
                 optimal_schedule = milp_scheduling(
-                    problem_instance, n_threads=6, cutoff_time_seconds=600
+                    problem_instance, n_threads=12, cutoff_time_seconds=60 * 15
                 )
+                if optimal_schedule is None:
+                    print("MILP could not find a solution within time limit.")
+                    makespans[scheduler_name].append(worst_case_makespan)
+                    travel_distances[scheduler_name].append(0)
+                    computation_times_per_decision[scheduler_name].append(0)
+                    computation_times_full_solution[scheduler_name].append(0)
+                    feasibility[scheduler_name].append(False)
+                    continue
 
                 time_full_solution = time.time() - start_time
                 # MILP can not return intermediate decisions -> both times are the same
@@ -129,7 +138,6 @@ if __name__ == "__main__":
             # HeteroMRTA runs
             elif scheduler_name in {"heteromrta", "heteromrta_sampling"}:
                 t_start = time.time()
-
                 # load network once per iteration
                 env: TaskEnv = problem_to_taskenv(problem_instance, GRID_SIZE, DURATION_FACTOR)
                 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -142,41 +150,50 @@ if __name__ == "__main__":
                 net.load_state_dict(ckpt["best_model"])
                 worker = Worker(0, net, net, 0, device)
 
-                best_ms = None
-                runs = 1 if scheduler_name == "heteromrta" else N_STOCHASTIC_RUNS
+                best_ms = float("inf")
+                best_res = None
                 found_feasible = False
-                for _ in range(runs):
-                    run_feasible = True
+                sampling_runs = 1 if scheduler_name == "heteromrta" else N_STOCHASTIC_RUNS
+
+                for _ in range(sampling_runs):
                     env.init_state()
                     worker.env = env
-                    if scheduler_name == "heteromrta":
-                        _, _, res = worker.run_episode(False, sample=False, max_waiting=False)
-                    elif scheduler_name == "heteromrta_sampling":
-                        _, _, res_candidate = worker.run_episode(
-                            False, sample=True, max_waiting=False
-                        )
-                        # keep best makespan
-                        res = (
-                            res_candidate
-                            if best_ms is None or res_candidate["makespan"][-1] < best_ms
-                            else res
+                    try:
+                        # run episode (sample only for heteromrta_sampling)
+                        _, _, res_temp = worker.run_episode(
+                            False,
+                            sample=(scheduler_name == "heteromrta_sampling"),
+                            max_waiting=False,
                         )
 
-                    ms = res["makespan"][-1] * MAKESPAN_FACTOR
-                    # if makespan is worse than worst case, set it to worst case (deadlock)
-                    if ms > worst_case_makespan:
-                        ms = worst_case_makespan
-                        run_feasible = False
+                        # compute makespan, clamp by worst_case
+                        ms_temp = res_temp["makespan"][-1] * MAKESPAN_FACTOR
+                        feasible_temp = True
+                        if ms_temp > worst_case_makespan:
+                            ms_temp = worst_case_makespan
+                            feasible_temp = False
 
-                    best_ms = ms if best_ms is None else min(best_ms, ms)
-                    found_feasible = found_feasible or run_feasible
+                        # update best
+                        if ms_temp < best_ms:
+                            best_ms = ms_temp
+                            best_res = res_temp
+                        found_feasible = found_feasible or feasible_temp
 
+                        # treat failed run as infeasible
+
+                    except Exception as e:
+                        print(f"Error in HeteroMRTA run: {e}")
+                        found_feasible = False
+                        best_ms = worst_case_makespan
+                        break
+
+                # store metrics for the single best run
                 makespans[scheduler_name].append(best_ms)
                 travel_distances[scheduler_name].append(
-                    res["travel_dist"][-1] * TRAVEL_DISTANCE_FACTOR
+                    best_res["travel_dist"][-1] * TRAVEL_DISTANCE_FACTOR
                 )
                 computation_times_per_decision[scheduler_name].append(
-                    np.mean(res["time_per_decision"])
+                    np.mean(best_res["time_per_decision"])
                 )
                 computation_times_full_solution[scheduler_name].append(time.time() - t_start)
                 feasibility[scheduler_name].append(found_feasible)
@@ -206,6 +223,19 @@ if __name__ == "__main__":
 
         iteration_results = sorted((makespans[s][-1], s) for s in scheduler_names)
 
+        with open(f"benchmark_results_{SEED}.pkl", "wb") as f:
+            pickle.dump(
+                {
+                    "makespans": makespans,
+                    "travel_distances": travel_distances,
+                    "computation_times_per_decision": computation_times_per_decision,
+                    "computation_times_full_solution": computation_times_full_solution,
+                    "feasibility": feasibility,
+                    "scheduler_names": scheduler_names,
+                },
+                f,
+            )
+
     print_final_results(
         scheduler_names,
         args.n_iterations,
@@ -221,7 +251,7 @@ if __name__ == "__main__":
         computation_times_full_solution,
         feasibility,
         scheduler_names,
-        args,
+        args.n_iterations,
         N_TASKS,
         N_ROBOTS,
         N_SKILLS,
