@@ -64,7 +64,7 @@ def evaluate_scheduler_in_simulation(
     scheduler_name,
     problem_instance,
     checkpoint_map,
-    n_stochastic_runs=1,
+    n_runs=1,
     sampling=False,
     worst_case_makespan=None,
 ):
@@ -73,7 +73,7 @@ def evaluate_scheduler_in_simulation(
     all_feasible = []
     all_distances = []
 
-    for _ in range(n_stochastic_runs):
+    for _ in range(n_runs):
         makespan, feasible, times_per_decision, schedule = run_one_simulation(
             problem_instance,
             scheduler_name,
@@ -91,7 +91,7 @@ def evaluate_scheduler_in_simulation(
     best_makespan = all_makespans[best_run]
     best_distance = all_distances[best_run]
     avg_time_per_decision = np.mean(times_per_decision)
-    total_time_solution = np.sum(times_per_decision)
+    total_time_solution = np.sum(times_per_decision) * n_runs  # total time for all runs
     feasible = any(all_feasible)
 
     return (
