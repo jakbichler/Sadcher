@@ -1,7 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Patch
-from matplotlib.ticker import ScalarFormatter
 
 LABEL_MAP = {
     "greedy": "Greedy",
@@ -28,11 +27,13 @@ def plot_results(
     n_skills,
     n_precedence,
     return_fig=False,
+    paper_format=False,
 ):
-    fig, axs = plt.subplots(1, 3, figsize=(12, 10))
-    fig.suptitle(
-        f"Scheduler Comparison on {n_iterations} instances of {n_tasks}t{n_robots}r{n_skills}s{n_precedence}p"
-    )
+    fig, axs = plt.subplots(1, 3, figsize=(16, 5) if paper_format else (16, 10))
+    if not paper_format:
+        fig.suptitle(
+            f"Scheduler Comparison on {n_iterations} instances of {n_tasks}t{n_robots}r{n_skills}s{n_precedence}p"
+        )
     fig.subplots_adjust(hspace=0.4, wspace=0.8)
 
     def apply_mask(data_dict):
@@ -52,6 +53,7 @@ def plot_results(
         scheduler_names,
         "makespan",
         "Makespan",
+        paper_format=paper_format,
     )
 
     plot_violin(
@@ -60,6 +62,7 @@ def plot_results(
         scheduler_names,
         "travel_distance",
         "Travel Distance",
+        paper_format=paper_format,
     )
 
     plot_double_violin_computation_times(
@@ -68,6 +71,7 @@ def plot_results(
         computation_times_full_solution,
         scheduler_names,
         title="Computation Time",
+        paper_format=paper_format,
     )
     # Horizontal padding for edgbe violin labels
     for ax in axs:
@@ -80,22 +84,22 @@ def plot_results(
     plt.show()
 
 
-def plot_violin(ax, data, scheduler_names, comparison_type, title):
+def plot_violin(ax, data, scheduler_names, comparison_type, title, paper_format=False):
     ax.violinplot(data.values(), showmeans=True)
     ax.set_xticks(range(1, len(scheduler_names) + 1))
 
     # Build labels in the same order as scheduler_names:
     labels = [LABEL_MAP.get(s, s) for s in scheduler_names]
-    ax.set_xticklabels(labels, rotation=45, ha="right")
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=11)
 
     if comparison_type == "makespan":
-        ylabel = "Makespan"
+        ylabel = "Makespan (time steps)"
     elif comparison_type == "travel_distance":
-        ylabel = "Travel Distance"
+        ylabel = "Travel Distance (simulation units)"
     else:
         raise ValueError(f"Unknown comparison type: {comparison_type}")
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
+    ax.set_ylabel(ylabel, fontsize=12)
+    ax.set_title(title, fontsize=14) if not paper_format else None
 
     text_offset_x = 0.4
     fontsize = 10
@@ -126,7 +130,7 @@ def plot_violin(ax, data, scheduler_names, comparison_type, title):
         ax.scatter(
             np.full_like(data[scheduler], i) + x_jitter,
             data[scheduler],
-            alpha=0.2,
+            alpha=0.1,
             s=10,
             color="black",
         )
@@ -138,6 +142,7 @@ def plot_double_violin_computation_times(
     data2,
     scheduler_names,
     title,
+    paper_format=False,
 ):
     import numpy as np
 
@@ -184,9 +189,9 @@ def plot_double_violin_computation_times(
     # x-axis
     ax.set_xticks(pos)
     labels = [LABEL_MAP.get(s, s) for s in scheduler_names]
-    ax.set_xticklabels(labels, rotation=45, ha="right")
-    ax.set_ylabel("Computation Time (s, log‐scale)")
-    ax.set_title(title)
+    ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=11)
+    ax.set_ylabel("Computation Time (s, log‐scale)", fontsize=12)
+    ax.set_title(title, fontsize=14) if not paper_format else None
 
     # annotate means
     text_offset_x = 0.5
@@ -221,10 +226,10 @@ def plot_double_violin_computation_times(
     for i, s in enumerate(scheduler_names, start=1):
         if s in instant_scheds:
             # per-decision points
-            j1 = np.random.normal(0, 0.02, len(data1[s]))
+            j1 = np.random.normal(0, 0.015, len(data1[s]))
             ax.scatter(i + j1, data1[s], s=10, alpha=0.2, color="C0", edgecolor="k")
         # full-solution points for all
-        j2 = np.random.normal(0, 0.02, len(data2[s]))
+        j2 = np.random.normal(0, 0.015, len(data2[s]))
         ax.scatter(i + j2, data2[s], s=10, alpha=0.2, color="C1", edgecolor="k")
 
     # legend
