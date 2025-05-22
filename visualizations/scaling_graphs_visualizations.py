@@ -35,18 +35,17 @@ if __name__ == "__main__":
 
     # 1.1 Average Computation Time stats
     comp_stats = (
-        df_filtered.groupby(["scheduler", "n_tasks"])["avg_comp_time"]
+        df_filtered.groupby(["scheduler", "n_tasks"])["computation_time_per_decision"]
         .agg(["mean", "std"])
         .reset_index()
     )
 
-    ## 1.2 Cumulative comp times for sadcher and greedy
-    # comp_stats_cum = (
-    # df_filtered[df_filtered["scheduler"].isin(["sadcher", "greedy"])]
-    # .groupby(["scheduler", "n_tasks"])["total_comp_time"]
-    # .agg(["mean", "std"])
-    # .reset_index()
-    # )
+    # 1.2 Cumulative comp times for sadcher and greedy
+    comp_stats_cum = (
+        df_filtered.groupby(["scheduler", "n_tasks"])["computation_time_full_solution"]
+        .agg(["mean", "std"])
+        .reset_index()
+    )
 
     # 2. Makespan stats (grouped by scheduler and n_tasks)
     makespan_stats = (
@@ -77,27 +76,37 @@ if __name__ == "__main__":
     unique_schedulers = comp_stats["scheduler"].unique()
     color_map = {scheduler: plt.cm.tab10(i) for i, scheduler in enumerate(unique_schedulers)}
 
+    # identify which schedulers only have full‐solution decisions
+    sched_only_full = {
+        "milp",
+        "stochastic_IL_sadcher",
+        "rl_sadcher_sampling",
+        "heteromrta_sampling",
+    }
     # Plot 1: Computation Time
     for scheduler, group in comp_stats.groupby("scheduler"):
+        if scheduler in sched_only_full:
+            # Skip schedulers that only have full-solution decisions
+            continue
         ax[0].errorbar(
             group["n_tasks"],
             group["mean"],
-            label=scheduler,
+            label=f"{scheduler} (per decision)",
             marker="o",
             capsize=3,
             color=color_map[scheduler],
         )
 
-    # for scheduler, group in comp_stats_cum.groupby("scheduler"):
-    # ax[0].errorbar(
-    # group["n_tasks"],
-    # group["mean"],
-    # label=f"{scheduler} (cumulative)",
-    # marker="o",
-    # capsize=5,
-    # color=color_map[scheduler],
-    # linestyle="--",
-    # )
+    for scheduler, group in comp_stats_cum.groupby("scheduler"):
+        ax[0].errorbar(
+            group["n_tasks"],
+            group["mean"],
+            label=f"{scheduler} (full solution)",
+            marker="o",
+            capsize=5,
+            color=color_map[scheduler],
+            linestyle="--",
+        )
 
     ax[0].set_xlabel("Number of Tasks")
     ax[0].set_ylabel("Average Computation Time (s)")
