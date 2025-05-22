@@ -128,3 +128,11 @@ def get_scheduler_names(args):
         "rl_sadcher_sampling",
     ]
     return [s for s in preferred if s in names]
+
+
+class EpisodeTimeout(Exception):
+    pass
+
+
+def timeout_handler(signum, frame):
+    raise EpisodeTimeout()

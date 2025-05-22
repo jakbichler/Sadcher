@@ -1,5 +1,6 @@
 import argparse
 import pickle
+import signal
 import sys
 import time
 
@@ -14,7 +15,12 @@ from baselines.heteromrta.bridge import problem_to_taskenv
 from baselines.heteromrta.env.task_env import TaskEnv
 from baselines.heteromrta.parameters import EnvParams, TrainParams
 from baselines.heteromrta.worker import Worker
-from benchmarking.benchmark_helpers import evaluate_scheduler_in_simulation, get_scheduler_names
+from benchmarking.benchmark_helpers import (
+    EpisodeTimeout,
+    evaluate_scheduler_in_simulation,
+    get_scheduler_names,
+    timeout_handler,
+)
 from data_generation.problem_generator import generate_random_data_with_precedence
 from helper_functions.schedules import calculate_traveled_distance
 from visualizations.benchmark_visualizations import plot_results, print_final_results
@@ -113,7 +119,7 @@ if __name__ == "__main__":
             if scheduler_name == "milp":
                 start_time = time.time()
                 optimal_schedule = milp_scheduling(
-                    problem_instance, n_threads=12, cutoff_time_seconds=60 * 15
+                    problem_instance, n_threads=2, cutoff_time_seconds=60 * 15
                 )
                 if optimal_schedule is None:
                     print("MILP could not find a solution within time limit.")
@@ -151,20 +157,25 @@ if __name__ == "__main__":
                 worker = Worker(0, net, net, 0, device)
 
                 best_ms = float("inf")
-                best_res = None
+                best_travel_distance = float("inf")
+                best_comp_time_per_decision = float("inf")
                 found_feasible = False
                 sampling_runs = 1 if scheduler_name == "heteromrta" else N_STOCHASTIC_RUNS
 
-                for _ in range(sampling_runs):
+                for run in range(sampling_runs):
                     env.init_state()
                     worker.env = env
                     try:
+                        signal.signal(signal.SIGALRM, timeout_handler)
+                        signal.alarm(10)  # 10s to finish -> catch very rare infinite loops
+
                         # run episode (sample only for heteromrta_sampling)
                         _, _, res_temp = worker.run_episode(
                             False,
                             sample=(scheduler_name == "heteromrta_sampling"),
                             max_waiting=False,
                         )
+                        signal.alarm(0)  # cancel alarm on success
 
                         # compute makespan, clamp by worst_case
                         ms_temp = res_temp["makespan"][-1] * MAKESPAN_FACTOR
@@ -176,25 +187,28 @@ if __name__ == "__main__":
                         # update best
                         if ms_temp < best_ms:
                             best_ms = ms_temp
-                            best_res = res_temp
+                            best_travel_distance = (
+                                res_temp["travel_dist"][-1] * TRAVEL_DISTANCE_FACTOR
+                            )
+                            best_comp_time_per_decision = np.mean(res_temp["time_per_decision"])
+
                         found_feasible = found_feasible or feasible_temp
 
-                        # treat failed run as infeasible
-
                     except Exception as e:
-                        print(f"Error in HeteroMRTA run: {e}")
-                        found_feasible = False
+                        if isinstance(e, EpisodeTimeout):
+                            print(f"  ⚠️  run {run} timed out → marking infeasible")
+                        else:
+                            print(f"  ⚠️  run {run} error ({e!r}) → marking infeasible")
+
+                        signal.alarm(0)
                         best_ms = worst_case_makespan
+                        found_feasible = False
                         break
 
                 # store metrics for the single best run
                 makespans[scheduler_name].append(best_ms)
-                travel_distances[scheduler_name].append(
-                    best_res["travel_dist"][-1] * TRAVEL_DISTANCE_FACTOR
-                )
-                computation_times_per_decision[scheduler_name].append(
-                    np.mean(best_res["time_per_decision"])
-                )
+                travel_distances[scheduler_name].append(best_travel_distance)
+                computation_times_per_decision[scheduler_name].append(best_comp_time_per_decision)
                 computation_times_full_solution[scheduler_name].append(time.time() - t_start)
                 feasibility[scheduler_name].append(found_feasible)
 
