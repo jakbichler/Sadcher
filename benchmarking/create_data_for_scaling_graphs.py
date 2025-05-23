@@ -99,9 +99,9 @@ def main():
 
     pbar = tqdm(total=total_iterations, desc="Running configurations")
     with open(args.output_file, "a") as outfile:
-        for n_tasks in range(args.min_tasks, args.max_tasks + 1, args.step_tasks):
-            for n_robots in range(args.min_robots, args.max_robots + 1, args.step_robots):
-                for run in range(args.n_runs):
+        for run in range(args.n_runs):
+            for n_tasks in range(args.min_tasks, args.max_tasks + 1, args.step_tasks):
+                for n_robots in range(args.min_robots, args.max_robots + 1, args.step_robots):
                     run_results = []
                     # Set seed for reproducibility
                     seed = np.random.randint(1, 1e6)
@@ -119,7 +119,9 @@ def main():
                         if scheduler_name == "milp":
                             start_time = time.time()
                             optimal_schedule = milp_scheduling(
-                                problem_instance, n_threads=2, cutoff_time_seconds=60 * 15
+                                problem_instance,
+                                n_threads=2,
+                                cutoff_time_seconds=args.milp_cutoff_time,
                             )
                             if optimal_schedule is None:
                                 print("MILP could not find a solution within time limit.")
