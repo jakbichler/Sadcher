@@ -26,8 +26,40 @@ if __name__ == "__main__":
     )
     df_filtered = pd.merge(df, feasible_instances, on=instance_keys)
 
-    print("Counts for feasible instances:")
-    print(df_filtered.groupby(["scheduler", "n_tasks"]).size())
+    # -------------------------
+    # Clip makespan for sampling schedulers to their non-sampling counterpart
+    # -------------------------
+    df_sad_base = df_filtered[df_filtered["scheduler"] == "sadcher"][
+        instance_keys + ["makespan"]
+    ].rename(columns={"makespan": "baseline_sadcher_makespan"})
+    df_het_base = df_filtered[df_filtered["scheduler"] == "heteromrta"][
+        instance_keys + ["makespan"]
+    ].rename(columns={"makespan": "baseline_heteromrta_makespan"})
+    df_clip = pd.merge(df_filtered, df_sad_base, on=instance_keys)
+    df_clip = pd.merge(df_clip, df_het_base, on=instance_keys, how="left")
+
+    # Apply clipping
+    mask_sil = df_clip["scheduler"] == "stochastic_IL_sadcher"
+    df_clip.loc[mask_sil, "makespan"] = df_clip.loc[
+        mask_sil, ["makespan", "baseline_sadcher_makespan"]
+    ].min(axis=1)
+    mask_het = df_clip["scheduler"] == "heteromrta_sampling"
+    df_clip.loc[mask_het, "makespan"] = df_clip.loc[
+        mask_het, ["makespan", "baseline_heteromrta_makespan"]
+    ].min(axis=1)
+
+    df_filtered = df_clip.copy()
+
+    # Get counts per scheduler and n_tasks
+    counts = df.groupby(["scheduler", "n_tasks"]).size().reset_index(name="feasible_count")
+
+    # Print each row with descriptive labels
+    for _, row in counts.iterrows():
+        print(
+            f"Scheduler: {row['scheduler']}, "
+            f"Number of Tasks: {row['n_tasks']}, "
+            f"Feasible Instances: {row['feasible_count']}"
+        )
 
     # -------------------------
     # Statistics Computation
@@ -98,6 +130,9 @@ if __name__ == "__main__":
         )
 
     for scheduler, group in comp_stats_cum.groupby("scheduler"):
+        if scheduler not in sched_only_full:
+            # Skip schedulers that do have per-decision computation times
+            continue
         ax[0].errorbar(
             group["n_tasks"],
             group["mean"],
@@ -105,7 +140,6 @@ if __name__ == "__main__":
             marker="o",
             capsize=5,
             color=color_map[scheduler],
-            linestyle="--",
         )
 
     ax[0].set_xlabel("Number of Tasks")
@@ -113,7 +147,7 @@ if __name__ == "__main__":
     ax[0].set_title(f"Avg Comp Time vs. #Tasks (#Robots = {n_robots})")
     ax[0].legend()
     ax[0].grid(True)
-    ax[0].set_xticks(range(0, 110, 10))
+    ax[0].set_xticks(range(0, 260, 20))
     ax[0].set_yscale("log")
 
     # Plot 2: Makespan
@@ -131,14 +165,28 @@ if __name__ == "__main__":
     ax[1].set_title(f"Makespan vs. #Tasks (#Robots = {n_robots})")
     ax[1].legend()
     ax[1].grid(True)
-    ax[1].set_xticks(range(0, 110, 10))
+    ax[1].set_xticks(range(0, 260, 20))
 
     # Plot 3: Optimality Gap (Sadcher baseline) in percentage (including MILP)
+    # for scheduler, group in gap_stats_sadcher.groupby("scheduler"):
+    # ax[2].errorbar(
+    # group["n_tasks"],
+    # group["mean"] * 100,
+    # label=scheduler,
+    # marker="o",
+    # capsize=3,
+    # color=color_map[scheduler],
+    # )
+
+    gap_stats_sadcher["mean_smooth"] = gap_stats_sadcher.groupby("scheduler")["mean"].transform(
+        lambda x: x.ewm(span=5, min_periods=1).mean()
+    )
+
     for scheduler, group in gap_stats_sadcher.groupby("scheduler"):
         ax[2].errorbar(
             group["n_tasks"],
-            group["mean"] * 100,
-            label=scheduler,
+            group["mean_smooth"] * 100,
+            label=f"{scheduler}",
             marker="o",
             capsize=3,
             color=color_map[scheduler],
@@ -148,7 +196,7 @@ if __name__ == "__main__":
     ax[2].set_title(f"Gap vs. Sadcher (#Robots = {n_robots})")
     ax[2].legend()
     ax[2].grid(True)
-    ax[2].set_xticks(range(0, 110, 10))
+    ax[2].set_xticks(range(0, 260, 20))
 
     plt.tight_layout()
     plt.show()
