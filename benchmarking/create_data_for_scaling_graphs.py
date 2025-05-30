@@ -99,9 +99,12 @@ def main():
 
     pbar = tqdm(total=total_iterations, desc="Running configurations")
     with open(args.output_file, "a") as outfile:
-        for run in range(args.n_runs):
+        for run_iteration in range(args.n_runs):
             for n_tasks in range(args.min_tasks, args.max_tasks + 1, args.step_tasks):
                 for n_robots in range(args.min_robots, args.max_robots + 1, args.step_robots):
+                    print(
+                        f"Running configuration: n_tasks={n_tasks}, n_robots={n_robots}, run={run_iteration}"
+                    )
                     run_results = []
                     # Set seed for reproducibility
                     seed = np.random.randint(1, 1e6)
@@ -166,7 +169,7 @@ def main():
                                 1 if scheduler_name == "heteromrta" else N_STOCHASTIC_RUNS
                             )
 
-                            for run in range(sampling_runs):
+                            for run_sample in range(sampling_runs):
                                 env.init_state()
                                 worker.env = env
                                 try:
@@ -204,9 +207,13 @@ def main():
 
                                 except Exception as e:
                                     if isinstance(e, EpisodeTimeout):
-                                        print(f"  ⚠️  run {run} timed out → marking infeasible")
+                                        print(
+                                            f"  ⚠️  run {run_sample} timed out → marking infeasible"
+                                        )
                                     else:
-                                        print(f"  ⚠️  run {run} error ({e!r}) → marking infeasible")
+                                        print(
+                                            f"  ⚠️  run {run_sample} error ({e!r}) → marking infeasible"
+                                        )
 
                                     signal.alarm(0)
                                     best_ms = worst_case_makespan
