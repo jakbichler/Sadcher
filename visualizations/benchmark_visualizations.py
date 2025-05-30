@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
 import numpy as np
 from matplotlib.patches import Patch
 
@@ -150,6 +151,15 @@ def plot_double_violin_computation_times(
     label2 = "Full Solution"
 
     ax.set_yscale("log")
+    # Major gridlines (at 10^0, 10^1, 10^2, ...)
+    ax.yaxis.set_major_locator(ticker.LogLocator(base=10.0))
+    # ax.grid(which="major", axis="y", linestyle="--", color="black")
+
+    ax.yaxis.set_minor_locator(
+        ticker.LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1, numticks=100)
+    )
+    ax.grid(which="minor", axis="y", linestyle=":", color="gray", alpha=0.5)
+
     pos = np.arange(1, len(scheduler_names) + 1)
 
     # identify which schedulers only have full‐solution decisions
@@ -269,7 +279,7 @@ def compare_makespans_1v1(ax, makespans1, makespans2, scheduler1, scheduler2):
     )
 
     # Scatter plot
-    ax.scatter(makespans1, makespans2, color="black", alpha=0.7, edgecolor="k")
+    ax.scatter(makespans1, makespans2, color="black", alpha=0.5, edgecolor="k")
 
     # Parity line
     x_vals = np.linspace(min_value, max_value, 100)
