@@ -11,3 +11,6 @@ runs/
 *.mp4
 *.gif
 *.db
+*.pkl
+*.tex
+*.csv
