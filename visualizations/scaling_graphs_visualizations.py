@@ -105,7 +105,14 @@ if __name__ == "__main__":
     # -------------------------
 
     fig, ax = plt.subplots(1, 3, figsize=(18, 6))
-    unique_schedulers = comp_stats["scheduler"].unique()
+    unique_schedulers = [
+        "greedy",
+        "heteromrta",
+        "heteromrta_sampling",
+        "milp",
+        "sadcher",
+        "stochastic_IL_sadcher",
+    ]
     color_map = {scheduler: plt.cm.tab10(i) for i, scheduler in enumerate(unique_schedulers)}
 
     # identify which schedulers only have full‐solution decisions
@@ -197,6 +204,6 @@ if __name__ == "__main__":
     ax[2].legend()
     ax[2].grid(True)
     ax[2].set_xticks(range(0, 260, 20))
-
+    ax[2].set_ylim(bottom=-16, top=21)
     plt.tight_layout()
     plt.show()
