@@ -47,7 +47,7 @@ Afterwards, we multiply all HeteroMRTA makespans by 20 to compare the values.
 This results in the exact fair comparison (can be verified: instances with same schedule have same makespan).
 """
 
-N_TASKS = 8
+N_TASKS = 50
 N_ROBOTS = 3
 N_SKILLS = 3
 N_PRECEDENCE = 3
@@ -57,11 +57,12 @@ DURATION_FACTOR = 100 / 5
 MAKESPAN_FACTOR = 20
 TRAVEL_DISTANCE_FACTOR = 100
 EnvParams.TRAIT_DIM = 5
+EnvParams.MAX_TIME = 1000
 TrainParams.EMBEDDING_DIM = 128
 TrainParams.AGENT_INPUT_DIM = 6 + EnvParams.TRAIT_DIM
 TrainParams.TASK_INPUT_DIM = 5 + 2 * EnvParams.TRAIT_DIM
 
-SEED = 0
+SEED = 1
 np.random.seed(SEED)
 
 SCHEDULERS_WITH_SAMPLING = {"stochastic_IL_sadcher", "rl_sadcher_sampling"}
