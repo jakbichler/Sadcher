@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
 from matplotlib.patches import Patch
+from scipy.stats import wilcoxon
 
 LABEL_MAP = {
     "greedy": "Greedy",
@@ -85,46 +86,74 @@ def plot_results(
     plt.show()
 
 
+def _sig_symbol(p):
+    return "***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else "n.s."
+
+
 def plot_violin(ax, data, scheduler_names, comparison_type, title, paper_format=False):
     ax.violinplot(data.values(), showmeans=True)
     ax.set_xticks(range(1, len(scheduler_names) + 1))
-
-    # Build labels in the same order as scheduler_names:
     labels = [LABEL_MAP.get(s, s) for s in scheduler_names]
     ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=11)
 
+    # ── Wilcoxon statistical signifcance  ───────────────────────────────────────
+    PAIRS = [
+        ("sadcher", "heteromrta"),
+        ("sadcher", "heteromrta_sampling"),
+        ("stochastic_IL_sadcher", "heteromrta_sampling"),
+    ]
+    base_max = max(*(np.max(data[a]) for pair in PAIRS for a in pair if a in data))
+    offsets = [1.05 + i * 0.1 for i in range(len(PAIRS))]
+
+    for idx, (A, B) in enumerate(PAIRS):
+        arrA = data.get(A)
+        arrB = data.get(B)
+        if arrA is None or arrB is None or len(arrA) != len(arrB):
+            continue
+
+        W, p = wilcoxon(arrA, arrB, alternative="two-sided")
+        print(f"Wilcoxon {A} vs {B}: W={W}, p={p:.4g}")
+
+        iA = scheduler_names.index(A) + 1
+        iB = scheduler_names.index(B) + 1
+
+        y0 = base_max * offsets[idx]
+        y1 = y0 * 1.02
+
+        # draw the “T-shaped” bar
+        ax.plot([iA, iA, iB, iB], [y0, y1, y1, y0], color="k")
+        ax.text(
+            (iA + iB) / 2,
+            y1 * 1.005,
+            f"{_sig_symbol(p)}, p={p:.2g}",
+            ha="center",
+            va="bottom",
+            fontsize=10,
+        )
+    # ── Scatter plot of individual data points ────────────────────────────────
     if comparison_type == "makespan":
         ylabel = "Makespan (time steps)"
     elif comparison_type == "travel_distance":
         ylabel = "Travel Distance (simulation units)"
     else:
         raise ValueError(f"Unknown comparison type: {comparison_type}")
+
     ax.set_ylabel(ylabel, fontsize=12)
-    ax.set_title(title, fontsize=14) if not paper_format else None
+    if not paper_format:
+        ax.set_title(title, fontsize=14)
 
     text_offset_x = 0.4
     fontsize = 10
     for i, s in enumerate(scheduler_names):
         avg_value = np.mean(data[s])
-
-        if comparison_type == "makespan":
-            ax.text(
-                i + 1 + text_offset_x,
-                avg_value,
-                f"{avg_value:.1f}",
-                ha="center",
-                fontsize=fontsize,
-                fontweight="bold",
-            )
-        elif comparison_type == "travel_distance":
-            ax.text(
-                i + 1 + text_offset_x,
-                avg_value,
-                f"{avg_value:.1f}",
-                ha="center",
-                fontsize=fontsize,
-                fontweight="bold",
-            )
+        ax.text(
+            i + 1 + text_offset_x,
+            avg_value,
+            f"{avg_value:.1f}",
+            ha="center",
+            fontsize=fontsize,
+            fontweight="bold",
+        )
 
     for i, scheduler in enumerate(scheduler_names, start=1):
         x_jitter = np.random.normal(0, 0.02, len(data[scheduler]))
@@ -151,9 +180,7 @@ def plot_double_violin_computation_times(
     label2 = "Full Solution"
 
     ax.set_yscale("log")
-    # Major gridlines (at 10^0, 10^1, 10^2, ...)
     ax.yaxis.set_major_locator(ticker.LogLocator(base=10.0))
-    # ax.grid(which="major", axis="y", linestyle="--", color="black")
 
     ax.yaxis.set_minor_locator(
         ticker.LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1, numticks=100)
@@ -253,7 +280,7 @@ def plot_double_violin_computation_times(
     )
 
 
-def compare_makespans_1v1(ax, makespans1, makespans2, scheduler1, scheduler2):
+def compare_makespans_1v1(ax, makespans1, makespans2, scheduler1, scheduler2, legend=True):
     makespans1 = np.array(makespans1)
     makespans2 = np.array(makespans2)
 
@@ -265,7 +292,7 @@ def compare_makespans_1v1(ax, makespans1, makespans2, scheduler1, scheduler2):
         [min_value, max_value],
         [min_value, max_value],
         max_value,
-        color="red",
+        color="tab:blue",
         alpha=0.15,
         label=f"{scheduler1} Wins",
     )
@@ -273,22 +300,22 @@ def compare_makespans_1v1(ax, makespans1, makespans2, scheduler1, scheduler2):
         [min_value, max_value],
         min_value,
         [min_value, max_value],
-        color="green",
+        color="tab:orange",
         alpha=0.15,
         label=f"{scheduler2} Wins",
     )
 
     # Scatter plot
-    ax.scatter(makespans1, makespans2, color="black", alpha=0.5, edgecolor="k")
+    ax.scatter(makespans1, makespans2, color="black", alpha=0.4, edgecolor="k")
 
     # Parity line
     x_vals = np.linspace(min_value, max_value, 100)
-    ax.plot(x_vals, x_vals, color="black", linestyle="--", label="Parity Line")
+    ax.plot(x_vals, x_vals, color="black", linestyle="-", label="Parity Line", linewidth=3)
 
     # Labels and legend
-    ax.set_xlabel(f"{scheduler1} Makespan")
-    ax.set_ylabel(f"{scheduler2} Makespan")
-    ax.legend()
+    ax.set_xlabel(f"{scheduler1} Makespan", fontsize=12)
+    ax.set_ylabel(f"{scheduler2} Makespan", fontsize=12)
+    ax.legend(fontsize=12, loc="upper left") if legend else None
 
 
 def print_final_results(scheduler_names, n_iter, makespans, feasibility, computation_times):
