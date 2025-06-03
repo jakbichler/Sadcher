@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
 from matplotlib.patches import Patch
-from scipy.stats import wilcoxon
+from scipy.stats import binomtest, wilcoxon
 
 LABEL_MAP = {
     "greedy": "Greedy",
@@ -283,6 +283,15 @@ def plot_double_violin_computation_times(
 def compare_makespans_1v1(ax, makespans1, makespans2, scheduler1, scheduler2, legend=True):
     makespans1 = np.array(makespans1)
     makespans2 = np.array(makespans2)
+
+    total_count = len(makespans1)
+    scheduler1_wins = np.sum(makespans1 < makespans2)
+
+    p_value = binomtest(scheduler1_wins, total_count, p=0.5, alternative="two-sided").pvalue
+
+    print(
+        f"{scheduler1} wins {scheduler1_wins} out of {total_count} ({scheduler1_wins / total_count:.2%}), confidence p-value: {p_value:.2g}"
+    )
 
     min_value = min(min(makespans1), min(makespans2))
     max_value = max(max(makespans1), max(makespans2))
