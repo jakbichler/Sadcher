@@ -85,6 +85,26 @@ def plot_results(
     plt.tight_layout()
     plt.show()
 
+    fig, axs = plt.subplots(1, 2, figsize=(16, 6))
+
+    compare_makespans_1v1(
+        axs[0],
+        makespans["heteromrta"],
+        makespans["sadcher"],
+        "HeteroMRTA",
+        "Sadcher",
+    )
+
+    compare_makespans_1v1(
+        axs[1],
+        makespans["heteromrta_sampling"],
+        makespans["stochastic_IL_sadcher"],
+        "Sample-HeteroMRTA",
+        "Sample-Sadcher",
+    )
+
+    plt.show()
+
 
 def _sig_symbol(p):
     return "***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else "n.s."
