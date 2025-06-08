@@ -7,8 +7,8 @@ from scipy.stats import binomtest, wilcoxon
 LABEL_MAP = {
     "greedy": "Greedy",
     "milp": "MILP",
-    "sadcher": "Sadcher",
-    "stochastic_IL_sadcher": "Sample-Sadcher",
+    "sadcher": "Sadcher (Ours)",
+    "stochastic_IL_sadcher": "Sample-Sadcher (Ours)",
     "heteromrta": "HeteroMRTA",
     "heteromrta_sampling": "Sample-HeteroMRTA",
     "rl_sadcher": "RL-Sadcher",
@@ -56,6 +56,7 @@ def plot_results(
         "makespan",
         "Makespan",
         paper_format=paper_format,
+        wilcoxon_test=True,
     )
 
     plot_violin(
@@ -65,6 +66,7 @@ def plot_results(
         "travel_distance",
         "Travel Distance",
         paper_format=paper_format,
+        wilcoxon_test=False,
     )
 
     plot_double_violin_computation_times(
@@ -110,46 +112,48 @@ def _sig_symbol(p):
     return "***" if p < 0.001 else "**" if p < 0.01 else "*" if p < 0.05 else "n.s."
 
 
-def plot_violin(ax, data, scheduler_names, comparison_type, title, paper_format=False):
+def plot_violin(
+    ax, data, scheduler_names, comparison_type, title, paper_format=False, wilcoxon_test=False
+):
     ax.violinplot(data.values(), showmeans=True)
     ax.set_xticks(range(1, len(scheduler_names) + 1))
     labels = [LABEL_MAP.get(s, s) for s in scheduler_names]
     ax.set_xticklabels(labels, rotation=45, ha="right", fontsize=11)
 
     # ── Wilcoxon statistical signifcance  ───────────────────────────────────────
-    PAIRS = [
-        ("sadcher", "heteromrta"),
-        ("sadcher", "heteromrta_sampling"),
-        ("stochastic_IL_sadcher", "heteromrta_sampling"),
-    ]
-    base_max = max(*(np.max(data[a]) for pair in PAIRS for a in pair if a in data))
-    offsets = [1.05 + i * 0.1 for i in range(len(PAIRS))]
+    if wilcoxon_test:
+        PAIRS = [
+            ("sadcher", "heteromrta"),
+            ("stochastic_IL_sadcher", "heteromrta_sampling"),
+        ]
+        base_max = max(*(np.max(data[a]) for pair in PAIRS for a in pair if a in data))
+        offsets = [1.0 + i * 0.07 for i in range(len(PAIRS))]
 
-    for idx, (A, B) in enumerate(PAIRS):
-        arrA = data.get(A)
-        arrB = data.get(B)
-        if arrA is None or arrB is None or len(arrA) != len(arrB):
-            continue
+        for idx, (A, B) in enumerate(PAIRS):
+            arrA = data.get(A)
+            arrB = data.get(B)
+            if arrA is None or arrB is None or len(arrA) != len(arrB):
+                continue
 
-        W, p = wilcoxon(arrA, arrB, alternative="two-sided")
-        print(f"Wilcoxon {A} vs {B}: W={W}, p={p:.4g}")
+            W, p = wilcoxon(arrA, arrB, alternative="two-sided")
+            print(f"Wilcoxon {A} vs {B}: W={W}, p={p:.4g}")
 
-        iA = scheduler_names.index(A) + 1
-        iB = scheduler_names.index(B) + 1
+            iA = scheduler_names.index(A) + 1
+            iB = scheduler_names.index(B) + 1
 
-        y0 = base_max * offsets[idx]
-        y1 = y0 * 1.02
+            y0 = base_max * offsets[idx]
+            y1 = y0 * 1.02
 
-        # draw the “T-shaped” bar
-        ax.plot([iA, iA, iB, iB], [y0, y1, y1, y0], color="k")
-        ax.text(
-            (iA + iB) / 2,
-            y1 * 1.005,
-            f"{_sig_symbol(p)}, p={p:.2g}",
-            ha="center",
-            va="bottom",
-            fontsize=10,
-        )
+            # draw the “T-shaped” bar
+            ax.plot([iA, iA, iB, iB], [y0, y1, y1, y0], color="k")
+            ax.text(
+                (iA + iB) / 2,
+                y1 * 1.00,
+                f" p={p:.2g}",
+                ha="center",
+                va="bottom",
+                fontsize=9,
+            )
     # ── Scatter plot of individual data points ────────────────────────────────
     if comparison_type == "makespan":
         ylabel = "Makespan (time steps)"
@@ -342,8 +346,8 @@ def compare_makespans_1v1(ax, makespans1, makespans2, scheduler1, scheduler2, le
     ax.plot(x_vals, x_vals, color="black", linestyle="-", label="Parity Line", linewidth=3)
 
     # Labels and legend
-    ax.set_xlabel(f"{scheduler1} Makespan", fontsize=12)
-    ax.set_ylabel(f"{scheduler2} Makespan", fontsize=12)
+    ax.set_xlabel(f"{scheduler1} Makespan", fontsize=15)
+    ax.set_ylabel(f"{scheduler2} Makespan", fontsize=15)
     ax.legend(fontsize=12, loc="upper left") if legend else None
 
 
