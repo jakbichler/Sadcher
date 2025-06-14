@@ -1,5 +1,9 @@
 # SADCHER: Scheduling using Attention-based Dynamic Coalitions of Heterogeneous Robots in Real-Time
 
+<p align="center">
+  <img src="media/sadcher_use_case.jpg" width="600" />
+</p>
+
 This repository accompanies our paper submission to IEEE MRS 2025, called "SADCHER: Scheduling using Attention-based Dynamic Coalitions of Heterogeneous Robots in Real-Time". The project was developed as part of my Master's thesis at Delft University of Technology under the supervision of Prof. Javier Alonso-Mora and Andreu Matoses Gimenez.  Links to the paper and the thesis will be added once they are available.
 
 We propose a novel learning-based framework for real-time multi-robot task allocation (MRTA) with heterogeneous agents/robots, dynamically formed coalitions and precedence constraints. Our approach combines graph attention networks and transformer-based encoders, and bipartite matching to generate high-quality task assignments. It is trained via imitation learning on optimally generated schedules. 
