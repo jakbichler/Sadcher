@@ -1,7 +1,7 @@
 # SADCHER: Scheduling using Attention-based Dynamic Coalitions of Heterogeneous Robots in Real-Time
 
 <p align="center">
-  <img src="media/sadcher_use_case.jpg" width="600" />
+  <img src="media/sadcher_use_case.png" width="1000" />
 </p>
 
 This repository accompanies our paper submission to IEEE MRS 2025, called "SADCHER: Scheduling using Attention-based Dynamic Coalitions of Heterogeneous Robots in Real-Time". The project was developed as part of my Master's thesis at Delft University of Technology under the supervision of Prof. Javier Alonso-Mora and Andreu Matoses Gimenez.  Links to the paper and the thesis will be added once they are available.
