@@ -4,15 +4,13 @@
   <img src="media/sadcher_use_case.png" width="1000" />
 </p>
 
-This repository accompanies our paper submission to IEEE MRS 2025, called "SADCHER: Scheduling using Attention-based Dynamic Coalitions of Heterogeneous Robots in Real-Time". The project was developed as part of my Master's thesis at Delft University of Technology under the supervision of Prof. Javier Alonso-Mora and Andreu Matoses Gimenez.  Links to the paper and the thesis will be added once they are available.
+This repository accompanies our paper submission to IEEE MRS 2025, called "SADCHER: Scheduling using Attention-based Dynamic Coalitions of Heterogeneous Robots in Real-Time". The project was developed as part of my Master's thesis at Delft University of Technology under the supervision of Prof. Javier Alonso-Mora and Andreu Matoses Gimenez. The [paper](media/Sadcher_IEEE_MRS25.pdf), the [thesis report](media/Bichler_Thesis_Report.pdf) and the [literature review](media/Bichler_Literature_Review.pdf) can  be found in this repo. The released dataset can be downloaded [here](https://data.4tu.nl/datasets/10e28ee0-9ad9-450d-8be7-6e6a91f2931f).
 
-We propose a novel learning-based framework for real-time multi-robot task allocation (MRTA) with heterogeneous agents/robots, dynamically formed coalitions and precedence constraints. Our approach combines graph attention networks and transformer-based encoders, and bipartite matching to generate high-quality task assignments. It is trained via imitation learning on optimally generated schedules. 
-
-
+We present Sadcher, a real-time task assign- ment framework for heterogeneous multi-robot teams that incorporates dynamic coalition formation and task precedence constraints. Sadcher is trained through Imitation Learning and combines graph attention and transformers to predict assignment rewards between robots and tasks. Based on the predicted rewards, a relaxed bipartite matching step generates high-quality schedules with feasibility guarantees. We explicitly model robot and task positions, task durations, and robots’ remaining processing times, enabling advanced temporal and spatial reasoning and generalization to environments with different spatiotemporal distributions compared to training. Trained on optimally solved small-scale instances, our method can scale to larger task sets and team sizes. Sadcher outper- forms other learning-based and heuristic baselines on random- ized, unseen problems for small and medium-sized teams with computation times suitable for real-time operation. We also explore sampling-based variants and evaluate scalability across robot and task counts. In addition, we release our dataset of 250,000 optimal schedules to facilitate future research.
 
 The repository also contains code to benchmark the performance of our method against other methods in the literature, including [HeteroMRTA](https://github.com/marmotlab/HeteroMRTA),  a greedy method and the exact MILP solver.
 
-We also provide code for the experiments with Reinforcement Learning fine-tuning, which is not part of the paper submission. 
+We also provide code for the experiments with Reinforcement Learning fine-tuning.
 
 
 ## Simple Demo
