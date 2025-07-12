@@ -5,11 +5,12 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import torch
 import torch.nn as nn
-from attention_models import SchedulerNetwork
 from dataset import LazyLoadedSchedulingDataset
 from icecream import ic
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
+
+from models.scheduler_network import SchedulerNetwork
 
 
 class Loss(nn.Module):
