@@ -7,7 +7,7 @@ from attention_models import SchedulerNetwork
 from dataset import LazyLoadedSchedulingDataset
 from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
-from train import LVWS_Loss, initialize_weights
+from train import Loss, initialize_weights
 
 
 # -----------------------------
@@ -61,7 +61,7 @@ def objective(trial, args, dataset):
         dropout=config["dropout"],
     ).to(device)
     initialize_weights(model)
-    loss_fn = LVWS_Loss(weight_factor=config["loss_weight_factor"])
+    loss_fn = Loss(weight_factor=config["loss_weight_factor"])
     optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
 
     best_val_loss = float("inf")

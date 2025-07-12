@@ -12,9 +12,9 @@ from torch.utils.data import DataLoader, random_split
 from tqdm import tqdm
 
 
-class LVWS_Loss(nn.Module):
+class Loss(nn.Module):
     def __init__(self, weight_factor):
-        super(LVWS_Loss, self).__init__()
+        super(Loss, self).__init__()
         self.l1_loss = nn.L1Loss()
         self.weight_factor = weight_factor
 
@@ -65,23 +65,6 @@ if __name__ == "__main__":
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
-
-    # Hyperparameters for 6t2r2s
-    # config = {
-    # "batch_size": 512,
-    # "embedding_dim": 256,
-    # "ff_dim": 512,
-    # "n_transformer_heads": 8,
-    # "n_transformer_layers": 1,
-    # "n_gatn_heads": 2,
-    # "n_gatn_layers": 1,
-    # "dropout": 0.0,
-    # "loss_weight_factor": 0.1,
-    # "learning_rate": 1e-3,
-    # "reward_gamma": 0.99,
-    # "early_stopping_patience": 5,
-    # "early_stopping_threshold": 1e-4,
-    # }
 
     #  Hyperparameter for 8t3r3s
     config = {
@@ -142,7 +125,7 @@ if __name__ == "__main__":
     else:
         initialize_weights(model)
 
-    loss_fn = LVWS_Loss(weight_factor=config["loss_weight_factor"])
+    loss_fn = Loss(weight_factor=config["loss_weight_factor"])
     optimizer = torch.optim.Adam(model.parameters(), lr=config["learning_rate"])
 
     print("Starting training...............")
